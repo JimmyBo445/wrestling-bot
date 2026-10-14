@@ -1,0 +1,21 @@
+{
+  "name": "wrestling-bot",
+  "version": "1.0.0",
+  "description": "Discord wrestling booking & stats bot",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "migrate": "node src/db/migrate.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.53",
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "pg": "^8.11.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
