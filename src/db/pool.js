@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Pool } = require('pg');
 
 // Railway injects DATABASE_URL automatically when you attach a Postgres plugin.
