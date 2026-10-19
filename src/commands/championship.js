@@ -162,7 +162,7 @@ module.exports = {
                 return `**${r.name}**\n${holder}${extra}${r.contender ? `\n🎯 #1 contender: ${r.contender}` : ''}`;
             };
             const embed = new EmbedBuilder().setTitle('🏆 Championship Titles').setColor(0xE8BF4A);
-            for (const div of ['mens', 'womens', 'custom']) {
+            for (const div of ['mens', 'womens', 'custom', 'custom_womens']) {
                 const list = rows.filter((r) => r.division === div);
                 if (list.length) embed.addFields({ name: `${DIVISION_THEME[div].label} Division`, value: list.map(fmt).join('\n\n').slice(0, 1024) });
             }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0
+- New **Custom Women's** division with three titles: Golden Global Kingdom, Custom Women's Air Force, and Custom Women's Tag Team.
+- Each player can now have **4** characters (approved + pending).
+
 ## 2.0.0 — The big revamp
 
 **Updates are now easier.** The bot upgrades its own database and registers its own slash commands every time it starts.

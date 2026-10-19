@@ -16,7 +16,8 @@ const { DIVISION_THEME, MAX_CHARACTERS_PER_USER } = require('../utils/constants'
 const DIVISION_CHOICES = [
     { name: "Men's", value: 'mens' },
     { name: "Women's", value: 'womens' },
-    { name: 'Custom', value: 'custom' }
+    { name: 'Custom', value: 'custom' },
+    { name: "Custom Women's", value: 'custom_womens' }
 ];
 const ALIGNMENT_CHOICES = [
     { name: 'Face (good guy)', value: 'face' },

@@ -1,7 +1,7 @@
 # Wrestling Bot 2.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
-#1 contenders, 10 championship titles, stats, rankings and visual cards. Works in many
+#1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
 servers at once. Everything is saved permanently in Postgres.
 
 ## What it does
@@ -19,7 +19,7 @@ servers at once. Everything is saved permanently in Postgres.
 | **Admin** | `/admin pending` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 
 ### How the rules work
-- **Characters**: max 3 per player (approved + pending). Players submit, admins approve (`/admin pending` or the buttons in the approval channel). Admins can assign directly.
+- **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
 - **Title match**: add the `title` option to any log command (or use the two `/championship log-...` commands). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
 - **#1 contender match**: add `contender_for`. The winner becomes #1 contender. A contender's shot is used up when they take part in a title match for that belt.
@@ -53,4 +53,4 @@ See `UPDATE-GUIDE.md`. In short: copy the new files over the old folder, then `g
 `npm run migrate` applies database upgrades by hand; `npm run deploy` registers slash commands by hand. Both need `DATABASE_URL`/`DISCORD_TOKEN` in a local `.env` (use the database's **public** address on your own computer). You normally never need them.
 
 ## Title catalogue
-Men's: World Heavyweight, United States, Intercontinental, Men's Tag Team. Women's: Women's World, Women's Intercontinental, Women's Tag Team. Custom: Prime Time Universal, Showtime, Customs Tag Team.
+Men's: World Heavyweight, United States, Intercontinental, Men's Tag Team. Women's: Women's World, Women's Intercontinental, Women's Tag Team. Custom: Prime Time Universal, Showtime, Customs Tag Team. Custom Women's: Golden Global Kingdom, Custom Women's Air Force, Custom Women's Tag Team.

@@ -75,7 +75,7 @@ async function getDisplayName(guild, discordId) {
     return (await getDisplayNames(guild, [discordId], 2500)).get(discordId);
 }
 
-const DIVISION_LABELS = { mens: "Men's", womens: "Women's", custom: 'Custom' };
+const DIVISION_LABELS = { mens: "Men's", womens: "Women's", custom: 'Custom', custom_womens: "Custom Women's" };
 
 module.exports = {
     EPHEMERAL, NO_MENTIONS, isAdmin, requireAdmin, respond, reply,
