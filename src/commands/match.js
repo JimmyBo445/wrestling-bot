@@ -1,87 +1,12 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
-const { pool, withTransaction } = require('../db/pool');
-const { autocompleteCharacters, getCharacterById } = require('../utils/characterUtils');
-const { renderMatchCard } = require('../utils/cardRenderer');
-const { checkAndAwardWinStreak } = require('../utils/contenderLogic');
-
-// Config drives both the slash command shape and the execution logic, so
-// adding a new match type later means editing one array, not the whole file.
-//
-// slots: array of { name, label, team } — team is 1 or 2 for team matches, null for FFA
-// winnerMode: 'single' (pick one winner participant) or 'team' (pick winning team number)
-const MATCH_CONFIG = {
-    singles: {
-        label: 'Singles',
-        slots: [
-            { name: 'participant1', label: 'Wrestler 1', team: null },
-            { name: 'participant2', label: 'Wrestler 2', team: null }
-        ],
-        winnerMode: 'single'
-    },
-    tag2v2: {
-        label: 'Tag Team (2v2)',
-        slots: [
-            { name: 'team1_p1', label: 'Team 1 - Wrestler 1', team: 1 },
-            { name: 'team1_p2', label: 'Team 1 - Wrestler 2', team: 1 },
-            { name: 'team2_p1', label: 'Team 2 - Wrestler 1', team: 2 },
-            { name: 'team2_p2', label: 'Team 2 - Wrestler 2', team: 2 }
-        ],
-        winnerMode: 'team'
-    },
-    tag3v3: {
-        label: 'Tag Team (3v3)',
-        slots: [
-            { name: 'team1_p1', label: 'Team 1 - Wrestler 1', team: 1 },
-            { name: 'team1_p2', label: 'Team 1 - Wrestler 2', team: 1 },
-            { name: 'team1_p3', label: 'Team 1 - Wrestler 3', team: 1 },
-            { name: 'team2_p1', label: 'Team 2 - Wrestler 1', team: 2 },
-            { name: 'team2_p2', label: 'Team 2 - Wrestler 2', team: 2 },
-            { name: 'team2_p3', label: 'Team 2 - Wrestler 3', team: 2 }
-        ],
-        winnerMode: 'team'
-    },
-    triple_threat: {
-        label: 'Triple Threat',
-        slots: [1, 2, 3].map((n) => ({ name: `participant${n}`, label: `Wrestler ${n}`, team: null })),
-        winnerMode: 'single'
-    },
-    fatal4way: {
-        label: 'Fatal 4-Way',
-        slots: [1, 2, 3, 4].map((n) => ({ name: `participant${n}`, label: `Wrestler ${n}`, team: null })),
-        winnerMode: 'single'
-    },
-    fiveway: {
-        label: '5-Way',
-        slots: [1, 2, 3, 4, 5].map((n) => ({ name: `participant${n}`, label: `Wrestler ${n}`, team: null })),
-        winnerMode: 'single'
-    },
-    sixman: {
-        label: '6-Man Tag',
-        slots: [
-            { name: 'team1_p1', label: 'Team 1 - Wrestler 1', team: 1 },
-            { name: 'team1_p2', label: 'Team 1 - Wrestler 2', team: 1 },
-            { name: 'team1_p3', label: 'Team 1 - Wrestler 3', team: 1 },
-            { name: 'team2_p1', label: 'Team 2 - Wrestler 1', team: 2 },
-            { name: 'team2_p2', label: 'Team 2 - Wrestler 2', team: 2 },
-            { name: 'team2_p3', label: 'Team 2 - Wrestler 3', team: 2 }
-        ],
-        winnerMode: 'team'
-    },
-    eightman: {
-        label: '8-Man Tag',
-        slots: [
-            { name: 'team1_p1', label: 'Team 1 - Wrestler 1', team: 1 },
-            { name: 'team1_p2', label: 'Team 1 - Wrestler 2', team: 1 },
-            { name: 'team1_p3', label: 'Team 1 - Wrestler 3', team: 1 },
-            { name: 'team1_p4', label: 'Team 1 - Wrestler 4', team: 1 },
-            { name: 'team2_p1', label: 'Team 2 - Wrestler 1', team: 2 },
-            { name: 'team2_p2', label: 'Team 2 - Wrestler 2', team: 2 },
-            { name: 'team2_p3', label: 'Team 2 - Wrestler 3', team: 2 },
-            { name: 'team2_p4', label: 'Team 2 - Wrestler 4', team: 2 }
-        ],
-        winnerMode: 'team'
-    }
-};
+const { pool } = require('../db/pool');
+const { MATCH_CONFIG, matchLabel } = require('../utils/constants');
+const { autocompleteCharacters } = require('../utils/characterUtils');
+const { autocompleteTitles } = require('../utils/titleLogic');
+const { logMatch, undoMatch, editMatch } = require('../utils/matchService');
+const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
+const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
+const { recentMatches } = require('../utils/statsQueries');
 
 const RESULT_CHOICES = [
     { name: 'Decisive (has a winner)', value: 'decisive' },
@@ -89,145 +14,141 @@ const RESULT_CHOICES = [
     { name: 'No Contest', value: 'no_contest' }
 ];
 
-function buildSubcommand(sub, key, config) {
-    sub.setName(`log-${key.replace(/_/g, '-')}`).setDescription(`Log a ${config.label} match result`);
+function buildLogSubcommand(sub, key, config) {
+    sub.setName(`log-${key.replace(/_/g, '-')}`).setDescription(`Log a ${config.label} result`);
     for (const slot of config.slots) {
         sub.addStringOption((o) => o.setName(slot.name).setDescription(slot.label).setRequired(true).setAutocomplete(true));
     }
     if (config.winnerMode === 'single') {
-        sub.addIntegerOption((o) =>
-            o.setName('winner')
-                .setDescription('Which numbered wrestler won (1-indexed, matches the slot order above)')
-                .setRequired(true)
-        );
+        sub.addIntegerOption((o) => o.setName('winner').setDescription(`Who won: 1-${config.slots.length} (the order you picked above)`)
+            .setRequired(true).setMinValue(1).setMaxValue(config.slots.length));
     } else {
-        sub.addIntegerOption((o) =>
-            o.setName('winning_team').setDescription('Which team won: 1 or 2').setRequired(true).addChoices({ name: 'Team 1', value: 1 }, { name: 'Team 2', value: 2 })
-        );
+        sub.addIntegerOption((o) => o.setName('winning_team').setDescription('Which team won')
+            .setRequired(true).addChoices({ name: 'Team 1', value: 1 }, { name: 'Team 2', value: 2 }));
     }
-    sub.addStringOption((o) => o.setName('result_type').setDescription('Result type').setRequired(false).addChoices(...RESULT_CHOICES));
-    sub.addStringOption((o) => o.setName('notes').setDescription('Optional notes / stipulation').setRequired(false));
+    sub.addStringOption((o) => o.setName('title').setDescription('Make it a championship match for this title').setRequired(false).setAutocomplete(true));
+    sub.addStringOption((o) => o.setName('contender_for').setDescription('Make it a #1 contender match for this title (winner becomes #1 contender)').setRequired(false).setAutocomplete(true));
+    sub.addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES));
+    sub.addStringOption((o) => o.setName('notes').setDescription('Stipulation or notes (shown on the card)').setRequired(false).setMaxLength(300));
+    if (key === 'singles') {
+        sub.addBooleanOption((o) => o.setName('override_cooldown').setDescription('Book it even though the repeat-matchup cooldown is active').setRequired(false));
+    }
     return sub;
 }
 
 const data = new SlashCommandBuilder()
     .setName('match')
-    .setDescription('Log match results')
+    .setDescription('Log match results (admins)')
+    .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 for (const [key, config] of Object.entries(MATCH_CONFIG)) {
-    data.addSubcommand((sub) => buildSubcommand(sub, key, config));
+    data.addSubcommand((sub) => buildLogSubcommand(sub, key, config));
 }
+data.addSubcommand((sub) => sub.setName('undo').setDescription('Delete a logged match and reverse its title/contender changes')
+    .addIntegerOption((o) => o.setName('match_id').setDescription('Match to undo').setRequired(true).setAutocomplete(true)));
+data.addSubcommand((sub) => sub.setName('edit').setDescription('Fix the notes, winner or result of a plain match')
+    .addIntegerOption((o) => o.setName('match_id').setDescription('Match to edit').setRequired(true).setAutocomplete(true))
+    .addStringOption((o) => o.setName('notes').setDescription('New notes (type a single - to clear)').setRequired(false).setMaxLength(300))
+    .addIntegerOption((o) => o.setName('winner').setDescription('New winner by slot number (non-team matches)').setRequired(false).setMinValue(1).setMaxValue(8))
+    .addIntegerOption((o) => o.setName('winning_team').setDescription('New winning team (team matches)').setRequired(false).addChoices({ name: 'Team 1', value: 1 }, { name: 'Team 2', value: 2 }))
+    .addStringOption((o) => o.setName('result_type').setDescription('Change the result type').setRequired(false).addChoices(...RESULT_CHOICES)));
+data.addSubcommand((sub) => sub.setName('recent').setDescription('Show the latest matches with their IDs')
+    .addIntegerOption((o) => o.setName('count').setDescription('How many (default 10, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
 
-async function checkSinglesCooldown(guildId, char1Id, char2Id) {
-    const { SINGLES_COOLDOWN_HOURS } = require('../utils/constants');
+async function matchIdAutocomplete(interaction, focused) {
+    const num = String(focused).replace(/\D/g, '');
     const { rows } = await pool.query(
-        `SELECT m.created_at FROM matches m
-         JOIN match_participants mp1 ON mp1.match_id = m.id AND mp1.character_id = $2
-         JOIN match_participants mp2 ON mp2.match_id = m.id AND mp2.character_id = $3
-         WHERE m.guild_id = $1 AND m.match_type = 'singles'
-         ORDER BY m.created_at DESC LIMIT 1`,
-        [guildId, char1Id, char2Id]
+        `SELECT m.id, m.match_type, m.is_title_match, m.created_at,
+                (SELECT string_agg(c.name, ' vs ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id WHERE mp.match_id = m.id) AS names
+         FROM matches m
+         WHERE m.guild_id = $1 AND ($2 = '' OR m.id::text LIKE $2 || '%')
+         ORDER BY m.id DESC LIMIT 25`,
+        [interaction.guildId, num]
     );
-    if (!rows.length) return null;
-    const hoursSince = (Date.now() - new Date(rows[0].created_at).getTime()) / 36e5;
-    if (hoursSince < SINGLES_COOLDOWN_HOURS) {
-        return Math.ceil(SINGLES_COOLDOWN_HOURS - hoursSince);
-    }
-    return null;
+    return rows.map((r) => ({
+        name: `#${r.id} ${matchLabel(r.match_type)}${r.is_title_match ? ' 🏆' : ''}: ${r.names}`.slice(0, 100),
+        value: Number(r.id)
+    }));
 }
 
 module.exports = {
     data,
 
     async autocomplete(interaction) {
-        const focused = interaction.options.getFocused();
-        const choices = await autocompleteCharacters(interaction, focused);
-        await interaction.respond(choices);
+        const focused = interaction.options.getFocused(true);
+        if (focused.name === 'match_id') return interaction.respond(await matchIdAutocomplete(interaction, focused.value));
+        if (focused.name === 'title' || focused.name === 'contender_for') return interaction.respond(await autocompleteTitles(interaction, focused.value));
+        return interaction.respond(await autocompleteCharacters(interaction, focused.value));
     },
 
     async execute(interaction) {
-        const subName = interaction.options.getSubcommand();
-        const key = subName.replace(/^log-/, '').replace(/-/g, '_');
-        const config = MATCH_CONFIG[key];
-        if (!config) return interaction.reply({ content: 'Unknown match type.', ephemeral: true });
-
+        requireAdmin(interaction, 'log or change matches');
+        const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
-        const resultType = interaction.options.getString('result_type') || 'decisive';
-        const notes = interaction.options.getString('notes');
 
-        const slotCharacterIds = config.slots.map((slot) => interaction.options.getString(slot.name));
-        const uniqueCheck = new Set(slotCharacterIds);
-        if (uniqueCheck.size !== slotCharacterIds.length) {
-            return interaction.reply({ content: 'The same character can\'t be booked twice in one match.', ephemeral: true });
+        if (sub.startsWith('log-')) {
+            const key = sub.replace(/^log-/, '').replace(/-/g, '_');
+            const config = MATCH_CONFIG[key];
+            if (!config) return respond(interaction, { content: 'Unknown match type.', flags: 64 });
+
+            const result = await logMatch({
+                guildId,
+                matchType: key,
+                slotCharacterIds: config.slots.map((s) => interaction.options.getString(s.name)),
+                winnerIndex: config.winnerMode === 'single' ? interaction.options.getInteger('winner') - 1 : null,
+                winningTeam: config.winnerMode === 'team' ? interaction.options.getInteger('winning_team') : null,
+                resultType: interaction.options.getString('result_type') || 'decisive',
+                notes: interaction.options.getString('notes'),
+                titleValue: interaction.options.getString('title'),
+                contenderTitleValue: interaction.options.getString('contender_for'),
+                overrideCooldown: interaction.options.getBoolean('override_cooldown') || false,
+                actor: interaction.user.id
+            });
+
+            await interaction.deferReply();
+            const { payload } = await presentMatch(interaction, result);
+            await interaction.editReply(payload);
+            await mirrorToMatchesChannel(interaction, payload);
+            return;
         }
 
-        // Singles cooldown check (only applies to plain singles matches)
-        if (key === 'singles' && resultType === 'decisive') {
-            const hoursLeft = await checkSinglesCooldown(guildId, slotCharacterIds[0], slotCharacterIds[1]);
-            if (hoursLeft) {
-                return interaction.reply({
-                    content: `These two just wrestled recently. Wait ~${hoursLeft}h before rebooking this singles matchup (cooldown doesn't apply to contender/title/tag matches).`,
-                    ephemeral: true
-                });
-            }
+        if (sub === 'undo') {
+            const matchId = interaction.options.getInteger('match_id');
+            const { match, parts } = await undoMatch(guildId, matchId, interaction.user.id);
+            const lines = [`↩️ Match **#${matchId}** (${matchLabel(match.match_type)}: ${parts.map((p) => p.name).join(' vs ')}) was undone by <@${interaction.user.id}>.`];
+            if (match.title_effect?.type && match.title_effect.type !== 'none') lines.push('The title change from that match was reversed.');
+            if (match.title_effect?.kind === 'contender') lines.push('The #1 contender change from that match was reversed.');
+            return respond(interaction, { content: lines.join('\n'), allowedMentions: NO_MENTIONS });
         }
 
-        let winnerSlotIndexes = [];
-        if (config.winnerMode === 'single') {
-            const winnerNum = interaction.options.getInteger('winner');
-            if (winnerNum < 1 || winnerNum > config.slots.length) {
-                return interaction.reply({ content: `Winner must be between 1 and ${config.slots.length}.`, ephemeral: true });
-            }
-            if (resultType === 'decisive') winnerSlotIndexes = [winnerNum - 1];
-        } else {
-            const winningTeam = interaction.options.getInteger('winning_team');
-            if (resultType === 'decisive') {
-                config.slots.forEach((slot, i) => { if (slot.team === winningTeam) winnerSlotIndexes.push(i); });
-            }
+        if (sub === 'edit') {
+            const matchId = interaction.options.getInteger('match_id');
+            const rawNotes = interaction.options.getString('notes');
+            const { changes } = await editMatch(guildId, matchId, interaction.user.id, {
+                notes: rawNotes === null ? null : rawNotes.trim() === '-' ? '' : rawNotes,
+                winnerIndex: interaction.options.getInteger('winner') !== null ? interaction.options.getInteger('winner') - 1 : null,
+                winningTeam: interaction.options.getInteger('winning_team'),
+                resultType: interaction.options.getString('result_type')
+            });
+            const bits = [];
+            if (changes.result) bits.push(`result is now **${changes.result.replace('_', ' ')}**`);
+            if (changes.winners !== undefined && changes.winners > 0) bits.push('winner updated');
+            if (changes.notes !== undefined) bits.push(changes.notes ? 'notes updated' : 'notes cleared');
+            return respond(interaction, { content: `✏️ Match **#${matchId}** edited: ${bits.join(', ')}.`, allowedMentions: NO_MENTIONS });
         }
 
-        await interaction.deferReply();
-
-        const matchId = await withTransaction(async (client) => {
-            const { rows } = await client.query(
-                `INSERT INTO matches (guild_id, match_type, result_type, logged_by, notes)
-                 VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-                [guildId, key, resultType, interaction.user.id, notes]
-            );
-            const mId = rows[0].id;
-
-            for (let i = 0; i < config.slots.length; i++) {
-                await client.query(
-                    `INSERT INTO match_participants (match_id, character_id, team_number, is_winner)
-                     VALUES ($1, $2, $3, $4)`,
-                    [mId, slotCharacterIds[i], config.slots[i].team, winnerSlotIndexes.includes(i)]
-                );
-            }
-            return mId;
-        });
-
-        // Fetch full character objects for the card + streak logic
-        const characters = await Promise.all(slotCharacterIds.map(getCharacterById));
-        const winners = characters.filter((_, i) => winnerSlotIndexes.includes(i));
-        const losers = characters.filter((_, i) => !winnerSlotIndexes.includes(i));
-
-        // Auto-award #1 contender status on a hot win streak (best-effort, non-blocking)
-        let streakNotice = '';
-        if (resultType === 'decisive') {
-            for (const w of winners) {
-                const hot = await checkAndAwardWinStreak(guildId, w.id);
-                if (hot) streakNotice += `\n🔥 **${w.name}** is on a ${hot.streak}-match win streak — consider \`/contender award\` for a title shot.`;
-            }
+        if (sub === 'recent') {
+            const rows = await recentMatches(guildId, { limit: interaction.options.getInteger('count') || 10 });
+            if (!rows.length) return respond(interaction, { content: 'No matches logged yet.', flags: 64 });
+            const lines = rows.map((r) => {
+                const when = `<t:${Math.floor(new Date(r.created_at).getTime() / 1000)}:R>`;
+                const tag = r.title_name ? ` 🏆 ${r.title_name}` : r.contender_title_name ? ` 🎯 ${r.contender_title_name}` : '';
+                const res = r.result_type === 'decisive' ? `**${r.winners}** def. ${r.others}` : `${[r.winners, r.others].filter(Boolean).join(', ')} (${r.result_type === 'draw' ? 'draw' : 'no contest'})`;
+                return `\`#${r.id}\` ${matchLabel(r.match_type)}${tag} — ${res} ${when}`;
+            });
+            const embed = new EmbedBuilder().setTitle('Recent Matches').setColor(0x3498DB).setDescription(lines.join('\n').slice(0, 4000));
+            return respond(interaction, { embeds: [embed], flags: 64, allowedMentions: NO_MENTIONS });
         }
-
-        const buffer = await renderMatchCard({ matchType: config.label, resultType, winners, losers, notes });
-        const embed = new EmbedBuilder()
-            .setTitle(`${config.label} Result`)
-            .setColor(resultType === 'decisive' ? 0x27AE60 : 0x95A5A6)
-            .setImage('attachment://match.png')
-            .setFooter({ text: `Logged by ${interaction.user.username} · Match #${matchId}` });
-
-        await interaction.editReply({ embeds: [embed], files: [{ attachment: buffer, name: 'match.png' }], content: streakNotice || undefined });
     }
 };

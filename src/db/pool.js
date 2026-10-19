@@ -1,13 +1,19 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
-// Railway injects DATABASE_URL automatically when you attach a Postgres plugin.
-// SSL is required on Railway's managed Postgres.
+// Railway injects DATABASE_URL when you link the Postgres service to the bot.
+// Railway's database wants SSL; set DATABASE_SSL=false if yours does not.
+const url = process.env.DATABASE_URL || '';
+const useSsl = process.env.DATABASE_SSL
+    ? process.env.DATABASE_SSL !== 'false'
+    : url.includes('railway') || url.includes('rlwy.net');
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
-        ? { rejectUnauthorized: false }
-        : false
+    connectionString: url,
+    ssl: useSsl ? { rejectUnauthorized: false } : false,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
 });
 
 pool.on('error', (err) => {
@@ -26,7 +32,7 @@ async function withTransaction(fn) {
         await client.query('COMMIT');
         return result;
     } catch (err) {
-        await client.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => {});
         throw err;
     } finally {
         client.release();

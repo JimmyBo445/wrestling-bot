@@ -1,147 +1,56 @@
-# Wrestling Bot
+# Wrestling Bot 2.0
 
-A Discord bot for booking and tracking a fantasy wrestling promotion: characters,
-matches, #1 contender status, and 9 championship titles across Men's, Women's,
-and Customs divisions. Multi-server, fully persistent Postgres storage.
+A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
+#1 contenders, 10 championship titles, stats, rankings and visual cards. Works in many
+servers at once. Everything is saved permanently in Postgres.
 
-## ⚠️ Two assumptions I made — please confirm
+## What it does
 
-1. **6-Man and 8-Man matches are team-based (3v3 / 4v4 tag), not free-for-all
-   battle royals.** This matches standard wrestling terminology. If you meant
-   these as free-for-all with a single winner instead, tell me and I'll flip
-   `winnerMode` from `'team'` to `'single'` for those two entries in
-   `src/commands/match.js` — it's a one-line-per-type change.
-2. **Win-streak #1 contender status is a nudge, not an auto-assignment.**
-   When a character hits a 3-win streak, the bot posts a notice suggesting
-   `/contender award` — it does NOT automatically pick a title, since men's
-   and women's divisions each have multiple non-tag titles and the bot can't
-   know which one you want to put on the line. Change the threshold in
-   `src/utils/contenderLogic.js` (`WIN_STREAK_THRESHOLD`).
+| Area | Commands |
+|---|---|
+| **Characters** | `/character submit` `assign` `list` `profile` `edit` `retire` `restore` `remove` `transfer` |
+| **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
+| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman`, plus `undo` `edit` `recent` |
+| **Championships** | `/championship list` `belt` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `backfill-reign` `edit-reign` `remove-reign` |
+| **#1 contenders** | `/contender challenge` `award` `revoke` `list` |
+| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `history` |
+| **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
+| **Matchmaking** | `/matchmaking suggest` `request` |
+| **Admin** | `/admin pending` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 
-## Setup
+### How the rules work
+- **Characters**: max 3 per player (approved + pending). Players submit, admins approve (`/admin pending` or the buttons in the approval channel). Admins can assign directly.
+- **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
+- **Title match**: add the `title` option to any log command (or use the two `/championship log-...` commands). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
+- **#1 contender match**: add `contender_for`. The winner becomes #1 contender. A contender's shot is used up when they take part in a title match for that belt.
+- **Registered teams**: tag titles belong to registered teams. When the exact wrestlers of a team are booked on one side of a tag match, the match counts for the team. Removing a member or disbanding a team that holds a belt vacates it.
+- **Cooldown**: only regular singles matches (not title, contender or tag). Default 24 hours between the same two players; change with `/admin set-cooldown`, or override one booking with `override_cooldown: true`.
+- **Win streaks**: at every multiple of the streak threshold (default 3), a prompt appears for admins to pick the title. Win streaks for registered teams use the tag titles.
+- **Undo**: `/match undo` deletes a match and reverses what it did. For title matches only the newest title match for that belt can be undone.
 
-### 1. Discord Application
-1. Go to https://discord.com/developers/applications → New Application
-2. Bot tab → Reset Token → copy it → this is `DISCORD_TOKEN`
-3. Under **Bot**, enable the **Server Members Intent** (needed for autocomplete
-   to show usernames)
-4. General Information tab → copy the **Application ID** → this is `CLIENT_ID`
-5. OAuth2 → URL Generator → scopes: `bot`, `applications.commands` →
-   bot permissions: Send Messages, Embed Links, Attach Files, Use External
-   Emojis, Manage Messages (for editing pending cards) → open the generated
-   URL to invite the bot to your server(s)
+## Setup (first time)
 
-### 2. Local setup (optional, for testing before deploying)
-```bash
-npm install
-cp .env.example .env
-# fill in DISCORD_TOKEN, CLIENT_ID, and a local DATABASE_URL
-npm run migrate       # creates all tables
-npm run deploy        # registers slash commands (set GUILD_ID in .env for instant testing)
-npm start
-```
+1. **Discord**: https://discord.com/developers/applications → New Application. Bot tab: copy the token (`DISCORD_TOKEN`) and turn on **Server Members Intent**. General Information: copy the Application ID (`CLIENT_ID`). OAuth2 → URL Generator: scopes `bot` + `applications.commands`; permissions Send Messages, Embed Links, Attach Files, Read Message History → open the link to add the bot to your server.
+2. **GitHub**: put this folder in a GitHub repository. The included `.gitignore` keeps your secrets and `node_modules` out.
+3. **Railway**: New Project → Deploy from GitHub repo. Add a **PostgreSQL** service. On the bot service, Variables: `DISCORD_TOKEN`, `CLIENT_ID`, and `DATABASE_URL` = a Reference to the Postgres service's `DATABASE_URL`.
+4. That's it. On startup the bot creates/updates its own tables and registers its slash commands.
+5. In Discord: `/admin set-pending-channel` (where approval requests and win-streak prompts appear) and optionally `/admin set-matches-channel`.
 
-### 3. Deploy to Railway
-1. Push this project to a GitHub repo
-2. Railway → New Project → Deploy from GitHub repo
-3. Add a **PostgreSQL** plugin to the project (Railway auto-sets `DATABASE_URL`
-   on your bot service — you don't need to copy/paste it)
-4. In your bot service's Variables tab, add `DISCORD_TOKEN` and `CLIENT_ID`
-   (and `GUILD_ID` only if you want single-server instant command deploys)
-5. Railway will run `npm start` automatically per `railway.json`
-6. Run the migration once, either by temporarily setting the service's start
-   command to `npm run migrate` and redeploying, or by running it locally
-   against the Railway Postgres connection string (Railway dashboard →
-   Postgres plugin → Connect → copy the external connection URL into your
-   local `.env` temporarily and run `npm run migrate`)
-7. Run `npm run deploy` once (locally, pointed at the same `CLIENT_ID`/token)
-   to register the slash commands — you only need to re-run this when you
-   add/change commands, not on every deploy
+## Updating later
+See `UPDATE-GUIDE.md`. In short: copy the new files over the old folder, then `git add .`, `git commit`, `git push`. Railway redeploys and the bot upgrades itself.
 
-### Fonts (important — see `assets/fonts/README.md`)
-Railway's base image often has no system fonts, which can make the generated
-match/profile card images render with blank text. Drop a `.ttf` into
-`assets/fonts/Inter-Bold.ttf` before deploying — see that folder's README.
+## Settings (environment variables)
+| Variable | Needed | What |
+|---|---|---|
+| `DISCORD_TOKEN` | yes | Bot token |
+| `CLIENT_ID` | recommended | Application ID (falls back to the bot's own ID) |
+| `DATABASE_URL` | yes | Postgres address |
+| `GUILD_ID` | no | Your server ID: slash-command changes appear instantly in that server |
+| `AUTO_DEPLOY_COMMANDS` | no | `false` stops registering commands at startup |
+| `DATABASE_SSL` | no | `false` if the database refuses SSL |
 
-### First-run per server
-The bot auto-creates a `guilds` row and seeds all 9 titles the moment it joins
-a server (or the moment any command runs there if it was already a member).
-Nothing to do manually except optionally:
-```
-/admin set-pending-channel #wherever-you-want-approvals-posted
-```
-If you skip this, submissions/challenges still queue up — admins just review
-them via `/admin pending` instead of getting a live-posted card.
+## Manual fallbacks
+`npm run migrate` applies database upgrades by hand; `npm run deploy` registers slash commands by hand. Both need `DATABASE_URL`/`DISCORD_TOKEN` in a local `.env` (use the database's **public** address on your own computer). You normally never need them.
 
-## Command Reference
-
-### Characters
-- `/character submit name division [image_url]` — user submits, needs approval
-- `/character assign user name division [image_url]` — admin, auto-approved
-- `/character list [user]`
-- `/character profile character` — renders a visual stat card
-- `/character retire character` — admin
-
-### Matches (all admin/mod-only — this is the "admin approves matches" requirement)
-- `/match log-singles p1 p2 winner [result_type] [notes]`
-- `/match log-tag2v2` / `log-tag3v3` — 2v2 / 3v3 tag, pick winning team
-- `/match log-triple-threat` / `log-fatal4way` / `log-fiveway` — FFA, pick winner
-- `/match log-sixman` / `log-eightman` — 3v3 / 4v4 tag by default (see assumption #1)
-- Regular singles matches have a 24h cooldown against an immediate rematch
-  between the same two characters. Title matches, contender matches, and tag
-  matches are exempt. Change `SINGLES_COOLDOWN_HOURS` in `constants.js`.
-
-### #1 Contenders
-- `/contender challenge character title` — user requests, queues for approval
-- `/contender award character title` — admin, instant
-- `/contender list [title]`
-- One active contender per title max; a new award/approval auto-revokes the
-  previous one for that title.
-
-### Championships
-- `/championship list` — all 9 titles by division with current holder
-- `/championship log-singles-title-match` — champion vs challenger, auto
-  updates reign (increments defenses on a successful defense, starts a new
-  reign on a title change)
-- `/championship log-tag-title-match` — 2v2 tag title defense/change
-- `/championship vacate title`
-- `/championship history title` — last 20 reigns
-- `/championship backfill-reign title champion_name won_date [lost_date] [defenses]`
-  — add pre-bot history; use free-text names if the champion predates any
-  character records
-
-### Stats & Leaderboard
-- `/stats character character` — record, streaks, by-match-type breakdown
-- `/stats user [user]` — aggregate across all their characters
-- `/leaderboard` — one command, dropdown to switch between Win %, Total Wins,
-  Current Streaks, Longest Streak Ever, Most Title Reigns, Most Active
-
-### Matchmaking
-- `/matchmaking suggest character [count]` — ranks other characters by fewest
-  prior matches against this one, so you can keep pairings fresh
-
-### Admin
-- `/admin pending` — review queued character submissions & title challenges
-  with Approve/Deny buttons, even without a configured channel
-- `/admin set-pending-channel #channel` — auto-post new requests live
-
-## Project Structure
-```
-src/
-  commands/        one file per slash command
-  db/              schema.sql, connection pool, migration runner
-  handlers/         button/select-menu interaction routing, pending queue
-  utils/            shared helpers: character lookups, streaks, card
-                    rendering, leaderboard queries, constants
-  index.js         bot entrypoint
-  deploy-commands.js  registers slash commands with Discord
-```
-
-## Notes on data model choices
-- **Per-character-per-user stats**: since two users could each have a
-  character with the same name, all stats key off the internal `characters.id`,
-  never the name string.
-- **Multi-guild**: every table is scoped by `guild_id`, including titles —
-  so each server gets its own independent set of 9 championships and its own
-  roster, even though they share one bot process and one database.
-- **No RNG**: match outcomes are 100% admin-logged; the bot never decides winners.
+## Title catalogue
+Men's: World Heavyweight, United States, Intercontinental, Men's Tag Team. Women's: Women's World, Women's Intercontinental, Women's Tag Team. Custom: Prime Time Universal, Showtime, Customs Tag Team.

@@ -1,51 +1,43 @@
 const { pool } = require('../db/pool');
 const { DEFAULT_TITLES } = require('./constants');
 
+const ensured = new Set(); // guilds we already verified this process lifetime
+
 /**
- * Ensures a guilds row and its 9 default titles exist. Safe to call on
- * every interaction — cheap no-op after the first call per guild.
+ * Ensures a guilds row and its default titles exist. Cheap no-op after the
+ * first call per guild per bot restart.
  */
 async function ensureGuild(guildId) {
+    if (ensured.has(guildId)) return;
     await pool.query(
         `INSERT INTO guilds (guild_id) VALUES ($1) ON CONFLICT (guild_id) DO NOTHING`,
         [guildId]
     );
-
-    const { rows } = await pool.query(
-        `SELECT COUNT(*)::int AS count FROM titles WHERE guild_id = $1`,
-        [guildId]
-    );
-
-    if (rows[0].count === 0) {
-        const values = [];
-        const params = [];
-        let i = 1;
-        for (const t of DEFAULT_TITLES) {
-            values.push(`($${i++}, $${i++}, $${i++}, $${i++})`);
-            params.push(guildId, t.name, t.division, t.is_tag_title);
-        }
+    // Insert any default title that's missing (also tops up older servers if a title is ever added)
+    for (const t of DEFAULT_TITLES) {
         await pool.query(
-            `INSERT INTO titles (guild_id, name, division, is_tag_title) VALUES ${values.join(', ')}`,
-            params
+            `INSERT INTO titles (guild_id, name, division, is_tag_title) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (guild_id, name) DO NOTHING`,
+            [guildId, t.name, t.division, t.is_tag_title]
         );
     }
+    ensured.add(guildId);
 }
 
-/**
- * Ensures a users row exists for this discord user in this guild, returns the internal id.
- */
-async function ensureUser(guildId, discordId) {
-    const existing = await pool.query(
-        `SELECT id FROM users WHERE guild_id = $1 AND discord_id = $2`,
+/** Ensures a users row exists for this discord user in this guild, returns the internal id. */
+async function ensureUser(guildId, discordId, client = pool) {
+    const { rows } = await client.query(
+        `INSERT INTO users (guild_id, discord_id) VALUES ($1, $2)
+         ON CONFLICT (guild_id, discord_id) DO UPDATE SET discord_id = EXCLUDED.discord_id
+         RETURNING id`,
         [guildId, discordId]
     );
-    if (existing.rows.length) return existing.rows[0].id;
-
-    const inserted = await pool.query(
-        `INSERT INTO users (guild_id, discord_id) VALUES ($1, $2) RETURNING id`,
-        [guildId, discordId]
-    );
-    return inserted.rows[0].id;
+    return rows[0].id;
 }
 
-module.exports = { ensureGuild, ensureUser };
+async function getGuildSettings(guildId, client = pool) {
+    const { rows } = await client.query(`SELECT * FROM guilds WHERE guild_id = $1`, [guildId]);
+    return rows[0];
+}
+
+module.exports = { ensureGuild, ensureUser, getGuildSettings };
