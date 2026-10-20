@@ -79,6 +79,18 @@ function portrait(ctx, art, member, x, y, size, brand, divisionFallback) {
     void brand;
 }
 
+/** Recap look: winners get a gold ring, everyone else on a decided/pending match is dimmed. */
+function memberState(m, mem) {
+    if (!m.result) return null;
+    if (m.result.status === 'pending') return 'dim';
+    if (m.result.status !== 'decisive') return null;
+    return mem.winner ? 'win' : 'dim';
+}
+function goldRing(ctx, x, y, size) {
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 5;
+    rr(ctx, x - 3, y - 3, size + 6, size + 6, 16); ctx.stroke();
+}
+
 function nameUnder(ctx, member, cx, y, maxW) {
     ctx.fillStyle = C.text;
     ctx.textAlign = 'center';
@@ -88,6 +100,14 @@ function nameUnder(ctx, member, cx, y, maxW) {
         fitText(ctx, `@${member.owner}`, cx, y + 17, maxW, 12, 'medium', 9);
     }
     ctx.textAlign = 'left';
+}
+
+/** The tiny line above the match label: outcome in a recap, otherwise "CHAMPIONSHIP MATCH". */
+function microLine(m) {
+    if (m.result?.outcome) return { text: m.result.outcome, gold: true };
+    if (m.title) return { text: m.result?.status === 'pending' ? 'CHAMPIONSHIP MATCH • NOT LOGGED YET' : 'CHAMPIONSHIP MATCH', gold: true };
+    if (m.result?.status === 'pending') return { text: 'NOT LOGGED YET', gold: false };
+    return null;
 }
 
 function drawRow(ctx, m, y, brand, divisionFallback, arts) {
@@ -124,8 +144,11 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         if (isTitle) {
             ctx.fillStyle = C.gold;
             fitText(ctx, m.title.toUpperCase(), areaL, y + ROW_H / 2 + 24, labelW, 15, 'bold', 10);
-            ctx.fillStyle = '#ffe9a8'; ctx.font = font(11, 'bold');
-            ctx.fillText('CHAMPIONSHIP MATCH', areaL, y + ROW_H / 2 - 28);
+        }
+        const microF = microLine(m);
+        if (microF) {
+            ctx.fillStyle = microF.gold ? '#ffe9a8' : '#b9b9c6'; ctx.font = font(12, 'bold');
+            ctx.fillText(microF.text, areaL, y + ROW_H / 2 - 28);
         }
         const n = m.entrants.length;
         const size = 84;
@@ -135,8 +158,13 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         const top = y + (ROW_H - size - 40) / 2;
         m.entrants.forEach((e, i) => {
             const cx = startX + slotW * i + slotW / 2;
+            const st = memberState(m, e);
+            ctx.save();
+            if (st === 'dim') ctx.globalAlpha = 0.45;
             portrait(ctx, arts.get(e.imageUrl) || null, e, cx - size / 2, top, size, brand, divisionFallback);
+            if (st === 'win') goldRing(ctx, cx - size / 2, top, size);
             nameUnder(ctx, e, cx, top + size + 19, slotW - 10);
+            ctx.restore();
         });
         return;
     }
@@ -149,15 +177,19 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#d6d6e0';
-    if (isTitle) {
-        ctx.fillStyle = '#ffe9a8'; ctx.font = font(11, 'bold');
-        ctx.fillText('CHAMPIONSHIP MATCH', midX, y + 24);
+    const microS = microLine(m);
+    if (microS) {
+        ctx.fillStyle = microS.gold ? '#ffe9a8' : '#b9b9c6'; ctx.font = font(12, 'bold');
+        ctx.fillText(microS.text, midX, y + 24);
     }
     ctx.fillStyle = '#d6d6e0';
-    fitText(ctx, labelLine, midX, y + (isTitle ? 46 : 38), centreW, 14, 'bold', 10);
+    fitText(ctx, labelLine, midX, y + ((isTitle || microS) ? 46 : 38), centreW, 14, 'bold', 10);
     ctx.fillStyle = isTitle ? C.gold : '#fff';
-    ctx.font = font(44, 'bold');
-    ctx.fillText('VS', midX, y + ROW_H / 2 + 22);
+    const st0 = m.result?.status;
+    const word = st0 === 'pending' ? 'PENDING' : st0 === 'draw' ? 'DRAW' : st0 === 'no_contest' ? 'NO CONTEST' : 'VS';
+    ctx.font = font(word === 'VS' ? 44 : 26, 'bold');
+    if (word !== 'VS') ctx.fillStyle = st0 === 'pending' ? '#b9b9c6' : '#fff';
+    ctx.fillText(word, midX, y + ROW_H / 2 + (word === 'VS' ? 22 : 14));
     if (isTitle) {
         ctx.fillStyle = C.gold;
         fitText(ctx, m.title.toUpperCase(), midX, y + ROW_H - 18, centreW, 15, 'bold', 10);
@@ -180,8 +212,13 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         }
         side.members.forEach((mem, i) => {
             const cx = startX + slotW * i + slotW / 2;
+            const st = memberState(m, mem);
+            ctx.save();
+            if (st === 'dim') ctx.globalAlpha = 0.45;
             portrait(ctx, arts.get(mem.imageUrl) || null, mem, cx - size / 2, top, size, brand, divisionFallback);
+            if (st === 'win') goldRing(ctx, cx - size / 2, top, size);
             nameUnder(ctx, mem, cx, top + size + 19, slotW - 4);
+            ctx.restore();
         });
     };
     draw(m.sides[0], leftEnd, true);
@@ -216,7 +253,7 @@ async function renderShowCard(data) {
     ctx.fillText(brand.label, MARGIN + 6, 106);
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
     ctx.font = font(22, 'medium');
-    ctx.fillText(data.name ? data.name.toUpperCase() : 'MATCH CARD', MARGIN + 10, 148);
+    ctx.fillText(data.recap ? `${data.name ? `${data.name.toUpperCase()}  •  ` : ''}RESULTS` : (data.name ? data.name.toUpperCase() : 'MATCH CARD'), MARGIN + 10, 148);
 
     // division tag on the right
     const tag = `${th.label.toUpperCase()} DIVISION`;
@@ -251,7 +288,8 @@ async function renderShowCard(data) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.font = font(16, 'medium');
-    ctx.fillText(`${rows} MATCH${rows === 1 ? '' : 'ES'}  •  ${brand.label}  •  ${th.label.toUpperCase()}`, W / 2, H - 26);
+    const done = data.matches.filter((m) => m.result && m.result.status !== 'pending').length;
+    ctx.fillText(data.recap ? `${done} OF ${rows} RESULTS LOGGED  •  ${brand.label}  •  ${th.label.toUpperCase()}` : `${rows} MATCH${rows === 1 ? '' : 'ES'}  •  ${brand.label}  •  ${th.label.toUpperCase()}`, W / 2, H - 26);
     ctx.textAlign = 'left';
 
     return canvas.toBuffer('image/png');

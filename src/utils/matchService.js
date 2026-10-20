@@ -8,6 +8,7 @@ const { setContender } = require('./contenderLogic');
 const { getGuildSettings } = require('./ensureGuild');
 const { logAudit } = require('./audit');
 const { DIVISION_LABELS } = require('./discordHelpers');
+const { linkMatchToCard } = require('./cardService');
 
 /**
  * Cooldown (regular singles only: never title, contender, or tag matches).
@@ -171,9 +172,16 @@ async function logMatch(input) {
 
     await logAudit(guildId, actor, 'match_logged', { matchId, matchType, resultType, title: title?.name, contender: contenderTitle?.name });
 
+    let defenseNumber = null;
+    if (effect?.type === 'defense' && effect.reign_id) {
+        const { rows } = await pool.query(`SELECT defenses FROM title_reigns WHERE id = $1`, [effect.reign_id]);
+        defenseNumber = rows[0]?.defenses || null;
+    }
+    const card = await linkMatchToCard(guildId, matchId, matchType, characters.map((c) => c.id));
+
     return {
         matchId, matchType, label: config.label, config, characters, winnerIdx, resultType, notes,
-        title, contenderTitle, sideTeams, winnerSubject, effect, cooldownOverridden, teamMode
+        title, contenderTitle, sideTeams, winnerSubject, effect, cooldownOverridden, teamMode, card, defenseNumber
     };
 }
 

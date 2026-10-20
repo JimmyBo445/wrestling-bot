@@ -5,8 +5,8 @@ const { autocompleteTeams, requireTeam, getTeamMembers } = require('../utils/tea
 const { autocompleteTitles, requireTitle, setVacancy, vacateTitle, reignHolderName } = require('../utils/titleLogic');
 const { logMatch } = require('../utils/matchService');
 const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
-const { renderBeltCard } = require('../utils/cardRenderer');
-const { buildBeltData } = require('../utils/cardData');
+const { renderBeltCard, renderLineageCard } = require('../utils/cardRenderer');
+const { buildBeltData, buildLineageData } = require('../utils/cardData');
 const { requireAdmin, respond, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { logAudit } = require('../utils/audit');
@@ -25,6 +25,10 @@ const data = new SlashCommandBuilder()
     .setDMPermission(false)
     .addSubcommand((s) => s.setName('list').setDescription('All titles and who holds them'))
     .addSubcommand((s) => s.setName('belt').setDescription('Show a title as a belt card').addStringOption((o) => titleOpt(o)))
+    .addSubcommand((s) => s.setName('lineage').setDescription('Graphic timeline of every champion of a title').addStringOption((o) => titleOpt(o)))
+    .addSubcommand((s) => s.setName('defenses').setDescription("A champion's title defense log (who they beat and when)")
+        .addStringOption((o) => titleOpt(o))
+        .addIntegerOption((o) => o.setName('reign').setDescription('Reign number from /championship history (default: current or latest)').setRequired(false).setMinValue(1)))
     .addSubcommand((s) => s.setName('history').setDescription('Reign history for a title').addStringOption((o) => titleOpt(o)))
     .addSubcommand((s) => s.setName('log-singles-title-match').setDescription('[Admin] Log a singles championship match')
         .addStringOption((o) => titleOpt(o, 'Title on the line'))
@@ -174,6 +178,39 @@ module.exports = {
             await interaction.deferReply();
             const buffer = await renderBeltCard(await buildBeltData(interaction.guild, title));
             return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'belt.png' })] });
+        }
+
+        if (sub === 'lineage') {
+            const title = await requireTitle(guildId, interaction.options.getString('title'));
+            await interaction.deferReply();
+            const buffer = await renderLineageCard(await buildLineageData(interaction.guild, title));
+            return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'lineage.png' })] });
+        }
+
+        if (sub === 'defenses') {
+            const title = await requireTitle(guildId, interaction.options.getString('title'));
+            const { rows: reigns } = await pool.query(
+                `SELECT * FROM (
+                    SELECT tr.*, c.name AS character_name, tm.name AS team_name, ROW_NUMBER() OVER (ORDER BY tr.won_date, tr.id)::int AS n
+                    FROM title_reigns tr LEFT JOIN characters c ON c.id = tr.character_id LEFT JOIN teams tm ON tm.id = tr.team_id
+                    WHERE tr.title_id = $1) x ORDER BY n`, [title.id]);
+            if (!reigns.length) throw new UserError(`The **${title.name}** has no reign history yet.`);
+            const want = interaction.options.getInteger('reign');
+            const reign = want ? reigns.find((r) => r.n === want) : reigns[reigns.length - 1];
+            if (!reign) throw new UserError(`The **${title.name}** only has ${reigns.length} reign${reigns.length === 1 ? '' : 's'}.`);
+            const { rows: defs } = await pool.query(
+                `SELECT m.id, m.created_at,
+                        (SELECT string_agg(c.name, ' & ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id
+                          WHERE mp.match_id = m.id AND NOT mp.is_winner) AS opponents
+                 FROM matches m WHERE m.title_id = $1 AND m.title_effect->>'type' = 'defense' AND m.title_effect->>'reign_id' = $2
+                 ORDER BY m.created_at, m.id`, [title.id, String(reign.id)]);
+            const holder = reignHolderName(reign);
+            const lines = defs.map((d, i) => `**${i + 1}.** vs ${d.opponents || 'unknown'} · <t:${Math.floor(new Date(d.created_at).getTime() / 1000)}:D> · match #${d.id}`);
+            const older = reign.defenses - defs.length;
+            if (older > 0) lines.push(`_+ ${older} defense${older === 1 ? '' : 's'} recorded without match details (historical or edited)_`);
+            const embed = new EmbedBuilder().setTitle(`${holder}: ${title.name}`).setColor(0xE8BF4A)
+                .setDescription(`Reign #${reign.n} · ${fmtDate(reign.won_date)} → ${fmtDate(reign.lost_date)} · ${daysBetween(reign.won_date, reign.lost_date)} days · **${reign.defenses}** defense${reign.defenses === 1 ? '' : 's'}\n\n${lines.length ? lines.join('\n') : 'No title defenses yet.'}`.slice(0, 4000));
+            return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'history') {

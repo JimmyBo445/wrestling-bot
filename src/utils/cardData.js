@@ -1,13 +1,15 @@
 const { pool } = require('../db/pool');
 const { getDisplayNames, DIVISION_LABELS } = require('./discordHelpers');
-const { characterSummary, teamSummary } = require('./statsQueries');
-const { getTeamMembers, getTeamsOfCharacter } = require('./teamUtils');
+const { characterSummary, teamSummary, headToHead } = require('./statsQueries');
+const { getTeamMembers, getTeamsOfCharacter, getTitlesHeldByCharacter } = require('./teamUtils');
 const { getCurrentReign, reignHolderName } = require('./titleLogic');
 const { MATCH_CONFIG } = require('./constants');
 
 const toMember = (c, names, winner = false) => ({
     name: c.name, division: c.division, imageUrl: c.image_url, owner: names.get(c.owner_discord_id) || 'unknown', winner
 });
+
+const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][(n % 100 >> 3) ^ 1 && n % 10] || 'th'}`;
 
 /** Sentence under the winner explaining what the match changed. */
 function outcomeText(result) {
@@ -21,7 +23,7 @@ function outcomeText(result) {
     };
     if (title) {
         if (!effect || effect.type === 'none') return resultType === 'draw' ? 'Draw: the champion retains' : 'No contest: the title stays put';
-        if (effect.type === 'defense') return `${winnerName()} retains the ${title.name}`;
+        if (effect.type === 'defense') return `${winnerName()} retains the ${title.name}${result.defenseNumber ? ` (${ordinal(result.defenseNumber)} defense)` : ''}`;
         if (effect.type === 'new_reign') return `${winnerName()} wins the vacant ${title.name}`;
         return `And new ${title.is_tag_title ? 'champions' : 'champion'}: ${winnerName()}`;
     }
@@ -37,7 +39,7 @@ async function buildMatchCardData(guild, result) {
         : result.contenderTitle ? { kind: 'contender', text: `#1 Contender Match • ${result.contenderTitle.name}` } : null;
     if (banner && banner.kind === 'title') banner.text = `Championship Match • ${result.title.name}`;
 
-    const base = { serverName: guild.name || null, label: result.label, matchId: result.matchId, resultType, notes: result.notes, banner, outcome: outcomeText(result) };
+    const base = { serverName: guild.name || null, show: result.card || null, label: result.label, matchId: result.matchId, resultType, notes: result.notes, banner, outcome: outcomeText(result) };
     const isWinner = (i) => winnerIdx.includes(i);
 
     if (config.winnerMode === 'single' && config.slots.length > 2) {
@@ -139,4 +141,65 @@ async function buildBeltData(guild, title) {
     return { serverName: guild.name || null, title, champion, contender: cont[0]?.name || null, totalReigns: cnt[0].n };
 }
 
-module.exports = { buildMatchCardData, buildProfileData, buildTeamData, buildBeltData, outcomeText, toMember, DIVISION_LABELS, MATCH_CONFIG };
+/** One side of a tale of the tape: a single wrestler or a registered team. */
+async function tapeSide(guild, subject) {
+    if (subject.type === 'team') {
+        const team = subject.team;
+        const members = await getTeamMembers(team.id);
+        const names = await getDisplayNames(guild, members.map((m) => m.owner_discord_id), 2500);
+        const s = await teamSummary(team.id);
+        const { rows: held } = await pool.query(
+            `SELECT t.name FROM title_reigns tr JOIN titles t ON t.id = tr.title_id WHERE tr.team_id = $1 AND tr.lost_date IS NULL ORDER BY t.name`, [team.id]);
+        const { rows: r } = await pool.query(`SELECT COUNT(*)::int AS n FROM title_reigns WHERE team_id = $1`, [team.id]);
+        const owners = [...new Set(members.map((m) => names.get(m.owner_discord_id)).filter(Boolean))];
+        return {
+            ids: members.map((m) => String(m.id)), name: team.name, owner: owners.length ? owners.map((o) => `@${o}`).join(' & ') : null,
+            members: members.map((m) => toMember(m, names)),
+            wins: s.wins, losses: s.losses, draws: s.draws, winPct: s.winPct, streak: { current: s.streaks.current, direction: s.streaks.direction },
+            longestWin: s.streaks.longestWin, titles: held.map((x) => x.name), reigns: r[0].n, form: s.form
+        };
+    }
+    const c = subject.character;
+    const names = await getDisplayNames(guild, [c.owner_discord_id], 2500);
+    const s = await characterSummary(c.id);
+    const held = await getTitlesHeldByCharacter(c.id);
+    const { rows: r } = await pool.query(
+        `SELECT COUNT(DISTINCT tr.id)::int AS n FROM title_reigns tr
+         WHERE (tr.team_id IS NULL AND tr.character_id = $1) OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1)`, [c.id]);
+    return {
+        ids: [String(c.id)], name: c.name, owner: names.get(c.owner_discord_id) ? `@${names.get(c.owner_discord_id)}` : null,
+        members: [toMember(c, names)],
+        wins: s.wins, losses: s.losses, draws: s.draws, winPct: s.winPct, streak: { current: s.streaks.current, direction: s.streaks.direction },
+        longestWin: s.streaks.longestWin, titles: held.map((x) => x.name), reigns: r[0].n, form: s.form
+    };
+}
+
+/** left / right: { type:'character', character } or { type:'team', team } */
+async function buildTapeData(guild, { left, right, label, title = null, division }) {
+    const [L, R] = [await tapeSide(guild, left), await tapeSide(guild, right)];
+    const h = await headToHead(L.ids, R.ids);
+    const last = h.matches[0]?.created_at ? new Date(h.matches[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+    return {
+        serverName: guild.name || null, division, label, title,
+        left: L, right: R, h2h: { a: h.a, b: h.b, d: h.d, total: h.total, lastDate: last }
+    };
+}
+
+/** Every champion of a belt, oldest first (the newest 12 reigns; older ones are summarised as a count). */
+async function buildLineageData(guild, title) {
+    const { rows } = await pool.query(
+        `SELECT n, id, name, won, lost, days, defenses, is_backfilled FROM (
+            SELECT tr.id, ROW_NUMBER() OVER (ORDER BY tr.won_date, tr.id)::int AS n,
+                   COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS name,
+                   to_char(tr.won_date, 'YYYY-MM-DD') AS won, to_char(tr.lost_date, 'YYYY-MM-DD') AS lost,
+                   (COALESCE(tr.lost_date, CURRENT_DATE) - tr.won_date)::int AS days, tr.defenses, tr.is_backfilled
+            FROM title_reigns tr LEFT JOIN characters c ON c.id = tr.character_id LEFT JOIN teams tm ON tm.id = tr.team_id
+            WHERE tr.title_id = $1) x ORDER BY n`, [title.id]);
+    const shown = rows.slice(-12);
+    return {
+        serverName: guild.name || null, title, totalReigns: rows.length, hiddenEarlier: rows.length - shown.length,
+        reigns: shown.map((r) => ({ n: r.n, name: r.name, won: r.won, lost: r.lost, days: r.days, defenses: r.defenses, backfilled: r.is_backfilled }))
+    };
+}
+
+module.exports = { buildLineageData, buildTapeData, buildMatchCardData, buildProfileData, buildTeamData, buildBeltData, outcomeText, toMember, DIVISION_LABELS, MATCH_CONFIG };

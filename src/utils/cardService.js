@@ -1,7 +1,7 @@
 const { pool, withTransaction } = require('../db/pool');
 const { MATCH_CONFIG, isTeamMatch, matchLabel, MAX_CARD_MATCHES, CARD_BRANDS, DIVISION_THEME } = require('./constants');
 const { UserError } = require('./errors');
-const { requireCharacter } = require('./characterUtils');
+const { requireCharacter, getCharacterById } = require('./characterUtils');
 const { requireTitle, getCurrentReign } = require('./titleLogic');
 const { findTeamForCharacters, getTeamMembers } = require('./teamUtils');
 const { getDisplayNames } = require('./discordHelpers');
@@ -51,12 +51,49 @@ async function saveMatches(client, draftId, list) {
     for (let i = 0; i < list.length; i++) {
         const m = list[i];
         await client.query(
-            `INSERT INTO card_draft_matches (draft_id, position, match_type, character_ids, title_id, stipulation)
-             VALUES ($1, $2, $3, $4::bigint[], $5, $6)`,
-            [draftId, i + 1, m.match_type, m.character_ids, m.title_id || null, m.stipulation || null]
+            `INSERT INTO card_draft_matches (draft_id, position, match_type, character_ids, title_id, stipulation, match_id)
+             VALUES ($1, $2, $3, $4::bigint[], $5, $6, $7)`,
+            [draftId, i + 1, m.match_type, m.character_ids, m.title_id || null, m.stipulation || null, m.match_id || null]
         );
     }
     await client.query(`UPDATE card_drafts SET updated_at = now() WHERE id = $1`, [draftId]);
+}
+
+// ------------------------------------------------------------------ linking logged matches to card slots
+
+/**
+ * When a match is logged, finds the card slot that planned it (same match type and the same wrestlers,
+ * with the same sides for tag matches) and marks that slot as done. Returns { brand, division, name, position } or null.
+ * Never throws: a card is a nice-to-have, logging the match matters more.
+ */
+async function linkMatchToCard(guildId, matchId, matchType, characterIds) {
+    try {
+        const config = MATCH_CONFIG[matchType];
+        const idList = ids(characterIds);
+        const { rows } = await pool.query(
+            `SELECT cdm.id, cdm.character_ids, cdm.position, cd.brand, cd.division, cd.name
+             FROM card_draft_matches cdm JOIN card_drafts cd ON cd.id = cdm.draft_id
+             WHERE cd.guild_id = $1 AND cdm.match_type = $2 AND cdm.match_id IS NULL
+               AND cdm.character_ids <@ $3::bigint[] AND cdm.character_ids @> $3::bigint[]
+             ORDER BY cd.updated_at DESC, cdm.id`,
+            [guildId, matchType, idList]
+        );
+        const sameSides = (slotIds) => {
+            if (config.winnerMode !== 'team') return true;
+            const half = idList.length / 2;
+            const a = new Set(idList.slice(0, half)), b = new Set(idList.slice(half));
+            const x = ids(slotIds).slice(0, half), y = ids(slotIds).slice(half);
+            const eq = (set, arr) => arr.length === set.size && arr.every((v) => set.has(v));
+            return (eq(a, x) && eq(b, y)) || (eq(a, y) && eq(b, x));
+        };
+        const hit = rows.find((r) => sameSides(r.character_ids));
+        if (!hit) return null;
+        await pool.query(`UPDATE card_draft_matches SET match_id = $1 WHERE id = $2`, [matchId, hit.id]);
+        return { brand: hit.brand, division: hit.division, name: hit.name, position: hit.position };
+    } catch (err) {
+        console.error('Could not link match to a card:', err.message);
+        return null;
+    }
 }
 
 // ------------------------------------------------------------------ manual booking
@@ -171,14 +208,14 @@ async function buildShowData(guild, draft) {
 
     const member = (id) => {
         const c = byId.get(String(id));
-        return c ? { name: c.name, division: c.division, imageUrl: c.image_url, owner: owners.get(c.discord_id) || null } : { name: 'TBD', division: draft.division, imageUrl: null };
+        return c ? { id: String(c.id), name: c.name, division: c.division, imageUrl: c.image_url, owner: owners.get(c.discord_id) || null } : { name: 'TBD', division: draft.division, imageUrl: null };
     };
 
     const out = [];
     for (const m of matches) {
         const config = MATCH_CONFIG[m.match_type];
         const base = {
-            number: m.position, label: config?.label || m.match_type, stipulation: m.stipulation,
+            number: m.position, matchId: m.match_id || null, label: config?.label || m.match_type, stipulation: m.stipulation,
             title: m.title_id ? titleName.get(String(m.title_id)) || null : null
         };
         if (!config) continue;
@@ -197,6 +234,65 @@ async function buildShowData(guild, draft) {
         }
     }
     return { serverName: guild?.name || null, brand: draft.brand, division: draft.division, name: draft.name, matches: out };
+}
+
+/** Like buildShowData, but each match that has been logged also carries its result (for the recap graphic). */
+async function buildRecapData(guild, draft) {
+    const data = await buildShowData(guild, draft);
+    const mids = data.matches.map((m) => m.matchId).filter(Boolean);
+    const { rows } = mids.length ? await pool.query(
+        `SELECT m.id, m.result_type, m.title_effect, t.is_tag_title, mp.character_id, mp.is_winner
+         FROM matches m JOIN match_participants mp ON mp.match_id = m.id LEFT JOIN titles t ON t.id = m.title_id
+         WHERE m.id = ANY($1::bigint[])`, [mids]) : { rows: [] };
+    const byMatch = new Map();
+    for (const r of rows) {
+        const e = byMatch.get(String(r.id)) || { type: r.result_type, effect: r.title_effect, tag: r.is_tag_title, winners: new Set() };
+        if (r.is_winner) e.winners.add(String(r.character_id));
+        byMatch.set(String(r.id), e);
+    }
+    for (const m of data.matches) {
+        const r = m.matchId ? byMatch.get(String(m.matchId)) : null;
+        if (!r) { m.result = { status: 'pending', outcome: null }; continue; }
+        const mark = (mem) => { mem.winner = r.type === 'decisive' && r.winners.has(String(mem.id)); };
+        if (m.mode === 'ffa') m.entrants.forEach(mark);
+        else { m.sides.forEach((s) => { s.members.forEach(mark); s.winner = s.members.some((x) => x.winner); }); }
+        let outcome = null;
+        if (r.type !== 'decisive') outcome = null;
+        else if (r.effect?.kind === 'title') {
+            if (r.effect.type === 'defense') outcome = 'RETAINS';
+            else if (['new_reign', 'title_change'].includes(r.effect.type)) outcome = r.tag ? 'NEW CHAMPIONS' : 'NEW CHAMPION';
+        } else if (r.effect?.kind === 'contender') outcome = 'NEW #1 CONTENDER';
+        m.result = { status: r.type, outcome };
+    }
+    data.recap = true;
+    return data;
+}
+
+/**
+ * Who a tale of the tape can compare for one card slot: two wrestlers (singles) or two registered teams (tag).
+ * Returns { left, right, label, title, division } or null when the match can't be shown as a head-to-head.
+ */
+async function tapeTargetsForSlot(guildId, slot) {
+    const config = MATCH_CONFIG[slot.match_type];
+    if (!config) return null;
+    let left, right;
+    if (config.winnerMode === 'team') {
+        const half = slot.character_ids.length / 2;
+        const a = await findTeamForCharacters(guildId, slot.character_ids.slice(0, half));
+        const b = await findTeamForCharacters(guildId, slot.character_ids.slice(half));
+        if (!a || !b) return null;
+        left = { type: 'team', team: a }; right = { type: 'team', team: b };
+    } else if (slot.character_ids.length === 2) {
+        const [a, b] = [await getCharacterById(slot.character_ids[0]), await getCharacterById(slot.character_ids[1])];
+        if (!a || !b) return null;
+        left = { type: 'character', character: a }; right = { type: 'character', character: b };
+    } else return null;
+    let title = null;
+    if (slot.title_id) {
+        const { rows } = await pool.query(`SELECT name FROM titles WHERE id = $1`, [slot.title_id]);
+        title = rows[0]?.name || null;
+    }
+    return { left, right, label: config.label, title, division: (left.character || left.team).division };
 }
 
 /** Plain-text running order for replies. */
@@ -218,7 +314,7 @@ async function describeCard(draft) {
             who = `${m.character_ids.slice(0, half).map(n).join(' & ')} vs ${m.character_ids.slice(half).map(n).join(' & ')}`;
         } else if (m.character_ids.length === 2) who = `${n(m.character_ids[0])} vs ${n(m.character_ids[1])}`;
         else who = m.character_ids.map(n).join(', ');
-        return `**${m.position}.** ${matchLabel(m.match_type)}: ${who}${m.title_id ? ` 🏆 ${tn.get(String(m.title_id)) || 'title'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
+        return `**${m.position}.**${m.match_id ? ' ✅' : ''} ${matchLabel(m.match_type)}: ${who}${m.title_id ? ` 🏆 ${tn.get(String(m.title_id)) || 'title'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
     }).join('\n');
 }
 
@@ -418,5 +514,5 @@ async function autoCard(guildId, brand, division, createdBy, count, name = null)
 
 module.exports = {
     brandLabel, divisionLabel, cardLabel, getDraft, requireDraft, startDraft, getDraftMatches,
-    addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, describeCard, planCard, autoCard
+    tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard, autoCard
 };

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { pool } = require('../db/pool');
 const { autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
 const { ensureUser } = require('../utils/ensureGuild');
@@ -8,6 +8,8 @@ const {
 const { respond, NO_MENTIONS, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { matchLabel, DIVISION_THEME } = require('../utils/constants');
 const { UserError } = require('../utils/errors');
+const { buildTapeData } = require('../utils/cardData');
+const { renderTapeCard } = require('../utils/cardRenderer');
 
 const PERIOD_CHOICES = Object.entries(PERIOD_LABELS).map(([value, name]) => ({ name, value }));
 const charOpt = (o, name = 'character', desc = 'Character') => o.setName(name).setDescription(desc).setRequired(true).setAutocomplete(true);
@@ -25,6 +27,8 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('versus').setDescription('Record between two players (all of their wrestlers)')
         .addUserOption((o) => o.setName('player1').setDescription('First player').setRequired(true))
         .addUserOption((o) => o.setName('player2').setDescription('Second player').setRequired(true)).addStringOption(periodOpt))
+    .addSubcommand((s) => s.setName('tape').setDescription('Tale of the tape graphic for two wrestlers')
+        .addStringOption((o) => charOpt(o, 'character1', 'First wrestler')).addStringOption((o) => charOpt(o, 'character2', 'Second wrestler')))
     .addSubcommand((s) => s.setName('opponents').setDescription('A wrestler\'s record against everyone they have faced')
         .addStringOption((o) => charOpt(o)).addStringOption(periodOpt))
     .addSubcommand((s) => s.setName('history').setDescription("A wrestler's most recent matches")
@@ -97,6 +101,17 @@ module.exports = {
             if (String(a.id) === String(b.id)) throw new UserError('Pick two different wrestlers.');
             const h = await headToHead([a.id], [b.id], days);
             return respond(interaction, { embeds: [h2hEmbed(`${a.name} vs ${b.name}`, a.name, b.name, h, periodNote)], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'tape') {
+            const a = await requireCharacter(guildId, interaction.options.getString('character1'), { statuses: ['approved', 'retired'] });
+            const b = await requireCharacter(guildId, interaction.options.getString('character2'), { statuses: ['approved', 'retired'] });
+            if (String(a.id) === String(b.id)) throw new UserError('Pick two different wrestlers.');
+            await interaction.deferReply();
+            const tape = await buildTapeData(interaction.guild, {
+                left: { type: 'character', character: a }, right: { type: 'character', character: b }, label: 'Singles', division: a.division
+            });
+            return interaction.editReply({ files: [new AttachmentBuilder(await renderTapeCard(tape), { name: 'tale-of-the-tape.png' })] });
         }
 
         if (sub === 'versus') {

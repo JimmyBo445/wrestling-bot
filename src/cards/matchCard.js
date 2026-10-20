@@ -2,6 +2,7 @@ const { createCanvas } = require('@napi-rs/canvas');
 const {
     font, C, themeOf, rr, fitText, wrapLines, drawCover, loadArt, placeholderArt, baseBackground, chip, serverTag
 } = require('./common');
+const { CARD_BRANDS } = require('../utils/constants');
 
 /**
  * data: {
@@ -45,8 +46,9 @@ async function renderMatchCard(data) {
     const artOf = new Map(all.map((m, i) => [m, arts[i]]));
 
     // ---- header ----
-    ctx.fillStyle = accent;
-    ctx.fillRect(0, 0, W, 6);
+    const brand = data.show ? CARD_BRANDS[data.show.brand] : null;
+    ctx.fillStyle = brand ? brand.accent : accent;
+    ctx.fillRect(0, 0, W, brand ? 9 : 6);
     ctx.textAlign = 'left';
     ctx.fillStyle = C.text;
     ctx.font = font(30, 'bold');
@@ -54,7 +56,8 @@ async function renderMatchCard(data) {
     ctx.fillStyle = C.sub;
     ctx.font = font(16, 'medium');
     const resultWord = decisive ? 'OFFICIAL RESULT' : data.resultType === 'draw' ? 'DRAW' : 'NO CONTEST';
-    ctx.fillText(resultWord, 40, 84);
+    const showLine = brand ? `  •  ${brand.label}${data.show.name ? ` ${data.show.name.toUpperCase()}` : ''}  •  MATCH ${data.show.position}` : '';
+    fitText(ctx, `${resultWord}${showLine}`, 40, 84, 520, 16, 'medium', 11);
     ctx.textAlign = 'right';
     ctx.fillStyle = C.sub;
     ctx.fillText(`MATCH #${data.matchId}`, W - 40, 56);

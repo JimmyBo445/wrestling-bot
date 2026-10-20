@@ -6,3 +6,5 @@ const { renderBeltCard } = require('../cards/beltCard');
 
 module.exports = { renderMatchCard, renderProfileCard, renderTeamCard, renderBeltCard };
 module.exports.renderShowCard = require('../cards/showCard').renderShowCard;
+module.exports.renderTapeCard = require('../cards/tapeCard').renderTapeCard;
+module.exports.renderLineageCard = require('../cards/lineageCard').renderLineageCard;

@@ -1,4 +1,4 @@
-# Wrestling Bot 2.3.1
+# Wrestling Bot 2.4.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -11,12 +11,12 @@ servers at once. Everything is saved permanently in Postgres.
 | **Characters** | `/character submit` `assign` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
 | **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman`, plus `undo` `edit` `recent` |
-| **Championships** | `/championship list` `belt` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `backfill-reign` `edit-reign` `remove-reign` |
+| **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `backfill-reign` `edit-reign` `remove-reign` |
 | **#1 contenders** | `/contender challenge` `award` `revoke` `list` |
-| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `history` |
+| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `tape` `history` |
 | **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
 | **Matchmaking** | `/matchmaking suggest` `request` |
-| **Match cards** (admins) | `/card new` `auto` `add` `remove` `move` `view` `post` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
+| **Match cards** (admins) | `/card new` `auto` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
 | **Help** | `/help` (everyone) and `/help command:<name>` |
 | **Admin** | `/admin pending` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 

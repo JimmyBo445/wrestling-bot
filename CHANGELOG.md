@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0 — Results, tapes and title history
+- **Results follow the card.** When you log a match with `/match` that was booked on a RAW/SmackDown card, the slot is ticked off (✅) automatically and the result graphic gets the brand colour, show name and match number. Undoing the match un-ticks the slot. Nothing to do differently, just use `/match` as usual.
+- **`/card recap`**: after the show, one graphic with every result. Winners are ringed in gold, unlogged matches show PENDING. Can post to another channel.
+- **Tale of the tape**: `/stats tape` for any two wrestlers, `/card tape number:` for a slot, and `/card post` now attaches a tape to each title match automatically (turn off with `tapes:false`).
+- **`/championship lineage`**: a timeline graphic of every champion of a title with reign lengths and defenses.
+- **`/championship defenses`**: a champion's defense log (who they beat and when). Result graphics now say "(3rd defense)".
+- Database: migration 005 (adds a link from card slots to logged matches). Runs by itself.
+
 ## 2.3.1
 - Show cards (`/card view`, `/card post`) now list each wrestler's player (`@name`) under the wrestler's name, like the match and profile cards already did. Rows are a little taller to fit it.
 

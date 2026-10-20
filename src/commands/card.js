@@ -5,6 +5,8 @@ const { UserError } = require('../utils/errors');
 const { autocompleteCharacters } = require('../utils/characterUtils');
 const { MATCH_CONFIG, CARD_BRANDS, MAX_CARD_MATCHES, DIVISION_THEME } = require('../utils/constants');
 const { renderShowCard } = require('../cards/showCard');
+const { renderTapeCard } = require('../cards/tapeCard');
+const { buildTapeData } = require('../utils/cardData');
 const svc = require('../utils/cardService');
 
 const BRAND_CHOICES = Object.entries(CARD_BRANDS).map(([value, b]) => ({ name: b.label === 'RAW' ? 'RAW (red)' : 'SmackDown (blue)', value }));
@@ -45,7 +47,13 @@ const data = new SlashCommandBuilder()
         .addIntegerOption((o) => o.setName('from').setDescription('Match number to move').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
         .addIntegerOption((o) => o.setName('to').setDescription('New spot').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
     .addSubcommand((s) => showOpts(s.setName('view').setDescription('Preview the card (only you see it)')))
-    .addSubcommand((s) => showOpts(s.setName('post').setDescription('Post the finished card as a picture'))
+    .addSubcommand((s) => showOpts(s.setName('post').setDescription('Post the finished card as a picture (title matches get a tale of the tape)'))
+        .addBooleanOption((o) => o.setName('tapes').setDescription('Attach a tale of the tape for each title match (default: yes)').setRequired(false))
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => showOpts(s.setName('tape').setDescription('Tale of the tape graphic for one match on the card'))
+        .addIntegerOption((o) => o.setName('number').setDescription('Match number').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
+    .addSubcommand((s) => showOpts(s.setName('recap').setDescription('Post a results graphic for the show (matches you have logged with /match)'))
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
     .addSubcommand((s) => showOpts(s.setName('clear').setDescription('Delete the card')));
@@ -132,21 +140,49 @@ module.exports = {
             return respond(interaction, { content: `**${label}** card preview:\n${await svc.describeCard(draft)}`, files: [new AttachmentBuilder(buffer, { name: 'card-preview.png' })] });
         }
 
-        if (sub === 'post') {
+        if (sub === 'post' || sub === 'recap') {
+            const recap = sub === 'recap';
             const draft = await svc.requireDraft(guildId, brand, division);
-            if (!(await svc.getDraftMatches(draft.id)).length) throw new UserError(`The ${label} card has no matches yet.`);
+            const slots = await svc.getDraftMatches(draft.id);
+            if (!slots.length) throw new UserError(`The ${label} card has no matches yet.`);
+            if (recap && !slots.some((s) => s.match_id)) {
+                throw new UserError(`None of the ${label} card's matches have been logged yet. Log them with \`/match\` (use the same wrestlers and match type as the card) and I'll connect them automatically.`);
+            }
             const target = interaction.options.getChannel('channel');
             await interaction.deferReply(target ? { flags: 64 } : {});
-            const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
-            const file = new AttachmentBuilder(buffer, { name: `${draft.brand}-${draft.division}-card.png` });
+            const data = recap ? await svc.buildRecapData(interaction.guild, draft) : await svc.buildShowData(interaction.guild, draft);
+            const files = [new AttachmentBuilder(await renderShowCard(data), { name: `${draft.brand}-${draft.division}-${recap ? 'recap' : 'card'}.png` })];
+            if (!recap && interaction.options.getBoolean('tapes') !== false) {
+                for (const slot of slots.filter((s) => s.title_id).slice(0, 9)) {
+                    try {
+                        const t = await svc.tapeTargetsForSlot(guildId, slot);
+                        if (!t) continue;
+                        files.push(new AttachmentBuilder(await renderTapeCard(await buildTapeData(interaction.guild, t)), { name: `tape-${slot.position}.png` }));
+                    } catch (err) { console.error('Tale of the tape failed:', err.message); }
+                }
+            }
+            const noun = recap ? 'recap' : 'card';
             if (target) {
                 const channel = await interaction.guild.channels.fetch(target.id).catch(() => null);
                 if (!channel || !channel.isTextBased()) throw new UserError('I can\'t post in that channel. Pick a text channel I can see and send messages in.');
-                try { await channel.send({ files: [file], allowedMentions: NO_MENTIONS }); }
+                try { await channel.send({ files, allowedMentions: NO_MENTIONS }); }
                 catch (e) { throw new UserError('I couldn\'t post there. Check that I can view the channel, send messages and attach files.'); }
-                return respond(interaction, { content: `Posted the ${label} card in <#${target.id}>.` });
+                return respond(interaction, { content: `Posted the ${label} ${noun} in <#${target.id}>.` });
             }
-            return respond(interaction, { files: [file] });
+            return respond(interaction, { files });
+        }
+
+        if (sub === 'tape') {
+            const n = interaction.options.getInteger('number');
+            const draft = await svc.requireDraft(guildId, brand, division);
+            const slots = await svc.getDraftMatches(draft.id);
+            const slot = slots[n - 1];
+            if (!slot) throw new UserError(slots.length ? `Pick a match number from 1 to ${slots.length}.` : 'That card has no matches yet.');
+            const targets = await svc.tapeTargetsForSlot(guildId, slot);
+            if (!targets) throw new UserError('A tale of the tape works for singles matches and tag matches where both sides are registered teams (`/team create`).');
+            await interaction.deferReply();
+            const buffer = await renderTapeCard(await buildTapeData(interaction.guild, targets));
+            return respond(interaction, { files: [new AttachmentBuilder(buffer, { name: 'tale-of-the-tape.png' })] });
         }
 
         if (sub === 'clear') {
