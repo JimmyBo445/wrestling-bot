@@ -10,13 +10,13 @@ function sinceClause(days, alias = 'm') {
 }
 
 /** Full ordered result list (oldest->newest) with dates, for one character. */
-async function characterTimeline(characterId, days = null) {
+async function characterTimeline(characterId, days = null, ownerId = null) {
     const { rows } = await pool.query(
         `SELECT m.id AS match_id, m.match_type, m.result_type, m.is_title_match, m.is_contender_match, m.created_at, mp.is_winner
          FROM match_participants mp JOIN matches m ON m.id = mp.match_id
-         WHERE mp.character_id = $1 ${sinceClause(days)}
+         WHERE mp.character_id = $1 ${ownerId ? 'AND mp.owner_id = $2' : ''} ${sinceClause(days)}
          ORDER BY m.created_at ASC, m.id ASC`,
-        [characterId]
+        ownerId ? [characterId, ownerId] : [characterId]
     );
     return rows.map((r) => ({
         ...r,
@@ -34,8 +34,8 @@ function tally(timeline) {
     return t;
 }
 
-async function characterSummary(characterId, days = null) {
-    const timeline = await characterTimeline(characterId, days);
+async function characterSummary(characterId, days = null, ownerId = null) {
+    const timeline = await characterTimeline(characterId, days, ownerId);
     const results = timeline.map((r) => r.result);
     const byType = {};
     for (const r of timeline) {
@@ -151,27 +151,45 @@ async function teamSummary(teamId) {
     return { ...tally(timeline), streaks: computeStreaks(results), form: recentForm(results, 5), timeline };
 }
 
-/** Wins/losses/titles for a user across all their characters. */
+/**
+ * A player's record follows the PLAYER: every match they wrestled in (whichever character
+ * they used), overall and per division. Characters they no longer own still count for them.
+ */
 async function userSummary(guildId, ownerId) {
-    const { rows: chars } = await pool.query(
-        `SELECT c.id, c.name, c.division, c.status FROM characters c
-         WHERE c.guild_id = $1 AND c.owner_id = $2 AND c.status IN ('approved','retired') ORDER BY c.status, c.name`,
-        [guildId, ownerId]
-    );
-    const perChar = [];
-    const allResults = [];
-    for (const c of chars) {
-        const s = await characterSummary(c.id);
-        perChar.push({ ...c, ...s });
-        for (const r of s.timeline) allResults.push(r);
-    }
-    // user streak = chronological across ALL their matches (a match with two of their chars counts once)
+    const { rows } = await pool.query(
+        `SELECT m.id AS match_id, m.match_type, m.result_type, m.created_at, mp.is_winner, mp.division,
+                c.id AS char_id, c.name AS char_name, c.status AS char_status, c.owner_id AS char_owner
+         FROM match_participants mp
+         JOIN matches m ON m.id = mp.match_id
+         JOIN characters c ON c.id = mp.character_id
+         WHERE mp.owner_id = $2 AND m.guild_id = $1
+         ORDER BY m.created_at ASC, m.id ASC`, [guildId, ownerId]);
+    const toResult = (r) => (r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L');
+    const all = rows.map((r) => ({ ...r, result: toResult(r) }));
     const seen = new Set();
-    const merged = allResults.sort((x, y) => new Date(x.created_at) - new Date(y.created_at) || x.match_id - y.match_id)
-        .filter((r) => (seen.has(r.match_id) ? false : seen.add(r.match_id)));
-    const results = merged.map((r) => r.result);
-    const total = tally(merged);
-    return { chars: perChar, ...total, streaks: computeStreaks(results), form: recentForm(results, 5) };
+    const merged = all.filter((r) => (seen.has(r.match_id) ? false : seen.add(r.match_id)));
+    const summarize = (list) => {
+        const once = new Set();
+        const uniq = list.filter((r) => (once.has(r.match_id) ? false : once.add(r.match_id)));
+        const results = uniq.map((r) => r.result);
+        return { ...tally(uniq), streaks: computeStreaks(results), form: recentForm(results, 5) };
+    };
+    const byDivision = {};
+    for (const div of [...new Set(all.map((r) => r.division).filter(Boolean))]) byDivision[div] = summarize(all.filter((r) => r.division === div));
+    const chars = [];
+    for (const id of [...new Set(all.map((r) => String(r.char_id)))]) {
+        const mine = all.filter((r) => String(r.char_id) === id);
+        const t = tally(mine);
+        chars.push({ id, name: mine[0].char_name, status: mine[0].char_status, division: mine[0].division,
+            current: String(mine[0].char_owner) === String(ownerId), ...t, streaks: computeStreaks(mine.map((r) => r.result)) });
+    }
+    // current characters with no matches yet still get listed
+    const { rows: owned } = await pool.query(
+        `SELECT id, name, status, division FROM characters WHERE guild_id = $1 AND owner_id = $2 AND status IN ('approved','retired')`, [guildId, ownerId]);
+    for (const c of owned) if (!chars.some((x) => String(x.id) === String(c.id))) {
+        chars.push({ id: String(c.id), name: c.name, status: c.status, division: c.division, current: true, wins: 0, losses: 0, draws: 0, ncs: 0, total: 0, winPct: 0, streaks: computeStreaks([]) });
+    }
+    return { chars, byDivision, ...summarize(merged) };
 }
 
 module.exports = {

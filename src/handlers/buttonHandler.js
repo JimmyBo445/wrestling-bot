@@ -68,7 +68,7 @@ async function handlePending(interaction) {
     if (['match_request', 'contender_challenge'].includes(request.request_type)) {
         try {
             await interaction.channel.send({
-                content: `<@${request.requested_by}> your ${request.request_type === 'match_request' ? 'match request' : 'contender challenge'} was **${approve ? 'approved' : 'denied'}**.${approve && request.request_type === 'match_request' ? ' An admin will book it.' : ''}`,
+                content: `<@${request.requested_by}> your ${request.request_type === 'match_request' ? 'match request' : 'contender challenge'} was **${approve ? 'approved' : 'denied'}**.${approve && request.request_type === 'match_request' ? ' An admin can put it on a card with `/card request`.' : ''}`,
                 allowedMentions: { users: [request.requested_by] }
             });
         } catch (_) { /* no permission to post: fine */ }

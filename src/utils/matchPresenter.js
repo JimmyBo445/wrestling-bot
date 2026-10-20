@@ -5,6 +5,7 @@ const { getGuildSettings } = require('./ensureGuild');
 const { maybePromptStreak } = require('./contenderLogic');
 const { NO_MENTIONS } = require('./discordHelpers');
 const { isTeamMatch } = require('./constants');
+const { detectMilestones } = require('./milestones');
 
 /** Plain-text alt/summary of a match, used if the image can't be drawn. */
 function textSummary(result) {
@@ -51,6 +52,8 @@ async function presentMatch(interaction, result) {
             if (n) notices.push(n.trim());
         }
     }
+
+    notices.push(...await detectMilestones(interaction.guildId, result));
 
     const payload = {
         content: notices.join('\n') || undefined,

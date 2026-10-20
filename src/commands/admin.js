@@ -4,6 +4,9 @@ const { getGuildSettings } = require('../utils/ensureGuild');
 const { buildPendingMessage } = require('../handlers/pendingQueue');
 const { respond, EPHEMERAL, NO_MENTIONS } = require('../utils/discordHelpers');
 const { logAudit } = require('../utils/audit');
+const { UserError } = require('../utils/errors');
+const { buildMonthlyEmbed, prevMonthKey } = require('../utils/monthly');
+const { sendBackup } = require('../utils/backup');
 
 const data = new SlashCommandBuilder()
     .setName('admin')
@@ -21,6 +24,15 @@ const data = new SlashCommandBuilder()
             .addChoices({ name: 'Same two players', value: 'user' }, { name: 'Same two characters', value: 'character' })))
     .addSubcommand((s) => s.setName('set-streak-threshold').setDescription('How many wins in a row triggers the "pick a title shot" prompt')
         .addIntegerOption((o) => o.setName('wins').setDescription('Win streak length (0 turns prompts off)').setRequired(true).setMinValue(0).setMaxValue(50)))
+    .addSubcommand((s) => s.setName('set-monthly-channel').setDescription('Where the monthly "Wrestler of the Month" post goes (leave empty to turn off)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('monthly-awards').setDescription('Post Wrestler of the Month now (default: last month)')
+        .addStringOption((o) => o.setName('month').setDescription('Month as YYYY-MM, e.g. 2026-09').setRequired(false).setMaxLength(7)))
+    .addSubcommand((s) => s.setName('backup').setDescription('Weekly backup spreadsheets sent to you by DM')
+        .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(true)
+            .addChoices({ name: 'Turn on (weekly, to me)', value: 'on' }, { name: 'Turn off', value: 'off' }, { name: 'Send one now', value: 'now' })))
+    .addSubcommand((s) => s.setName('milestones').setDescription('Auto shout-outs for win streaks, career wins and title reigns')
+        .addStringOption((o) => o.setName('action').setDescription('On or off').setRequired(true).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('audit').setDescription('Recent admin actions')
         .addIntegerOption((o) => o.setName('count').setDescription('How many (default 15, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
@@ -44,6 +56,41 @@ module.exports = {
             await logAudit(guildId, interaction.user.id, 'setting_matches_channel', { channel: channel?.id || null });
             return respond(interaction, { content: channel ? `Match results will also be posted in <#${channel.id}>.` : 'Match results will no longer be copied to another channel.' });
         }
+        if (sub === 'set-monthly-channel') {
+            const channel = interaction.options.getChannel('channel');
+            await pool.query(`UPDATE guilds SET monthly_channel_id = $1 WHERE guild_id = $2`, [channel?.id || null, guildId]);
+            await logAudit(guildId, interaction.user.id, 'setting_monthly_channel', { channel: channel?.id || null });
+            return respond(interaction, { content: channel ? `Wrestler of the Month will be posted in <#${channel.id}> at the start of each month (it covers the month before).` : 'The automatic monthly post is **off**.' });
+        }
+        if (sub === 'monthly-awards') {
+            const raw = interaction.options.getString('month')?.trim();
+            if (raw && !/^\d{4}-(0[1-9]|1[0-2])$/.test(raw)) throw new UserError('Write the month like `2026-09`.');
+            const { embed } = await buildMonthlyEmbed(guildId, raw || prevMonthKey());
+            return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
+        }
+        if (sub === 'backup') {
+            const action = interaction.options.getString('action');
+            if (action === 'off') {
+                await pool.query(`UPDATE guilds SET backup_user_id = NULL WHERE guild_id = $1`, [guildId]);
+                await logAudit(guildId, interaction.user.id, 'backup_off', {});
+                return respond(interaction, { content: 'Weekly backups are **off**.', flags: 64 });
+            }
+            await interaction.deferReply({ flags: 64 });
+            if (action === 'on') {
+                await pool.query(`UPDATE guilds SET backup_user_id = $1, backup_last = NULL WHERE guild_id = $2`, [interaction.user.id, guildId]);
+                await logAudit(guildId, interaction.user.id, 'backup_on', {});
+            }
+            const ok = await sendBackup(interaction.client, guildId, interaction.user.id);
+            return respond(interaction, { content: ok
+                ? (action === 'on' ? '✅ Weekly backups are **on**. I just sent the first one to your DMs, and I\'ll send a new one every week.' : '✅ Sent to your DMs.')
+                : '⚠️ I couldn\'t DM you. Open Discord Settings → Privacy & Safety → allow direct messages from server members, then try again.' });
+        }
+        if (sub === 'milestones') {
+            const on = interaction.options.getString('action') === 'on';
+            await pool.query(`UPDATE guilds SET milestones_enabled = $1 WHERE guild_id = $2`, [on, guildId]);
+            await logAudit(guildId, interaction.user.id, 'setting_milestones', { on });
+            return respond(interaction, { content: `Milestone shout-outs are **${on ? 'on' : 'off'}**.` });
+        }
         if (sub === 'set-cooldown') {
             const hours = interaction.options.getInteger('hours');
             const scope = interaction.options.getString('scope');
@@ -65,7 +112,10 @@ module.exports = {
                 { name: 'Approval / prompts channel', value: s.pending_channel_id ? `<#${s.pending_channel_id}>` : 'Not set (use `/admin set-pending-channel`)' },
                 { name: 'Match results copied to', value: s.matches_channel_id ? `<#${s.matches_channel_id}>` : 'Off (results appear where the command is used)' },
                 { name: 'Singles cooldown', value: s.singles_cooldown_hours ? `${s.singles_cooldown_hours}h (${s.cooldown_scope === 'character' ? 'same two characters' : 'same two players'})` : 'Off' },
-                { name: 'Win-streak prompt', value: s.streak_threshold ? `Every ${s.streak_threshold} wins in a row` : 'Off' }
+                { name: 'Win-streak prompt', value: s.streak_threshold ? `Every ${s.streak_threshold} wins in a row` : 'Off' },
+                { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin set-monthly-channel`)' },
+                { name: 'Milestone shout-outs', value: s.milestones_enabled === false ? 'Off' : 'On' },
+                { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin backup`)' }
             );
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
         }

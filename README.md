@@ -1,4 +1,4 @@
-# Wrestling Bot 2.4.0
+# Wrestling Bot 2.5.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -10,19 +10,21 @@ servers at once. Everything is saved permanently in Postgres.
 |---|---|
 | **Characters** | `/character submit` `assign` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
-| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman`, plus `undo` `edit` `recent` |
+| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman`, plus `undo` `edit` `rate` `recent` |
 | **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `backfill-reign` `edit-reign` `remove-reign` |
 | **#1 contenders** | `/contender challenge` `award` `revoke` `list` |
-| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `tape` `history` |
+| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `history` |
 | **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
 | **Matchmaking** | `/matchmaking suggest` `request` |
-| **Match cards** (admins) | `/card new` `auto` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
+| **Match cards** (admins) | `/card new` `auto` `request` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
+| **Factions** | `/faction create` `add-member` `remove-member` `disband` `list` `profile` (3 to 8 wrestlers, shared record, separate from tag teams) |
+| **Hall of Fame** | `/halloffame induct` `remove` `list` `view` |
 | **Help** | `/help` (everyone) and `/help command:<name>` |
-| **Admin** | `/admin pending` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
+| **Admin** | `/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 
 ### How the rules work
 - **Match cards**: one card per brand + division (RAW or SmackDown, and each division), up to 10 matches. `/card auto` books one from recent matches; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). A wrestler can be in one match per card, and everyone on a card must be in that division. Cards are plans only: log the real result with `/match` afterwards.
-- **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` or the buttons in the approval channel). Admins can assign directly.
+- **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
 - **Title match**: add the `title` option to any log command (or use the two `/championship log-...` commands). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
 - **#1 contender match**: add `contender_for`. The winner becomes #1 contender. A contender's shot is used up when they take part in a title match for that belt.

@@ -122,8 +122,8 @@ async function buildLeaderboardEmbed(guildId, category = 'win_pct', period = 'al
             `SELECT u.discord_id,
                     COUNT(DISTINCT m.id) FILTER (WHERE mp.is_winner AND m.result_type = 'decisive')::int AS w,
                     COUNT(DISTINCT m.id) FILTER (WHERE NOT mp.is_winner AND m.result_type = 'decisive')::int AS l
-             FROM users u JOIN characters c ON c.owner_id = u.id
-             JOIN match_participants mp ON mp.character_id = c.id JOIN matches m ON m.id = mp.match_id
+             FROM users u
+             JOIN match_participants mp ON mp.owner_id = u.id JOIN matches m ON m.id = mp.match_id
              WHERE u.guild_id = $1 ${since(days)} GROUP BY u.discord_id HAVING COUNT(*) > 0
              ORDER BY w DESC, l ASC LIMIT 10`,
             [guildId]

@@ -61,7 +61,9 @@ async function buildMatchCardData(guild, result) {
 
 async function buildProfileData(guild, character) {
     const names = await getDisplayNames(guild, [character.owner_discord_id], 2500);
-    const summary = await characterSummary(character.id);
+    const summary = await characterSummary(character.id, null, character.owner_id);
+    const all = await characterSummary(character.id);
+    const allTime = all.total !== summary.total ? { wins: all.wins, losses: all.losses, draws: all.draws, total: all.total } : null;
     const { rows: held } = await pool.query(
         `SELECT t.name FROM title_reigns tr JOIN titles t ON t.id = tr.title_id
          WHERE tr.lost_date IS NULL AND ((tr.team_id IS NULL AND tr.character_id = $1)
@@ -81,7 +83,7 @@ async function buildProfileData(guild, character) {
         serverName: guild.name || null,
         character: { name: character.name, division: character.division, imageUrl: character.image_url, alignment: character.alignment, bio: character.bio, finisher: character.finisher, entranceTheme: character.entrance_theme, status: character.status },
         ownerName: names.get(character.owner_discord_id) || 'unknown',
-        summary, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses,
+        summary, allTime, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses,
         teamName: teams.length ? teams.map((t) => t.name).join(' / ') : null
     };
 }

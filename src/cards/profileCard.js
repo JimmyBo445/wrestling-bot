@@ -90,6 +90,12 @@ async function renderProfileCard(data) {
     statBox(ctx, px + 3 * (bw + gap), by, bw - 8, 92, 'Best run', s.streaks.longestWin ? `W${s.streaks.longestWin}` : '—', C.green);
 
     formRow(ctx, px, 296 + dy, s.form);
+    if (data.allTime) {
+        ctx.textAlign = 'right'; ctx.fillStyle = C.sub; ctx.font = font(13, 'medium');
+        const a = data.allTime;
+        ctx.fillText(`ALL OWNERS: ${a.wins}-${a.losses}${a.draws ? `-${a.draws}` : ''}`, W - 30, 316 + dy);
+        ctx.textAlign = 'left';
+    }
 
     // by match type
     const typeBits = Object.entries(s.byType)

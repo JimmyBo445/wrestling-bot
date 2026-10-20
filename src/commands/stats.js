@@ -27,6 +27,9 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('versus').setDescription('Record between two players (all of their wrestlers)')
         .addUserOption((o) => o.setName('player1').setDescription('First player').setRequired(true))
         .addUserOption((o) => o.setName('player2').setDescription('Second player').setRequired(true)).addStringOption(periodOpt))
+    .addSubcommand((s) => s.setName('rivalries').setDescription('The hottest rivalries: pairs who have met the most')
+        .addStringOption((o) => o.setName('period').setDescription('Default: all time').setRequired(false)
+            .addChoices(...Object.entries(PERIOD_LABELS).map(([value, name]) => ({ name, value })))))
     .addSubcommand((s) => s.setName('tape').setDescription('Tale of the tape graphic for two wrestlers')
         .addStringOption((o) => charOpt(o, 'character1', 'First wrestler')).addStringOption((o) => charOpt(o, 'character2', 'Second wrestler')))
     .addSubcommand((s) => s.setName('opponents').setDescription('A wrestler\'s record against everyone they have faced')
@@ -56,7 +59,8 @@ module.exports = {
 
         if (sub === 'character') {
             const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
-            const s = await characterSummary(c.id, days);
+            const s = await characterSummary(c.id, days, c.owner_id);
+            const allOwners = await characterSummary(c.id, days);
             const opps = await opponentBreakdown(c.id, { days, limit: 1 });
             const embed = new EmbedBuilder()
                 .setTitle(`${c.name} — Stats`).setColor(DIVISION_THEME[c.division].embed)
@@ -72,6 +76,7 @@ module.exports = {
                     { name: 'Title Matches', value: `${s.titleMatches.w}-${s.titleMatches.l}`, inline: true },
                     { name: 'Most Faced', value: opps[0] ? `${opps[0].name} (${opps[0].w}-${opps[0].l}${opps[0].d ? `-${opps[0].d}` : ''})` : '—', inline: true }
                 );
+            if (allOwners.total !== s.total) embed.addFields({ name: 'All owners (before transfer)', value: rec(allOwners), inline: true });
             const types = Object.entries(s.byType);
             if (types.length) embed.addFields({ name: 'By Match Type', value: types.map(([k, v]) => `${matchLabel(k)}: **${v.w}-${v.l}**${v.d ? `-${v.d}` : ''}`).join('\n') });
             if (periodNote) embed.setFooter({ text: periodNote });
@@ -83,6 +88,7 @@ module.exports = {
             const ownerId = await ensureUser(guildId, target.id);
             const u = await userSummary(guildId, ownerId);
             if (!u.chars.length) throw new UserError(`<@${target.id}> has no approved characters yet.`);
+            const divLines = Object.entries(u.byDivision).map(([d, v]) => `${DIVISION_LABELS[d] || d}: **${rec(v)}**${v.winPct && v.wins + v.losses ? ` (${v.winPct.toFixed(0)}%)` : ''}`);
             const embed = new EmbedBuilder().setTitle(`${target.displayName || target.username} — Overall`).setColor(0xC0392B)
                 .addFields(
                     { name: 'Record', value: rec(u), inline: true },
@@ -90,7 +96,8 @@ module.exports = {
                     { name: 'Streak', value: streakStr(u.streaks), inline: true },
                     { name: 'Best Win Streak', value: String(u.streaks.longestWin), inline: true },
                     { name: 'Last 5', value: form(u.form), inline: true },
-                    { name: 'Wrestlers', value: u.chars.map((c) => `**${c.name}**${c.status === 'retired' ? ' _(retired)_' : ''}: ${c.wins}-${c.losses}${c.streaks.current ? ` (${c.streaks.direction === 'win' ? 'W' : 'L'}${c.streaks.current})` : ''}`).join('\n') }
+                    { name: 'By division', value: (divLines.join('\n') || '—').slice(0, 1000) },
+                    { name: 'Wrestlers', value: u.chars.map((c) => `**${c.name}**${c.status === 'retired' ? ' _(retired)_' : ''}${c.current ? '' : ' _(former)_'}: ${c.wins}-${c.losses}${c.streaks.current ? ` (${c.streaks.direction === 'win' ? 'W' : 'L'}${c.streaks.current})` : ''}`).join('\n') }
                 );
             return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
@@ -101,6 +108,16 @@ module.exports = {
             if (String(a.id) === String(b.id)) throw new UserError('Pick two different wrestlers.');
             const h = await headToHead([a.id], [b.id], days);
             return respond(interaction, { embeds: [h2hEmbed(`${a.name} vs ${b.name}`, a.name, b.name, h, periodNote)], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'rivalries') {
+            const { rivalries } = require('../utils/monthly');
+            const period = interaction.options.getString('period') || 'all';
+            const d = PERIODS[period];
+            const rows = await rivalries(guildId, { start: d ? new Date(Date.now() - d * 864e5) : null, limit: 8 });
+            if (!rows.length) throw new UserError('No rivalries yet. A rivalry starts when two wrestlers have met at least twice.');
+            const lines = rows.map((r, i) => `**${i + 1}.** 🔥 ${r.a_name} vs ${r.b_name}: **${r.meetings}** meetings (${r.a_wins}-${r.b_wins})`);
+            return respond(interaction, { embeds: [new EmbedBuilder().setTitle('Hottest Rivalries').setColor(0xE67E22).setDescription(lines.join('\n')).setFooter({ text: PERIOD_LABELS[period] })] });
         }
 
         if (sub === 'tape') {

@@ -8,3 +8,5 @@ module.exports = { renderMatchCard, renderProfileCard, renderTeamCard, renderBel
 module.exports.renderShowCard = require('../cards/showCard').renderShowCard;
 module.exports.renderTapeCard = require('../cards/tapeCard').renderTapeCard;
 module.exports.renderLineageCard = require('../cards/lineageCard').renderLineageCard;
+module.exports.renderFactionCard = require('../cards/factionCard').renderFactionCard;
+module.exports.renderHofCard = require('../cards/hofCard').renderHofCard;

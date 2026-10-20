@@ -142,9 +142,9 @@ async function logMatch(input) {
         for (let i = 0; i < config.slots.length; i++) {
             const side = config.slots[i].team;
             await client.query(
-                `INSERT INTO match_participants (match_id, character_id, team_number, team_id, is_winner)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [mId, characters[i].id, side, side && sideTeams[side] ? sideTeams[side].id : null, winnerIdx.includes(i)]
+                `INSERT INTO match_participants (match_id, character_id, team_number, team_id, is_winner, owner_id, division)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [mId, characters[i].id, side, side && sideTeams[side] ? sideTeams[side].id : null, winnerIdx.includes(i), characters[i].owner_id, characters[i].division]
             );
         }
 

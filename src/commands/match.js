@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 const { pool } = require('../db/pool');
+const { UserError } = require('../utils/errors');
+const { logAudit } = require('../utils/audit');
 const { MATCH_CONFIG, matchLabel } = require('../utils/constants');
 const { autocompleteCharacters } = require('../utils/characterUtils');
 const { autocompleteTitles } = require('../utils/titleLogic');
@@ -45,6 +47,9 @@ const data = new SlashCommandBuilder()
 for (const [key, config] of Object.entries(MATCH_CONFIG)) {
     data.addSubcommand((sub) => buildLogSubcommand(sub, key, config));
 }
+data.addSubcommand((sub) => sub.setName('rate').setDescription('Give a logged match 1 to 5 stars (used for Wrestler of the Month "best match")')
+    .addIntegerOption((o) => o.setName('match_id').setDescription('Match to rate').setRequired(true).setAutocomplete(true))
+    .addIntegerOption((o) => o.setName('stars').setDescription('1 to 5 stars').setRequired(true).setMinValue(1).setMaxValue(5)));
 data.addSubcommand((sub) => sub.setName('undo').setDescription('Delete a logged match and reverse its title/contender changes')
     .addIntegerOption((o) => o.setName('match_id').setDescription('Match to undo').setRequired(true).setAutocomplete(true)));
 data.addSubcommand((sub) => sub.setName('edit').setDescription('Fix the notes, winner or result of a plain match')
@@ -111,6 +116,15 @@ module.exports = {
             await interaction.editReply(payload);
             await mirrorToMatchesChannel(interaction, payload);
             return;
+        }
+
+        if (sub === 'rate') {
+            const matchId = interaction.options.getInteger('match_id');
+            const stars = interaction.options.getInteger('stars');
+            const { rowCount } = await pool.query(`UPDATE matches SET stars = $1, rated_by = $2 WHERE id = $3 AND guild_id = $4`, [stars, interaction.user.id, matchId, guildId]);
+            if (!rowCount) throw new UserError('I could not find that match on this server.');
+            await logAudit(guildId, interaction.user.id, 'match_rated', { matchId, stars });
+            return respond(interaction, { content: `Match **#${matchId}** rated ${'⭐'.repeat(stars)} (${stars}/5).` });
         }
 
         if (sub === 'undo') {

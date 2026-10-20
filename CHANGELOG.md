@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.5.0 — Player records, factions and more
+- **Records now follow the player.** Every match remembers who owned each wrestler at the time. `/stats user` shows a player's overall record plus one for each division (Men's, Women's, Custom, Custom Women's). Switching characters, or leaving and rejoining the server, never resets it. If a character is transferred, the old player keeps what they earned and the new player starts at 0-0 with it. A character's page shows the current owner's record, and "All owners" when it has changed hands. Old matches are credited to each character's current owner.
+- **Factions** (`/faction`): groups of 3 to 8 wrestlers with a shared record and a graphic. Separate from tag teams: a wrestler can be in both, but only one faction.
+- **Hall of Fame** (`/halloffame`): induct legends with a gold graphic showing their career.
+- **Star ratings**: admins rate matches 1 to 5 stars with `/match rate`.
+- **Wrestler of the Month**: posts on its own each month (set the channel with `/admin set-monthly-channel`) with the top wrestler, match of the month (from star ratings) and hottest rivalries. `/admin monthly-awards` posts it on demand. `/stats rivalries` shows the hottest rivalries any time.
+- **Milestone shout-outs**: every 5th win in a row, big career win numbers, and "3-time champion" announcements appear with the match result. Turn off with `/admin milestones`.
+- **Weekly backup**: `/admin backup action:Turn on` sends you spreadsheets (CSV files) of all records by DM every week. "Send one now" works too.
+- **`/card request`**: put an approved player match request on a card.
+- Database: migrations 006 and 007 run by themselves.
+
 ## 2.4.0 — Results, tapes and title history
 - **Results follow the card.** When you log a match with `/match` that was booked on a RAW/SmackDown card, the slot is ticked off (✅) automatically and the result graphic gets the brand colour, show name and match number. Undoing the match un-ticks the slot. Nothing to do differently, just use `/match` as usual.
 - **`/card recap`**: after the show, one graphic with every result. Winners are ringed in gold, unlogged matches show PENDING. Can post to another channel.

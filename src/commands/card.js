@@ -41,6 +41,9 @@ const data = new SlashCommandBuilder()
             .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true))
             .addStringOption((o) => o.setName('stipulation').setDescription('e.g. No DQ, Steel Cage, Main Event').setRequired(false).setMaxLength(40));
     })
+    .addSubcommand((s) => showOpts(s.setName('request').setDescription('Put an approved player match request on the card as a singles match'))
+        .addStringOption((o) => o.setName('request').setDescription('Approved match request').setRequired(true).setAutocomplete(true))
+        .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true)))
     .addSubcommand((s) => showOpts(s.setName('remove').setDescription('Take a match off the card'))
         .addIntegerOption((o) => o.setName('number').setDescription('Match number').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
     .addSubcommand((s) => showOpts(s.setName('move').setDescription('Change the running order'))
@@ -71,6 +74,18 @@ module.exports = {
             if (division) { params.push(division); extra = 'AND division = $3'; }
             const { rows } = await pool.query(`SELECT id, name, is_vacant FROM titles WHERE guild_id = $1 AND name ILIKE $2 ${extra} ORDER BY name LIMIT 25`, params);
             return interaction.respond(rows.map((r) => ({ name: `${r.name}${r.is_vacant ? ' (Vacant)' : ''}`.slice(0, 100), value: String(r.id) })));
+        }
+        if (focused.name === 'request') {
+            const { rows } = await pool.query(
+                `SELECT pr.id, a.name AS a, b.name AS b, pr.payload
+                 FROM pending_requests pr JOIN characters a ON a.id = pr.character_id JOIN characters b ON b.id = pr.challenger_character_id
+                 WHERE pr.guild_id = $1 AND pr.request_type = 'match_request' AND pr.status = 'approved'
+                   AND COALESCE(pr.payload->>'booked', 'no') <> 'yes' AND a.status = 'approved' AND b.status = 'approved'
+                   AND ($2::text IS NULL OR a.division = $2)
+                 ORDER BY pr.id DESC LIMIT 25`, [interaction.guildId, division || null]);
+            const q = String(focused.value || '').toLowerCase();
+            return interaction.respond(rows.map((r) => ({ name: `${r.a} vs ${r.b}${r.payload?.note ? ` — ${r.payload.note}` : ''}`.slice(0, 100), value: String(r.id) }))
+                .filter((o) => o.name.toLowerCase().includes(q)));
         }
         return interaction.respond(await autocompleteCharacters(interaction, focused.value, { division: division || null }));
     },
@@ -116,6 +131,26 @@ module.exports = {
             const draft = await svc.requireDraft(guildId, brand, division);
             return respond(interaction, {
                 content: `Added as match **${number}** on the ${label} card.${warnings.length ? `\n⚠️ ${warnings.join('\n⚠️ ')}` : ''}\n\n${await svc.describeCard(draft)}\n\n${number >= MAX_CARD_MATCHES ? 'The card is full.' : `${MAX_CARD_MATCHES - number} spot${MAX_CARD_MATCHES - number === 1 ? '' : 's'} left.`}`,
+                allowedMentions: NO_MENTIONS
+            });
+        }
+
+        if (sub === 'request') {
+            await interaction.deferReply({ flags: 64 });
+            const id = parseInt(interaction.options.getString('request'), 10);
+            const { rows } = Number.isInteger(id) ? await pool.query(
+                `SELECT * FROM pending_requests WHERE id = $1 AND guild_id = $2 AND request_type = 'match_request' AND status = 'approved'`, [id, guildId]) : { rows: [] };
+            const req = rows[0];
+            if (!req) throw new UserError('Pick one of the approved match requests from the list.');
+            if (req.payload?.booked === 'yes') throw new UserError('That request is already on a card.');
+            const { number, warnings } = await svc.addMatchToCard(guildId, brand, division, {
+                matchType: 'singles', characterIds: [String(req.character_id), String(req.challenger_character_id)],
+                titleId: interaction.options.getString('title'), stipulation: req.payload?.note ? String(req.payload.note).slice(0, 40) : null
+            });
+            await pool.query(`UPDATE pending_requests SET payload = COALESCE(payload, '{}'::jsonb) || '{"booked":"yes"}'::jsonb WHERE id = $1`, [id]);
+            const draft = await svc.requireDraft(guildId, brand, division);
+            return respond(interaction, {
+                content: `Added the request as match **${number}** on the ${label} card.${warnings.length ? `\n⚠️ ${warnings.join('\n⚠️ ')}` : ''}\n\n${await svc.describeCard(draft)}`,
                 allowedMentions: NO_MENTIONS
             });
         }

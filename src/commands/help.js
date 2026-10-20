@@ -3,7 +3,7 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'match', 'card', 'admin'];
+const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'match', 'card', 'faction', 'halloffame', 'admin'];
 const BLURB = {
     character: 'Your wrestlers: submit, edit, view profile cards',
     team: 'Registered tag teams',
@@ -15,7 +15,9 @@ const BLURB = {
     matchmaking: 'Find fresh opponents or request a match',
     match: 'Log, undo and edit match results',
     card: 'Build and post RAW / SmackDown match cards',
-    admin: 'Server settings and the approval queue'
+    faction: 'Factions: groups of 3-8 with a shared record',
+    halloffame: 'Hall of Fame: retired legends',
+    admin: 'Server settings, monthly awards, backups and the approval queue'
 };
 
 const ADMIN_TAG = /^\[Admin\]\s*/i;
