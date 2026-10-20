@@ -1,7 +1,7 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const {
     font, C, themeOf, rr, fitText, wrapLines, drawCover, loadArt, placeholderArt, baseBackground, chip,
-    statBox, streakText, recordText, formRow
+    statBox, streakText, recordText, formRow, serverTag
 } = require('./common');
 const { MATCH_CONFIG } = require('../utils/constants');
 
@@ -48,6 +48,7 @@ async function renderProfileCard(data) {
 
     // ---- right panel ----
     const px = 385;
+    serverTag(ctx, data.serverName, W - 30, 28);
     ctx.fillStyle = C.text;
     ctx.textAlign = 'left';
     fitText(ctx, c.name, px, 82, W - px - 30, 46, 'bold', 24);

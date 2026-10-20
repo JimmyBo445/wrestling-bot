@@ -1,6 +1,6 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const {
-    font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt, baseBackground, chip
+    font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt, baseBackground, chip, serverTag
 } = require('./common');
 
 /**
@@ -20,6 +20,7 @@ async function renderBeltCard(data) {
     ctx.strokeStyle = fg; ctx.lineWidth = 6;
     rr(ctx, 8, 8, W - 16, H - 16, 22); ctx.stroke();
 
+    serverTag(ctx, data.serverName, W / 2, 30, { align: 'center', size: 12 });
     ctx.textAlign = 'center';
     ctx.fillStyle = C.gold;
     fitText(ctx, data.title.name.toUpperCase(), W / 2, 66, W - 100, 38, 'bold', 20);

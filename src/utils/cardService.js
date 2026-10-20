@@ -194,7 +194,7 @@ async function buildShowData(guild, draft) {
             out.push({ ...base, mode: 'ffa', entrants: m.character_ids.map(member) });
         }
     }
-    return { brand: draft.brand, division: draft.division, name: draft.name, matches: out, _chars: byId };
+    return { serverName: guild?.name || null, brand: draft.brand, division: draft.division, name: draft.name, matches: out };
 }
 
 /** Plain-text running order for replies. */

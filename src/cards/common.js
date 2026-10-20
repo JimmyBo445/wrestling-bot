@@ -193,3 +193,14 @@ module.exports.statBox = statBox;
 module.exports.streakText = streakText;
 module.exports.recordText = recordText;
 module.exports.formRow = formRow;
+
+/** Small server-name tag. Does nothing when there is no name. */
+function serverTag(ctx, text, x, y, { align = 'right', size = 13, color = C.sub, maxW = 340 } = {}) {
+    if (!text) return;
+    ctx.save();
+    ctx.textAlign = align;
+    ctx.fillStyle = color;
+    fitText(ctx, String(text).toUpperCase(), x, y, maxW, size, 'bold', 9);
+    ctx.restore();
+}
+module.exports.serverTag = serverTag;

@@ -1,7 +1,7 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const {
     font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt, baseBackground, chip,
-    statBox, streakText, recordText, formRow
+    statBox, streakText, recordText, formRow, serverTag
 } = require('./common');
 
 /** data: { team:{name,division,status}, members:[{name,division,imageUrl,owner}], summary, titlesHeld:[string], reigns, defenses } */
@@ -15,6 +15,7 @@ async function renderTeamCard(data) {
 
     ctx.fillStyle = data.titlesHeld.length ? C.gold : th.accent;
     ctx.fillRect(0, 0, W, 6);
+    serverTag(ctx, data.serverName, W - 40, 30);
     ctx.textAlign = 'left';
     ctx.fillStyle = C.text;
     fitText(ctx, team.name, 40, 72, W - 80, 46, 'bold', 24);

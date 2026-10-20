@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0
+- **`/help`**: lists every command with what it does. `/help command:match` shows all the subcommands of one command. Players only see what they can use; admins see everything (🔒 marks admin-only). It builds its list from the real commands, so it never goes out of date.
+- **Server name on the cards**: your Discord server's name now appears small on the match, profile, team, belt and show cards ("<server> presents" on RAW / SmackDown cards). Nothing else about the cards changed.
+
 ## 2.2.0 — Match cards
 - **`/card`: match card maker** (admins). Build a RAW (red) or SmackDown (blue) card for any division with up to **10 matches** and pick exactly who is in each one.
   Commands: `/card new` `add` `remove` `move` `view` `post` `clear`. Every match type works (singles, tag, triple threat, fatal 4-way, 5-way, 6-man, 8-man),

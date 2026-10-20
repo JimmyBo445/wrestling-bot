@@ -1,6 +1,6 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const {
-    font, C, themeOf, rr, fitText, wrapLines, drawCover, loadArt, placeholderArt, baseBackground, chip
+    font, C, themeOf, rr, fitText, wrapLines, drawCover, loadArt, placeholderArt, baseBackground, chip, serverTag
 } = require('./common');
 
 /**
@@ -58,6 +58,7 @@ async function renderMatchCard(data) {
     ctx.textAlign = 'right';
     ctx.fillStyle = C.sub;
     ctx.fillText(`MATCH #${data.matchId}`, W - 40, 56);
+    serverTag(ctx, data.serverName, W - 40, 84, { size: 14 });
     ctx.textAlign = 'left';
 
     if (data.banner) {

@@ -37,7 +37,7 @@ async function buildMatchCardData(guild, result) {
         : result.contenderTitle ? { kind: 'contender', text: `#1 Contender Match • ${result.contenderTitle.name}` } : null;
     if (banner && banner.kind === 'title') banner.text = `Championship Match • ${result.title.name}`;
 
-    const base = { label: result.label, matchId: result.matchId, resultType, notes: result.notes, banner, outcome: outcomeText(result) };
+    const base = { serverName: guild.name || null, label: result.label, matchId: result.matchId, resultType, notes: result.notes, banner, outcome: outcomeText(result) };
     const isWinner = (i) => winnerIdx.includes(i);
 
     if (config.winnerMode === 'single' && config.slots.length > 2) {
@@ -76,6 +76,7 @@ async function buildProfileData(guild, character) {
     );
     const teams = await getTeamsOfCharacter(character.id);
     return {
+        serverName: guild.name || null,
         character: { name: character.name, division: character.division, imageUrl: character.image_url, alignment: character.alignment, bio: character.bio, finisher: character.finisher, entranceTheme: character.entrance_theme, status: character.status },
         ownerName: names.get(character.owner_discord_id) || 'unknown',
         summary, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses,
@@ -92,6 +93,7 @@ async function buildTeamData(guild, team) {
     const { rows: stats } = await pool.query(
         `SELECT COUNT(*)::int AS reigns, COALESCE(SUM(defenses), 0)::int AS defenses FROM title_reigns WHERE team_id = $1`, [team.id]);
     return {
+        serverName: guild.name || null,
         team: { name: team.name, division: team.division, status: team.status },
         members: members.map((m) => toMember(m, names)),
         summary, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses
@@ -134,7 +136,7 @@ async function buildBeltData(guild, title) {
             defenses: current.defenses, since: won.toISOString().slice(0, 10), isBackfilled: current.is_backfilled
         };
     }
-    return { title, champion, contender: cont[0]?.name || null, totalReigns: cnt[0].n };
+    return { serverName: guild.name || null, title, champion, contender: cont[0]?.name || null, totalReigns: cnt[0].n };
 }
 
 module.exports = { buildMatchCardData, buildProfileData, buildTeamData, buildBeltData, outcomeText, toMember, DIVISION_LABELS, MATCH_CONFIG };

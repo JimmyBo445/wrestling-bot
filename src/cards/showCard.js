@@ -1,5 +1,5 @@
 const { createCanvas } = require('@napi-rs/canvas');
-const { font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt } = require('./common');
+const { font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt, serverTag } = require('./common');
 const { CARD_BRANDS } = require('../utils/constants');
 
 /**
@@ -205,6 +205,7 @@ async function renderShowCard(data) {
     // ---- header ----
     ctx.fillStyle = brand.accent;
     ctx.fillRect(0, 0, W, 8);
+    serverTag(ctx, data.serverName ? `${data.serverName} presents` : null, MARGIN + 10, 33, { align: 'left', size: 15, color: 'rgba(255,255,255,0.8)', maxW: 600 });
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
     ctx.font = font(88, 'bold');
