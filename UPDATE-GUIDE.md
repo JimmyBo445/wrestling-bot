@@ -1,4 +1,4 @@
-# How to install the Version 2.1 update (Mac, step by step)
+# How to install the Version 2.2 update (Mac, step by step)
 
 (This zip contains the whole bot, so it works whether or not you already installed Version 2.)
 
@@ -15,9 +15,9 @@ and press Return. Only one command at a time.
 
 ## Step 1: Get the new files onto your Mac
 
-1. Download the file **wrestling-bot-v2.1.zip** I sent you in this chat.
+1. Download the file **wrestling-bot-v2.2.zip** I sent you in this chat.
 2. Open your **Downloads** folder and double-click the zip. A new folder named
-   **wrestling-bot-v2.1** appears next to it. (Your old folder is called **wrestling-bot**.
+   **wrestling-bot-v2.2** appears next to it. (Your old folder is called **wrestling-bot**.
    Don't mix them up: v2 is the NEW one.)
 
 ## Step 2: Open Terminal and go to your old folder
@@ -35,7 +35,7 @@ and press Return. Only one command at a time.
 
 Type this (it is ONE line) and press Return:
 
-`rsync -a ~/Downloads/wrestling-bot-v2.1/ ~/Downloads/wrestling-bot/`
+`rsync -a ~/Downloads/wrestling-bot-v2.2/ ~/Downloads/wrestling-bot/`
 
 Nothing prints when it works. This copies the new files in and **keeps** your hidden
 settings (`.env`) and git history. Important: do NOT do this by dragging folders in Finder
@@ -53,7 +53,7 @@ Type: `git status` and press Return.
 Run these three commands, one at a time:
 
 1. `git add .`
-2. `git commit -m "Version 2.1"`
+2. `git commit -m "Version 2.2"`
 3. `git push`
 
 `git push` will ask for a **Username** and **Password**:
@@ -78,10 +78,10 @@ When it works you'll see a line like `main -> main`. That means the upload succe
 1. Go to https://railway.app and open your project → click the **wrestling-bot** service.
 2. Click **Deployments**. A new deployment starts by itself. Wait until it says **Active**/**Success**.
 3. Click that deployment → **View logs**. You should see lines like:
-   - `Applying migration 002_revamp.sql...`
+   - `Applying migration 004_cards.sql...` (only the first time; older updates may list more)
    - `Applied 1 migration(s).`
    - `Logged in as <your bot name>`
-   - `Registering 10 slash commands`
+   - `Registering 11 slash commands`
    - `Slash commands registered.`
 
    If you see `Database not ready ... Retrying`, just wait a minute. It retries on its own.
@@ -94,7 +94,7 @@ When it works you'll see a line like `main -> main`. That means the upload succe
 3. Type `/admin set-pending-channel` and pick the channel where approvals should appear.
 4. Fix your accidental character: `/character transfer` (pick the character, then choose the
    right owner). Or, if it's a mistake that has no matches yet: `/character remove`.
-5. Try `/character profile`, `/championship list`, `/team create`. Have fun!
+5. Try `/card auto` (pick RAW or SmackDown and a division), `/character profile`, `/championship list`. Have fun!
 
 ---
 

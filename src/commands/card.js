@@ -1,0 +1,158 @@
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, AttachmentBuilder } = require('discord.js');
+const { pool } = require('../db/pool');
+const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
+const { UserError } = require('../utils/errors');
+const { autocompleteCharacters } = require('../utils/characterUtils');
+const { MATCH_CONFIG, CARD_BRANDS, MAX_CARD_MATCHES, DIVISION_THEME } = require('../utils/constants');
+const { renderShowCard } = require('../cards/showCard');
+const svc = require('../utils/cardService');
+
+const BRAND_CHOICES = Object.entries(CARD_BRANDS).map(([value, b]) => ({ name: b.label === 'RAW' ? 'RAW (red)' : 'SmackDown (blue)', value }));
+const DIVISION_CHOICES = Object.entries(DIVISION_THEME).map(([value, t]) => ({ name: t.label, value }));
+const TYPE_CHOICES = Object.entries(MATCH_CONFIG).map(([value, c]) => ({ name: c.label, value }));
+const MAX_SLOTS = Math.max(...Object.values(MATCH_CONFIG).map((c) => c.slots.length)); // 8
+
+// Every subcommand starts with the same two choices: which show, which division.
+const showOpts = (sub) => sub
+    .addStringOption((o) => o.setName('brand').setDescription('RAW (red) or SmackDown (blue)').setRequired(true).addChoices(...BRAND_CHOICES))
+    .addStringOption((o) => o.setName('division').setDescription('Division for this card').setRequired(true).addChoices(...DIVISION_CHOICES));
+
+const data = new SlashCommandBuilder()
+    .setName('card')
+    .setDescription('[Admin] Build and post match cards for RAW and SmackDown')
+    .setDMPermission(false)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((s) => showOpts(s.setName('new').setDescription(`Start an empty card (up to ${MAX_CARD_MATCHES} matches). Replaces the card already there.`))
+        .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40)))
+    .addSubcommand((s) => showOpts(s.setName('auto').setDescription('Generate a card from recent matches: rematches, title shots and fresh matchups'))
+        .addIntegerOption((o) => o.setName('matches').setDescription(`How many matches (default 5, max ${MAX_CARD_MATCHES})`).setRequired(false).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
+        .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40)))
+    .addSubcommand((s) => {
+        showOpts(s.setName('add').setDescription('Add a match to the card and pick who is in it'))
+            .addStringOption((o) => o.setName('match_type').setDescription('Type of match').setRequired(true).addChoices(...TYPE_CHOICES))
+            .addStringOption((o) => o.setName('wrestler1').setDescription('Wrestler 1 (tag matches: list Team 1 first, then Team 2)').setRequired(true).setAutocomplete(true))
+            .addStringOption((o) => o.setName('wrestler2').setDescription('Wrestler 2').setRequired(true).setAutocomplete(true));
+        for (let i = 3; i <= MAX_SLOTS; i++) {
+            s.addStringOption((o) => o.setName(`wrestler${i}`).setDescription(`Wrestler ${i}`).setRequired(false).setAutocomplete(true));
+        }
+        return s
+            .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true))
+            .addStringOption((o) => o.setName('stipulation').setDescription('e.g. No DQ, Steel Cage, Main Event').setRequired(false).setMaxLength(40));
+    })
+    .addSubcommand((s) => showOpts(s.setName('remove').setDescription('Take a match off the card'))
+        .addIntegerOption((o) => o.setName('number').setDescription('Match number').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
+    .addSubcommand((s) => showOpts(s.setName('move').setDescription('Change the running order'))
+        .addIntegerOption((o) => o.setName('from').setDescription('Match number to move').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
+        .addIntegerOption((o) => o.setName('to').setDescription('New spot').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
+    .addSubcommand((s) => showOpts(s.setName('view').setDescription('Preview the card (only you see it)')))
+    .addSubcommand((s) => showOpts(s.setName('post').setDescription('Post the finished card as a picture'))
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => showOpts(s.setName('clear').setDescription('Delete the card')));
+
+
+module.exports = {
+    data,
+
+    async autocomplete(interaction) {
+        const focused = interaction.options.getFocused(true);
+        const division = interaction.options.getString('division');
+        if (focused.name === 'title') {
+            const params = [interaction.guildId, `%${String(focused.value).replace(/[%_]/g, '')}%`];
+            let extra = '';
+            if (division) { params.push(division); extra = 'AND division = $3'; }
+            const { rows } = await pool.query(`SELECT id, name, is_vacant FROM titles WHERE guild_id = $1 AND name ILIKE $2 ${extra} ORDER BY name LIMIT 25`, params);
+            return interaction.respond(rows.map((r) => ({ name: `${r.name}${r.is_vacant ? ' (Vacant)' : ''}`.slice(0, 100), value: String(r.id) })));
+        }
+        return interaction.respond(await autocompleteCharacters(interaction, focused.value, { division: division || null }));
+    },
+
+    async execute(interaction) {
+        requireAdmin(interaction, 'build match cards');
+        const sub = interaction.options.getSubcommand();
+        const guildId = interaction.guildId;
+        const brand = interaction.options.getString('brand');
+        const division = interaction.options.getString('division');
+        const label = `${svc.brandLabel(brand)} ${svc.divisionLabel(division)}`;
+        const list = async () => svc.describeCard(await svc.requireDraft(guildId, brand, division));
+
+        if (sub === 'new') {
+            await interaction.deferReply({ flags: 64 });
+            await svc.startDraft(guildId, brand, division, interaction.user.id, interaction.options.getString('name')?.trim() || null);
+            return respond(interaction, { content: `Started a fresh **${label}** card. Add matches with \`/card add\`, or use \`/card auto\` to have me book one.` });
+        }
+
+        if (sub === 'auto') {
+            await interaction.deferReply({ flags: 64 });
+            const wanted = interaction.options.getInteger('matches') || 5;
+            const { draft, planned } = await svc.autoCard(guildId, brand, division, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null);
+            const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
+            const short = planned < wanted ? `\nOnly ${planned} of ${wanted} matches could be booked (not enough free wrestlers).` : '';
+            return respond(interaction, {
+                content: `Booked a **${label}** card from recent matches:\n${await svc.describeCard(draft)}${short}\n\nTweak it with \`/card add\`, \`/card remove\` and \`/card move\`, then \`/card post\`.`,
+                files: [new AttachmentBuilder(buffer, { name: 'card-preview.png' })]
+            });
+        }
+
+        if (sub === 'add') {
+            await interaction.deferReply({ flags: 64 });
+            const matchType = interaction.options.getString('match_type');
+            const characterIds = [];
+            for (let i = 1; i <= MAX_SLOTS; i++) {
+                const v = interaction.options.getString(`wrestler${i}`);
+                if (v !== null) characterIds.push(v);
+            }
+            const { number, warnings } = await svc.addMatchToCard(guildId, brand, division, {
+                matchType, characterIds, titleId: interaction.options.getString('title'), stipulation: interaction.options.getString('stipulation')
+            });
+            const draft = await svc.requireDraft(guildId, brand, division);
+            return respond(interaction, {
+                content: `Added as match **${number}** on the ${label} card.${warnings.length ? `\n⚠️ ${warnings.join('\n⚠️ ')}` : ''}\n\n${await svc.describeCard(draft)}\n\n${number >= MAX_CARD_MATCHES ? 'The card is full.' : `${MAX_CARD_MATCHES - number} spot${MAX_CARD_MATCHES - number === 1 ? '' : 's'} left.`}`,
+                allowedMentions: NO_MENTIONS
+            });
+        }
+
+        if (sub === 'remove') {
+            await interaction.deferReply({ flags: 64 });
+            const n = interaction.options.getInteger('number');
+            await svc.removeMatchFromCard(guildId, brand, division, n);
+            return respond(interaction, { content: `Removed match ${n}.\n\n${await list()}` });
+        }
+
+        if (sub === 'move') {
+            await interaction.deferReply({ flags: 64 });
+            await svc.moveMatchOnCard(guildId, brand, division, interaction.options.getInteger('from'), interaction.options.getInteger('to'));
+            return respond(interaction, { content: `Moved it.\n\n${await list()}` });
+        }
+
+        if (sub === 'view') {
+            await interaction.deferReply({ flags: 64 });
+            const draft = await svc.requireDraft(guildId, brand, division);
+            const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
+            return respond(interaction, { content: `**${label}** card preview:\n${await svc.describeCard(draft)}`, files: [new AttachmentBuilder(buffer, { name: 'card-preview.png' })] });
+        }
+
+        if (sub === 'post') {
+            const draft = await svc.requireDraft(guildId, brand, division);
+            if (!(await svc.getDraftMatches(draft.id)).length) throw new UserError(`The ${label} card has no matches yet.`);
+            const target = interaction.options.getChannel('channel');
+            await interaction.deferReply(target ? { flags: 64 } : {});
+            const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
+            const file = new AttachmentBuilder(buffer, { name: `${draft.brand}-${draft.division}-card.png` });
+            if (target) {
+                const channel = await interaction.guild.channels.fetch(target.id).catch(() => null);
+                if (!channel || !channel.isTextBased()) throw new UserError('I can\'t post in that channel. Pick a text channel I can see and send messages in.');
+                try { await channel.send({ files: [file], allowedMentions: NO_MENTIONS }); }
+                catch (e) { throw new UserError('I couldn\'t post there. Check that I can view the channel, send messages and attach files.'); }
+                return respond(interaction, { content: `Posted the ${label} card in <#${target.id}>.` });
+            }
+            return respond(interaction, { files: [file] });
+        }
+
+        if (sub === 'clear') {
+            await interaction.deferReply({ flags: 64 });
+            await svc.clearCard(guildId, brand, division);
+            return respond(interaction, { content: `Deleted the ${label} card.` });
+        }
+    }
+};

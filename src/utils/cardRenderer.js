@@ -5,3 +5,4 @@ const { renderTeamCard } = require('../cards/teamCard');
 const { renderBeltCard } = require('../cards/beltCard');
 
 module.exports = { renderMatchCard, renderProfileCard, renderTeamCard, renderBeltCard };
+module.exports.renderShowCard = require('../cards/showCard').renderShowCard;

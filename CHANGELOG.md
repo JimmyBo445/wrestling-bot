@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.0 — Match cards
+- **`/card`: match card maker** (admins). Build a RAW (red) or SmackDown (blue) card for any division with up to **10 matches** and pick exactly who is in each one.
+  Commands: `/card new` `add` `remove` `move` `view` `post` `clear`. Every match type works (singles, tag, triple threat, fatal 4-way, 5-way, 6-man, 8-man),
+  with an optional title (championship matches get a gold frame) and a stipulation like "No DQ". A registered team's name shows above its members. Post it here or in another channel as one picture.
+- **`/card auto`: card generator**. Books a card from recent matches: champion vs #1 contender (or a good recent winner) for title matches, rematches of recent results
+  (tagged "Rematch", or "Rivalry" if they've met 2+ times lately), and fresh matchups for everyone else, favouring people who've faced each other least and players who haven't just fought.
+  Title matches close the show. The result is a normal draft, so you can tweak it with `/card add`, `remove` and `move` before posting.
+- **Finisher and entrance theme** on characters: new options on `/character submit`, `assign` and `edit`, shown on the profile card.
+- The card is only a plan: nothing is logged and no stats change until you log the match with `/match`.
+
+## 2.1.0
 ## 2.1.0
 - New **Custom Women's** division with three titles: Golden Global Kingdom, Custom Women's Air Force, and Custom Women's Tag Team.
 - Each player can now have **4** characters (approved + pending).

@@ -37,7 +37,9 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
         .addStringOption((o) => o.setName('image_url').setDescription('Link (https) to character art for their card').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
-        .addStringOption((o) => o.setName('bio').setDescription('One-line description shown on their profile').setRequired(false).setMaxLength(120)))
+        .addStringOption((o) => o.setName('bio').setDescription('One-line description shown on their profile').setRequired(false).setMaxLength(120))
+        .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, shown on their profile').setRequired(false).setMaxLength(40))
+        .addStringOption((o) => o.setName('entrance_theme').setDescription('Entrance theme (song name), shown on their profile').setRequired(false).setMaxLength(60)))
     .addSubcommand((sub) => sub.setName('assign')
         .setDescription('[Admin] Create and auto-approve a character for a player')
         .addUserOption((o) => o.setName('user').setDescription('Owner').setRequired(true))
@@ -45,18 +47,22 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
         .addStringOption((o) => o.setName('image_url').setDescription('Link (https) to character art').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
-        .addStringOption((o) => o.setName('bio').setDescription('One-line description').setRequired(false).setMaxLength(120)))
+        .addStringOption((o) => o.setName('bio').setDescription('One-line description').setRequired(false).setMaxLength(120))
+        .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, shown on their profile').setRequired(false).setMaxLength(40))
+        .addStringOption((o) => o.setName('entrance_theme').setDescription('Entrance theme (song name), shown on their profile').setRequired(false).setMaxLength(60)))
     .addSubcommand((sub) => sub.setName('list')
         .setDescription("List a player's characters")
         .addUserOption((o) => o.setName('user').setDescription('Defaults to you').setRequired(false)))
     .addSubcommand((sub) => sub.setName('profile').setDescription("Show a character's profile card").addStringOption((o) => charOpt(o)))
     .addSubcommand((sub) => sub.setName('edit')
-        .setDescription("Change a character's name, art, alignment or bio (owner or admin)")
+        .setDescription("Change a character's name, art, alignment, bio, finisher or theme (owner or admin)")
         .addStringOption((o) => charOpt(o))
         .addStringOption((o) => o.setName('name').setDescription('New name').setRequired(false).setMaxLength(40))
         .addStringOption((o) => o.setName('image_url').setDescription('New art link (https), or - to remove').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
-        .addStringOption((o) => o.setName('bio').setDescription('New description, or - to clear').setRequired(false).setMaxLength(120)))
+        .addStringOption((o) => o.setName('bio').setDescription('New description, or - to clear').setRequired(false).setMaxLength(120))
+        .addStringOption((o) => o.setName('finisher').setDescription('New finisher, or - to clear').setRequired(false).setMaxLength(40))
+        .addStringOption((o) => o.setName('entrance_theme').setDescription('New entrance theme, or - to clear').setRequired(false).setMaxLength(60)))
     .addSubcommand((sub) => sub.setName('retire')
         .setDescription('[Admin] Retire a character (hides it, keeps all stats, frees a slot)')
         .addStringOption((o) => charOpt(o)))
@@ -76,6 +82,13 @@ const STATUS_BY_SUB = {
     profile: ['approved', 'retired'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
     restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired']
 };
+
+/** Trims; empty text becomes null. */
+function cleanText(v) {
+    if (v === null || v === undefined) return null;
+    const t = String(v).trim();
+    return t ? t : null;
+}
 
 async function checkImage(url) {
     if (!url || url === '-') return null;
@@ -109,9 +122,10 @@ module.exports = {
                 throw new UserError(`You already have ${MAX_CHARACTERS_PER_USER} characters (approved or pending). Ask an admin to retire one first.`);
             }
             const { rows } = await pool.query(
-                `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, status, submitted_by)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8) RETURNING id`,
-                [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'), interaction.user.id]
+                `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, finisher, entrance_theme, status, submitted_by)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10) RETURNING id`,
+                [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
+                    cleanText(interaction.options.getString('finisher')), cleanText(interaction.options.getString('entrance_theme')), interaction.user.id]
             );
             await interaction.editReply({ content: `**${name}** was submitted for approval. An admin will review it.` });
             await postPendingCard(interaction.guild, { type: 'character_submission', characterId: rows[0].id, requestedBy: interaction.user.id });
@@ -129,9 +143,10 @@ module.exports = {
             if (!(await canAddCharacter(guildId, ownerId))) throw new UserError(`<@${targetUser.id}> already has ${MAX_CHARACTERS_PER_USER} characters.`);
             const division = interaction.options.getString('division');
             await pool.query(
-                `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, status, submitted_by, approved_by, approved_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', $8, $8, now())`,
-                [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'), interaction.user.id]
+                `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, finisher, entrance_theme, status, submitted_by, approved_by, approved_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', $10, $10, now())`,
+                [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
+                    cleanText(interaction.options.getString('finisher')), cleanText(interaction.options.getString('entrance_theme')), interaction.user.id]
             );
             await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division });
             return interaction.editReply({ content: `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
@@ -179,7 +194,11 @@ module.exports = {
             if (align !== null) set('alignment', align, 'alignment');
             const bio = interaction.options.getString('bio');
             if (bio !== null) set('bio', bio === '-' ? null : bio, 'bio');
-            if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (name, image_url, alignment or bio).');
+            const finisher = interaction.options.getString('finisher');
+            if (finisher !== null) set('finisher', finisher === '-' ? null : cleanText(finisher), 'finisher');
+            const theme = interaction.options.getString('entrance_theme');
+            if (theme !== null) set('entrance_theme', theme === '-' ? null : cleanText(theme), 'entrance theme');
+            if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (name, image_url, alignment, bio, finisher or entrance_theme).');
             params.push(character.id);
             await pool.query(`UPDATE characters SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed });

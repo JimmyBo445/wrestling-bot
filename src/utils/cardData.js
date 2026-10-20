@@ -76,7 +76,7 @@ async function buildProfileData(guild, character) {
     );
     const teams = await getTeamsOfCharacter(character.id);
     return {
-        character: { name: character.name, division: character.division, imageUrl: character.image_url, alignment: character.alignment, bio: character.bio, status: character.status },
+        character: { name: character.name, division: character.division, imageUrl: character.image_url, alignment: character.alignment, bio: character.bio, finisher: character.finisher, entranceTheme: character.entrance_theme, status: character.status },
         ownerName: names.get(character.owner_discord_id) || 'unknown',
         summary, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses,
         teamName: teams.length ? teams.map((t) => t.name).join(' / ') : null

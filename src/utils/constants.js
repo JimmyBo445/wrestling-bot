@@ -40,6 +40,7 @@ const isTeamMatch = (matchType) => MATCH_CONFIG[matchType]?.winnerMode === 'team
 const matchLabel = (matchType) => MATCH_CONFIG[matchType]?.label || matchType;
 
 const MAX_CHARACTERS_PER_USER = 4;
+const MAX_CARD_MATCHES = 10;
 const DEFAULT_COOLDOWN_HOURS = 24;
 const DEFAULT_STREAK_THRESHOLD = 3;
 const RANKING_WINDOW_DAYS = 90;
@@ -52,7 +53,14 @@ const DIVISION_THEME = {
     custom_womens: { label: "Custom Women's", accent: '#0EA5A4', accent2: '#0B5E5E', embed: 0x0EA5A4 }
 };
 
+// Show brands for match cards. Plain colours + text only (no logos).
+const CARD_BRANDS = {
+    raw:       { name: 'RAW', label: 'RAW',       bgTop: '#9b1118', bgBottom: '#2a0306', accent: '#ff3b3b', glow: '#ff5a4a' },
+    smackdown: { name: 'SmackDown', label: 'SMACKDOWN', bgTop: '#0e4cb5', bgBottom: '#041230', accent: '#3d9bff', glow: '#4fa3ff' }
+};
+
 module.exports = {
+    MAX_CARD_MATCHES, CARD_BRANDS,
     DEFAULT_TITLES, MATCH_CONFIG, isTeamMatch, matchLabel,
     MAX_CHARACTERS_PER_USER, DEFAULT_COOLDOWN_HOURS, DEFAULT_STREAK_THRESHOLD, RANKING_WINDOW_DAYS,
     DIVISION_THEME,
