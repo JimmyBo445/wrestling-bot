@@ -1,4 +1,4 @@
-# How to install the Version 2.3 update (Mac, step by step)
+# How to install the Version 2.3.1 update (Mac, step by step)
 
 (This zip contains the whole bot, so it works whether or not you already installed Version 2.)
 
@@ -15,9 +15,9 @@ and press Return. Only one command at a time.
 
 ## Step 1: Get the new files onto your Mac
 
-1. Download the file **wrestling-bot-v2.3.zip** I sent you in this chat.
+1. Download the file **wrestling-bot-v2.3.1.zip** I sent you in this chat.
 2. Open your **Downloads** folder and double-click the zip. A new folder named
-   **wrestling-bot-v2.3** appears next to it. (Your old folder is called **wrestling-bot**.
+   **wrestling-bot-v2.3.1** appears next to it. (Your old folder is called **wrestling-bot**.
    Don't mix them up: v2 is the NEW one.)
 
 ## Step 2: Open Terminal and go to your old folder
@@ -35,7 +35,7 @@ and press Return. Only one command at a time.
 
 Type this (it is ONE line) and press Return:
 
-`rsync -a ~/Downloads/wrestling-bot-v2.3/ ~/Downloads/wrestling-bot/`
+`rsync -a ~/Downloads/wrestling-bot-v2.3.1/ ~/Downloads/wrestling-bot/`
 
 Nothing prints when it works. This copies the new files in and **keeps** your hidden
 settings (`.env`) and git history. Important: do NOT do this by dragging folders in Finder
@@ -53,7 +53,7 @@ Type: `git status` and press Return.
 Run these three commands, one at a time:
 
 1. `git add .`
-2. `git commit -m "Version 2.3"`
+2. `git commit -m "Version 2.3.1"`
 3. `git push`
 
 `git push` will ask for a **Username** and **Password**:

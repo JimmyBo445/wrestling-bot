@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.1
+- Show cards (`/card view`, `/card post`) now list each wrestler's player (`@name`) under the wrestler's name, like the match and profile cards already did. Rows are a little taller to fit it.
+
 ## 2.3.0
 - **`/help`**: lists every command with what it does. `/help command:match` shows all the subcommands of one command. Players only see what they can use; admins see everything (🔒 marks admin-only). It builds its list from the real commands, so it never goes out of date.
 - **Server name on the cards**: your Discord server's name now appears small on the match, profile, team, belt and show cards ("<server> presents" on RAW / SmackDown cards). Nothing else about the cards changed.

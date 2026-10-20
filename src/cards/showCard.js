@@ -15,7 +15,7 @@ const { CARD_BRANDS } = require('../utils/constants');
  * }
  */
 const W = 1100;
-const ROW_H = 144;
+const ROW_H = 158;
 const ROW_GAP = 14;
 const MARGIN = 30;
 const HEADER_H = 200;
@@ -79,10 +79,14 @@ function portrait(ctx, art, member, x, y, size, brand, divisionFallback) {
     void brand;
 }
 
-function nameUnder(ctx, text, cx, y, maxW) {
+function nameUnder(ctx, member, cx, y, maxW) {
     ctx.fillStyle = C.text;
     ctx.textAlign = 'center';
-    fitText(ctx, text, cx, y, maxW, 15, 'bold', 10);
+    fitText(ctx, member.name, cx, y, maxW, 15, 'bold', 10);
+    if (member.owner) {
+        ctx.fillStyle = 'rgba(255,255,255,0.72)';
+        fitText(ctx, `@${member.owner}`, cx, y + 17, maxW, 12, 'medium', 9);
+    }
     ctx.textAlign = 'left';
 }
 
@@ -128,11 +132,11 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         const regionX = areaL + labelW + 20, regionW = areaR - regionX;
         const slotW = Math.min(150, regionW / n);
         const startX = regionX + (regionW - slotW * n) / 2;
-        const top = y + (ROW_H - size - 22) / 2;
+        const top = y + (ROW_H - size - 40) / 2;
         m.entrants.forEach((e, i) => {
             const cx = startX + slotW * i + slotW / 2;
             portrait(ctx, arts.get(e.imageUrl) || null, e, cx - size / 2, top, size, brand, divisionFallback);
-            nameUnder(ctx, e.name, cx, top + size + 19, slotW - 10);
+            nameUnder(ctx, e, cx, top + size + 19, slotW - 10);
         });
         return;
     }
@@ -167,7 +171,7 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         const slotW = size + 12;
         const total = slotW * n;
         const startX = alignRight ? edge - total : edge;
-        const top = y + (anyTeam ? 30 : (ROW_H - size - 22) / 2);
+        const top = y + (anyTeam ? 30 : (ROW_H - size - 40) / 2);
         if (side.teamName) {
             ctx.textAlign = alignRight ? 'right' : 'left';
             ctx.fillStyle = brand.accent;
@@ -177,7 +181,7 @@ function drawRow(ctx, m, y, brand, divisionFallback, arts) {
         side.members.forEach((mem, i) => {
             const cx = startX + slotW * i + slotW / 2;
             portrait(ctx, arts.get(mem.imageUrl) || null, mem, cx - size / 2, top, size, brand, divisionFallback);
-            nameUnder(ctx, mem.name, cx, top + size + 19, slotW - 4);
+            nameUnder(ctx, mem, cx, top + size + 19, slotW - 4);
         });
     };
     draw(m.sides[0], leftEnd, true);

@@ -4,6 +4,7 @@ const { UserError } = require('./errors');
 const { requireCharacter } = require('./characterUtils');
 const { requireTitle, getCurrentReign } = require('./titleLogic');
 const { findTeamForCharacters, getTeamMembers } = require('./teamUtils');
+const { getDisplayNames } = require('./discordHelpers');
 
 const brandLabel = (b) => CARD_BRANDS[b]?.name || b;
 const divisionLabel = (d) => DIVISION_THEME[d]?.label || d;
@@ -160,8 +161,9 @@ async function buildShowData(guild, draft) {
     const matches = await getDraftMatches(draft.id);
     const allIds = [...new Set(matches.flatMap((m) => m.character_ids))];
     const { rows: chars } = allIds.length
-        ? await pool.query(`SELECT c.id, c.name, c.division, c.image_url FROM characters c WHERE c.id = ANY($1::bigint[])`, [allIds])
+        ? await pool.query(`SELECT c.id, c.name, c.division, c.image_url, u.discord_id FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [allIds])
         : { rows: [] };
+    const owners = await getDisplayNames(guild, chars.map((c) => c.discord_id), 2500);
     const byId = new Map(chars.map((c) => [String(c.id), c]));
     const titleIds = [...new Set(matches.map((m) => m.title_id).filter(Boolean))];
     const { rows: titles } = titleIds.length ? await pool.query(`SELECT id, name FROM titles WHERE id = ANY($1::bigint[])`, [titleIds]) : { rows: [] };
@@ -169,7 +171,7 @@ async function buildShowData(guild, draft) {
 
     const member = (id) => {
         const c = byId.get(String(id));
-        return c ? { name: c.name, division: c.division, imageUrl: c.image_url } : { name: 'TBD', division: draft.division, imageUrl: null };
+        return c ? { name: c.name, division: c.division, imageUrl: c.image_url, owner: owners.get(c.discord_id) || null } : { name: 'TBD', division: draft.division, imageUrl: null };
     };
 
     const out = [];
