@@ -8,7 +8,9 @@ const {
  *         reignNumber, days, defenses, since, isBackfilled }, contender: string|null, previous: {name,days}|null, totalReigns }
  */
 async function renderBeltCard(data) {
-    const W = 1000, H = 440;
+    const W = 1000;
+    const prev = data.previous || [];
+    const H = 440 + (prev.length ? 92 : 0);
     const th = themeOf(data.title.division);
     const canvas = createCanvas(W, H);
     const ctx = canvas.getContext('2d');
@@ -92,6 +94,18 @@ async function renderBeltCard(data) {
         ctx.textAlign = 'center';
         chip(ctx, `#1 CONTENDER: ${data.contender}`.slice(0, 46), W / 2 - 170, 330, { bg: '#a85a10', size: 15, h: 30 });
         ctx.textAlign = 'left';
+    }
+    if (prev.length) {
+        ctx.fillStyle = C.sub; ctx.font = font(13, 'bold');
+        ctx.fillText('PREVIOUS CHAMPIONS', 44, 436);
+        const pw = (W - 88 - 2 * 14) / 3;
+        prev.forEach((p, i) => {
+            const x = 44 + i * (pw + 14), y = 448;
+            ctx.fillStyle = C.panel; rr(ctx, x, y, pw, 54, 12); ctx.fill();
+            ctx.fillStyle = C.text; fitText(ctx, p.name, x + 14, y + 24, pw - 28, 18, 'bold', 11);
+            ctx.fillStyle = C.sub; ctx.font = font(13, 'medium');
+            ctx.fillText(`${p.days} day${p.days === 1 ? '' : 's'}`, x + 14, y + 44);
+        });
     }
     return canvas.toBuffer('image/png');
 }

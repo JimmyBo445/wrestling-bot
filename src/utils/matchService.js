@@ -1,6 +1,6 @@
 const { pool, withTransaction } = require('../db/pool');
 const { UserError } = require('./errors');
-const { MATCH_CONFIG, isTeamMatch, matchLabel } = require('./constants');
+const { MATCH_CONFIG, isTeamMatch, matchLabel, FINISHES } = require('./constants');
 const { requireCharacter } = require('./characterUtils');
 const { findTeamForCharacters } = require('./teamUtils');
 const { requireTitle, getCurrentReign, applyTitleResult, undoMatchEffect, reignMatchesSubject } = require('./titleLogic');
@@ -9,6 +9,7 @@ const { getGuildSettings } = require('./ensureGuild');
 const { logAudit } = require('./audit');
 const { DIVISION_LABELS } = require('./discordHelpers');
 const { linkMatchToCard } = require('./cardService');
+const { advanceFromMatch, revertTournamentMatch } = require('./tournamentUtils');
 
 /**
  * Cooldown (regular singles only: never title, contender, or tag matches).
@@ -50,12 +51,17 @@ async function logMatch(input) {
     const {
         guildId, matchType, slotCharacterIds, winnerIndex = null, winningTeam = null,
         resultType = 'decisive', notes = null, titleValue = null, contenderTitleValue = null,
-        actor, overrideCooldown = false
+        actor, overrideCooldown = false, stipulation = null, finish = null, score = null
     } = input;
     const config = MATCH_CONFIG[matchType];
     if (!config) throw new UserError('Unknown match type.');
     if (titleValue && contenderTitleValue) throw new UserError('A match can be a title match or a #1 contender match, not both.');
     if (notes && notes.length > 300) throw new UserError('Notes are limited to 300 characters.');
+    const stip = stipulation ? String(stipulation).trim() : null;
+    if (stip && stip.length > 40) throw new UserError('Keep the stipulation under 40 characters (for example "Ladder Match").');
+    const scoreText = score ? String(score).trim() : null;
+    if (scoreText && scoreText.length > 20) throw new UserError('Keep the score short (for example "3-2" for an Iron Man match).');
+    if (finish && !FINISHES.some((f) => f.value === finish)) throw new UserError('Unknown finish type.');
 
     // ---- who is in it ----
     if (new Set(slotCharacterIds.map(String)).size !== slotCharacterIds.length) {
@@ -132,10 +138,10 @@ async function logMatch(input) {
     const matchId = await withTransaction(async (client) => {
         const { rows } = await client.query(
             `INSERT INTO matches (guild_id, match_type, result_type, is_title_match, is_contender_match, title_id,
-                                  contender_title_id, logged_by, notes, cooldown_overridden)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+                                  contender_title_id, logged_by, notes, cooldown_overridden, stipulation, finish, score)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
             [guildId, matchType, resultType, Boolean(title), Boolean(contenderTitle), title?.id || null,
-                contenderTitle?.id || null, actor, notes, cooldownOverridden]
+                contenderTitle?.id || null, actor, notes, cooldownOverridden, stip, finish, scoreText]
         );
         const mId = rows[0].id;
 
@@ -149,6 +155,7 @@ async function logMatch(input) {
         }
 
         if (title) {
+            const usedRematches = await useRematchRights(client, { title, matchId: mId, characters, teamMode, sideTeams });
             if (resultType === 'decisive') {
                 const memberIds = winnerIdx.map((i) => characters[i].id);
                 effect = await applyTitleResult(client, {
@@ -157,6 +164,11 @@ async function logMatch(input) {
                 });
             } else {
                 effect = { kind: 'title', title_id: String(title.id), type: 'none' };
+            }
+            if (usedRematches.length) effect.used_rematch_ids = usedRematches;
+            if (effect.type === 'title_change' && settings.rematch_enabled) {
+                const rid = await createRematchRight(client, { guildId, title, matchId: mId, dethroned: effect.dethroned, days: settings.rematch_days });
+                if (rid) effect.rematch_id = rid;
             }
         } else if (contenderTitle) {
             const winnerChar = characters[winnerIdx[0]];
@@ -177,12 +189,50 @@ async function logMatch(input) {
         const { rows } = await pool.query(`SELECT defenses FROM title_reigns WHERE id = $1`, [effect.reign_id]);
         defenseNumber = rows[0]?.defenses || null;
     }
+    const { injuryWarnings } = require('./injuryUtils');
+    const injuryNotes = await injuryWarnings(characters);
     const card = await linkMatchToCard(guildId, matchId, matchType, characters.map((c) => c.id));
+    const tournament = await advanceFromMatch(guildId, matchId, matchType, characters, winnerIdx, resultType);
+    let finalStip = stip;
+    if (!finalStip && card) {
+        const { rows } = await pool.query(`SELECT stipulation FROM matches WHERE id = $1`, [matchId]);
+        finalStip = rows[0]?.stipulation || null;
+    }
+    let rematch = null;
+    if (effect?.rematch_id) {
+        const { rows } = await pool.query(`SELECT holder_name, expires_on FROM rematch_rights WHERE id = $1`, [effect.rematch_id]);
+        rematch = rows[0] ? { name: rows[0].holder_name, expires_on: rows[0].expires_on } : null;
+    }
 
     return {
         matchId, matchType, label: config.label, config, characters, winnerIdx, resultType, notes,
-        title, contenderTitle, sideTeams, winnerSubject, effect, cooldownOverridden, teamMode, card, defenseNumber
+        title, contenderTitle, sideTeams, winnerSubject, effect, cooldownOverridden, teamMode, card, defenseNumber, injuryNotes,
+        stipulation: finalStip, finish, score: scoreText, rematch, tournament
     };
+}
+
+/** Marks any active rematch rights as used when their holder appears in a title match for that belt. */
+async function useRematchRights(client, { title, matchId, characters, teamMode, sideTeams }) {
+    const charIds = characters.map((c) => String(c.id));
+    const teamIds = teamMode ? [1, 2].map((s) => sideTeams[s]?.id).filter(Boolean).map(String) : [];
+    const { rows } = await client.query(
+        `UPDATE rematch_rights SET status = 'used', used_match_id = $2
+         WHERE title_id = $1 AND status = 'active'
+           AND ((character_id IS NOT NULL AND character_id::text = ANY($3::text[]))
+             OR (team_id IS NOT NULL AND team_id::text = ANY($4::text[])))
+         RETURNING id`,
+        [title.id, matchId, charIds, teamIds]);
+    return rows.map((r) => String(r.id));
+}
+
+/** The champion who just lost is owed a rematch for a while. */
+async function createRematchRight(client, { guildId, title, matchId, dethroned, days }) {
+    if (!dethroned || (!dethroned.character_id && !dethroned.team_id)) return null;
+    const { rows } = await client.query(
+        `INSERT INTO rematch_rights (guild_id, title_id, character_id, team_id, holder_name, source_match_id, expires_on)
+         VALUES ($1,$2,$3,$4,$5,$6, CURRENT_DATE + $7::int) RETURNING id`,
+        [guildId, title.id, dethroned.team_id ? null : dethroned.character_id, dethroned.team_id, dethroned.name, matchId, days || 30]);
+    return String(rows[0].id);
 }
 
 async function validateTitleMatch({ title, characters, matchType, teamMode, sideTeams, resultType }) {
@@ -245,6 +295,7 @@ async function undoMatch(guildId, matchId, actor) {
         const match = rows[0];
         if (!match) throw new UserError(`I couldn't find match #${matchId} on this server.`);
         await undoMatchEffect(client, match);
+        await revertTournamentMatch(client, matchId);
         const { rows: parts } = await client.query(
             `SELECT c.name, mp.is_winner FROM match_participants mp JOIN characters c ON c.id = mp.character_id WHERE mp.match_id = $1`, [matchId]);
         await client.query(`DELETE FROM matches WHERE id = $1`, [matchId]);
@@ -260,7 +311,7 @@ async function undoMatch(guildId, matchId, actor) {
  * Edits a match: notes always; winner/result only for plain matches
  * (title and #1 contender matches must be undone and re-logged so belts stay correct).
  */
-async function editMatch(guildId, matchId, actor, { notes, winnerIndex = null, winningTeam = null, resultType = null }) {
+async function editMatch(guildId, matchId, actor, { notes, winnerIndex = null, winningTeam = null, resultType = null, stipulation = null, finish = null, score = null }) {
     return withTransaction(async (client) => {
         const { rows } = await client.query(`SELECT * FROM matches WHERE id = $1 AND guild_id = $2 FOR UPDATE`, [matchId, guildId]);
         const match = rows[0];
@@ -296,7 +347,24 @@ async function editMatch(guildId, matchId, actor, { notes, winnerIndex = null, w
             await client.query(`UPDATE matches SET notes = $2 WHERE id = $1`, [matchId, notes || null]);
             changes.notes = notes;
         }
-        if (!Object.keys(changes).length) throw new UserError('Nothing to change. Provide notes, a new winner, or a new result type.');
+        if (stipulation !== null && stipulation !== undefined) {
+            const v = stipulation.trim() === '-' ? '' : stipulation.trim();
+            if (v.length > 40) throw new UserError('Keep the stipulation under 40 characters.');
+            await client.query(`UPDATE matches SET stipulation = $2 WHERE id = $1`, [matchId, v || null]);
+            changes.stipulation = v;
+        }
+        if (finish) {
+            if (!FINISHES.some((f) => f.value === finish)) throw new UserError('Unknown finish type.');
+            await client.query(`UPDATE matches SET finish = $2 WHERE id = $1`, [matchId, finish]);
+            changes.finish = finish;
+        }
+        if (score !== null && score !== undefined) {
+            const v = score.trim() === '-' ? '' : score.trim();
+            if (v.length > 20) throw new UserError('Keep the score short.');
+            await client.query(`UPDATE matches SET score = $2 WHERE id = $1`, [matchId, v || null]);
+            changes.score = v;
+        }
+        if (!Object.keys(changes).length) throw new UserError('Nothing to change. Provide notes, stipulation, finish, score, a new winner, or a new result type.');
         await client.query(`UPDATE matches SET edited_at = now() WHERE id = $1`, [matchId]);
         await logAudit(guildId, actor, 'match_edited', { matchId, ...changes }, client);
         return { match, changes };

@@ -5,7 +5,7 @@ const { canAddCharacter, autocompleteCharacters, requireCharacter } = require('.
 const { postPendingCard } = require('../handlers/pendingQueue');
 const { renderProfileCard } = require('../utils/cardRenderer');
 const { buildProfileData } = require('../utils/cardData');
-const { validateImageUrl } = require('../utils/imageUrl');
+const { validateImageUrl, processUpload, saveCharacterImage, deleteCharacterImage } = require('../utils/imageUrl');
 const { getTitlesHeldByCharacter } = require('../utils/teamUtils');
 const { requireAdmin, isAdmin, respond, reply, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
@@ -35,7 +35,8 @@ const data = new SlashCommandBuilder()
         .setDescription(`Submit a character for admin approval (max ${MAX_CHARACTERS_PER_USER} per player)`)
         .addStringOption((o) => o.setName('name').setDescription('Character name').setRequired(true).setMaxLength(40))
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
-        .addStringOption((o) => o.setName('image_url').setDescription('Link (https) to character art for their card').setRequired(false))
+        .addAttachmentOption((o) => o.setName('picture').setDescription('Upload a picture (easiest: just attach an image)').setRequired(false))
+        .addStringOption((o) => o.setName('image_url').setDescription('Or a link (https) to character art').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
         .addStringOption((o) => o.setName('bio').setDescription('One-line description shown on their profile').setRequired(false).setMaxLength(120))
         .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, shown on their profile').setRequired(false).setMaxLength(40))
@@ -45,7 +46,8 @@ const data = new SlashCommandBuilder()
         .addUserOption((o) => o.setName('user').setDescription('Owner').setRequired(true))
         .addStringOption((o) => o.setName('name').setDescription('Character name').setRequired(true).setMaxLength(40))
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
-        .addStringOption((o) => o.setName('image_url').setDescription('Link (https) to character art').setRequired(false))
+        .addAttachmentOption((o) => o.setName('picture').setDescription('Upload a picture (easiest: just attach an image)').setRequired(false))
+        .addStringOption((o) => o.setName('image_url').setDescription('Or a link (https) to character art').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
         .addStringOption((o) => o.setName('bio').setDescription('One-line description').setRequired(false).setMaxLength(120))
         .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, shown on their profile').setRequired(false).setMaxLength(40))
@@ -58,11 +60,23 @@ const data = new SlashCommandBuilder()
         .setDescription("Change a character's name, art, alignment, bio, finisher or theme (owner or admin)")
         .addStringOption((o) => charOpt(o))
         .addStringOption((o) => o.setName('name').setDescription('New name').setRequired(false).setMaxLength(40))
-        .addStringOption((o) => o.setName('image_url').setDescription('New art link (https), or - to remove').setRequired(false))
+        .addAttachmentOption((o) => o.setName('picture').setDescription('Upload a picture (easiest: just attach an image)').setRequired(false))
+        .addStringOption((o) => o.setName('image_url').setDescription('Or a new art link (https), or - to remove the picture').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
         .addStringOption((o) => o.setName('bio').setDescription('New description, or - to clear').setRequired(false).setMaxLength(120))
         .addStringOption((o) => o.setName('finisher').setDescription('New finisher, or - to clear').setRequired(false).setMaxLength(40))
         .addStringOption((o) => o.setName('entrance_theme').setDescription('New entrance theme, or - to clear').setRequired(false).setMaxLength(60)))
+    .addSubcommand((sub) => sub.setName('picture')
+        .setDescription('Upload or replace a character\'s picture (owner or admin)')
+        .addStringOption((o) => charOpt(o))
+        .addAttachmentOption((o) => o.setName('picture').setDescription('The picture (PNG, JPG, WEBP or GIF)').setRequired(true)))
+    .addSubcommand((sub) => sub.setName('story')
+        .setDescription('Add signature moves, a catchphrase, and a longer story to a character (all optional, owner or admin)')
+        .addStringOption((o) => charOpt(o))
+        .addStringOption((o) => o.setName('signatures').setDescription('Signature moves, separated by commas, or - to clear').setRequired(false).setMaxLength(160))
+        .addStringOption((o) => o.setName('catchphrase').setDescription('Catchphrase or gimmick, or - to clear').setRequired(false).setMaxLength(80))
+        .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, or - to clear').setRequired(false).setMaxLength(40))
+        .addStringOption((o) => o.setName('story').setDescription('Longer biography shown on the Story page, or - to clear').setRequired(false).setMaxLength(1500)))
     .addSubcommand((sub) => sub.setName('retire')
         .setDescription('[Admin] Retire a character (hides it, keeps all stats, frees a slot)')
         .addStringOption((o) => charOpt(o)))
@@ -79,7 +93,7 @@ const data = new SlashCommandBuilder()
 
 // Which statuses to offer in the dropdown for each subcommand
 const STATUS_BY_SUB = {
-    profile: ['approved', 'retired'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
+    profile: ['approved', 'retired'], story: ['approved', 'retired', 'pending'], picture: ['approved', 'retired', 'pending'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
     restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired']
 };
 
@@ -90,6 +104,13 @@ function cleanText(v) {
     return t ? t : null;
 }
 
+/** Checks an uploaded attachment (if any) and returns the shrunken picture, or null. */
+async function readUpload(interaction) {
+    const att = interaction.options.getAttachment('picture');
+    if (!att) return null;
+    try { return await processUpload(att); } catch (err) { throw new UserError(`Picture problem: ${err.message}`); }
+}
+
 async function checkImage(url) {
     if (!url || url === '-') return null;
     const v = await validateImageUrl(url);
@@ -97,8 +118,16 @@ async function checkImage(url) {
     return url;
 }
 
+/** The "Story" button under a profile (only when there is something on the second page). */
+function storyButtons(character) {
+    if (!character.lore && !character.signatures && !character.catchphrase) return [];
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`prof:story:${character.id}`).setLabel('Story & moves').setStyle(ButtonStyle.Secondary))];
+}
+
 module.exports = {
     data,
+    storyButtons,
 
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused();
@@ -115,7 +144,8 @@ module.exports = {
             const division = interaction.options.getString('division');
             if (!name) throw new UserError('Please give the character a name.');
             await interaction.deferReply({ flags: 64 });
-            const imageUrl = await checkImage(interaction.options.getString('image_url'));
+            const upload = await readUpload(interaction);
+            const imageUrl = upload ? null : await checkImage(interaction.options.getString('image_url'));
 
             const ownerId = await ensureUser(guildId, interaction.user.id);
             if (!(await canAddCharacter(guildId, ownerId))) {
@@ -127,6 +157,7 @@ module.exports = {
                 [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
                     cleanText(interaction.options.getString('finisher')), cleanText(interaction.options.getString('entrance_theme')), interaction.user.id]
             );
+            if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(rows[0].id, upload), rows[0].id]);
             await interaction.editReply({ content: `**${name}** was submitted for approval. An admin will review it.` });
             await postPendingCard(interaction.guild, { type: 'character_submission', characterId: rows[0].id, requestedBy: interaction.user.id });
             return;
@@ -138,16 +169,18 @@ module.exports = {
             if (targetUser.bot) throw new UserError('Bots can\'t own characters.');
             const name = interaction.options.getString('name').trim();
             await interaction.deferReply();
-            const imageUrl = await checkImage(interaction.options.getString('image_url'));
+            const upload = await readUpload(interaction);
+            const imageUrl = upload ? null : await checkImage(interaction.options.getString('image_url'));
             const ownerId = await ensureUser(guildId, targetUser.id);
             if (!(await canAddCharacter(guildId, ownerId))) throw new UserError(`<@${targetUser.id}> already has ${MAX_CHARACTERS_PER_USER} characters.`);
             const division = interaction.options.getString('division');
-            await pool.query(
+            const { rows: made } = await pool.query(
                 `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, finisher, entrance_theme, status, submitted_by, approved_by, approved_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', $10, $10, now())`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', $10, $10, now()) RETURNING id`,
                 [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
                     cleanText(interaction.options.getString('finisher')), cleanText(interaction.options.getString('entrance_theme')), interaction.user.id]
             );
+            if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(made[0].id, upload), made[0].id]);
             await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division });
             return interaction.editReply({ content: `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
         }
@@ -175,7 +208,28 @@ module.exports = {
             const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
             await interaction.deferReply();
             const buffer = await renderProfileCard(await buildProfileData(interaction.guild, character));
-            return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'profile.png' })] });
+            return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'profile.png' })], components: storyButtons(character) });
+        }
+
+        if (sub === 'story') {
+            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired', 'pending'] });
+            const mine = character.owner_discord_id === interaction.user.id;
+            if (!mine && !isAdmin(interaction)) throw new UserError('You can only edit the story of your own characters (admins can edit anyone\'s).');
+            const updates = []; const params = []; const changed = [];
+            const set = (col, raw, label) => {
+                if (raw === null) return;
+                const v = raw.trim() === '-' ? null : cleanText(raw);
+                params.push(v); updates.push(`${col} = $${params.length}`); changed.push(v ? label : `${label} cleared`);
+            };
+            set('signatures', interaction.options.getString('signatures'), 'signatures');
+            set('catchphrase', interaction.options.getString('catchphrase'), 'catchphrase');
+            set('finisher', interaction.options.getString('finisher'), 'finisher');
+            set('lore', interaction.options.getString('story'), 'story');
+            if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (signatures, catchphrase, finisher or story).');
+            params.push(character.id);
+            await pool.query(`UPDATE characters SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
+            if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed });
+            return respond(interaction, { content: `Updated **${character.name}**: ${changed.join(', ')}. See it with \`/character profile\`.`, flags: 64 });
         }
 
         if (sub === 'edit') {
@@ -188,8 +242,10 @@ module.exports = {
             const set = (col, val, label) => { params.push(val); updates.push(`${col} = $${params.length}`); changed.push(label); };
             const name = interaction.options.getString('name');
             if (name !== null) { if (!name.trim()) throw new UserError('Name can\'t be empty.'); set('name', name.trim(), 'name'); }
+            const upload = await readUpload(interaction);
             const img = interaction.options.getString('image_url');
-            if (img !== null) set('image_url', await checkImage(img), img === '-' ? 'art removed' : 'art');
+            if (upload) { set('image_url', await saveCharacterImage(character.id, upload), 'picture'); }
+            else if (img !== null) { set('image_url', await checkImage(img), img === '-' ? 'art removed' : 'art'); await deleteCharacterImage(character.id); }
             const align = interaction.options.getString('alignment');
             if (align !== null) set('alignment', align, 'alignment');
             const bio = interaction.options.getString('bio');
@@ -198,11 +254,22 @@ module.exports = {
             if (finisher !== null) set('finisher', finisher === '-' ? null : cleanText(finisher), 'finisher');
             const theme = interaction.options.getString('entrance_theme');
             if (theme !== null) set('entrance_theme', theme === '-' ? null : cleanText(theme), 'entrance theme');
-            if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (name, image_url, alignment, bio, finisher or entrance_theme).');
+            if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (name, picture, image_url, alignment, bio, finisher or entrance_theme).');
             params.push(character.id);
             await pool.query(`UPDATE characters SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed });
             return interaction.editReply({ content: `Updated **${name?.trim() || character.name}**: ${changed.join(', ')}.` });
+        }
+
+        if (sub === 'picture') {
+            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired', 'pending'] });
+            const mine = character.owner_discord_id === interaction.user.id;
+            if (!mine && !isAdmin(interaction)) throw new UserError('You can only change the picture of your own characters (admins can change anyone\'s).');
+            await interaction.deferReply({ flags: 64 });
+            const upload = await readUpload(interaction);
+            await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(character.id, upload), character.id]);
+            if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed: ['picture'] });
+            return interaction.editReply({ content: `Updated the picture for **${character.name}**. See it with \`/character profile\`.` });
         }
 
         if (sub === 'retire') {

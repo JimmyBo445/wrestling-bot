@@ -1,0 +1,21 @@
+const f = require('./fixtures');
+const { run } = require('./mock');
+const fs = require('fs');
+(async () => {
+    await f.resetDb(); await f.ensureGuild('g1');
+    const names = [['Titan', 'u1'], ['Fox', 'u2'], ['Bull', 'u3'], ['Wolf', 'u4'], ['Hawk', 'u1'], ['Raven', 'u2'], ['Jackal', 'u3'], ['Viper', 'u4'], ['Atlas', 'u5'], ['Bruiser', 'u6']];
+    const id = {};
+    for (const [n, o] of names) id[n] = await f.makeChar('g1', o, n, 'mens');
+    const ADM = { admin: true, user: 'admin1' };
+    await run('match', 'log-singles', { participant1: id.Titan, participant2: id.Fox, winner: 1, override_cooldown: true }, ADM);
+    await run('match', 'log-singles', { participant1: id.Bull, participant2: id.Wolf, winner: 2, override_cooldown: true }, ADM);
+    await f.makeTeam('g1', 'The Packmen', 'mens', [id.Wolf, id.Hawk]);
+    const t = await f.titleId('g1', 'World Heavyweight Championship');
+    await run('championship', 'backfill-reign', { title: t, won_date: '2026-01-01', character: id.Atlas }, ADM);
+    await run('contender', 'award', { title: t, character: id.Viper }, ADM);
+    const a = await run('card', 'auto', { brand: 'raw', division: 'mens', matches: 6, name: 'Monday Night Mayhem' }, ADM);
+    const file = a.responses.find((r) => r.p?.files?.length).p.files[0];
+    fs.writeFileSync(process.argv[2] + '/auto_raw.png', file.attachment);
+    console.log(a.responses.map((r) => r.p.content).join('\n'));
+    await f.pool.end();
+})();

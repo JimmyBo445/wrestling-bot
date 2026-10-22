@@ -3,13 +3,14 @@ const { pool } = require('../db/pool');
 const { autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
 const { ensureUser } = require('../utils/ensureGuild');
 const {
-    PERIODS, PERIOD_LABELS, characterSummary, opponentBreakdown, headToHead, recentMatches, userSummary
+    PERIODS, PERIOD_LABELS, stipulationBreakdown, characterSummary, opponentBreakdown, headToHead, recentMatches, userSummary
 } = require('../utils/statsQueries');
 const { respond, NO_MENTIONS, DIVISION_LABELS } = require('../utils/discordHelpers');
-const { matchLabel, DIVISION_THEME } = require('../utils/constants');
+const { matchLabel, DIVISION_THEME, FINISH_LABEL } = require('../utils/constants');
 const { UserError } = require('../utils/errors');
-const { buildTapeData } = require('../utils/cardData');
-const { renderTapeCard } = require('../utils/cardRenderer');
+const { buildTapeData, buildPlayerData, buildCareerData } = require('../utils/cardData');
+const { characterBadges } = require('../utils/badges');
+const { renderTapeCard, renderPlayerCard, renderCareerCard } = require('../utils/cardRenderer');
 
 const PERIOD_CHOICES = Object.entries(PERIOD_LABELS).map(([value, name]) => ({ name, value }));
 const charOpt = (o, name = 'character', desc = 'Character') => o.setName(name).setDescription(desc).setRequired(true).setAutocomplete(true);
@@ -21,7 +22,8 @@ const data = new SlashCommandBuilder()
     .setDMPermission(false)
     .addSubcommand((s) => s.setName('character').setDescription('Detailed stats for one wrestler').addStringOption((o) => charOpt(o)).addStringOption(periodOpt))
     .addSubcommand((s) => s.setName('user').setDescription("A player's stats across all their wrestlers")
-        .addUserOption((o) => o.setName('user').setDescription('Defaults to you').setRequired(false)))
+        .addUserOption((o) => o.setName('user').setDescription('Defaults to you').setRequired(false))
+        .addBooleanOption((o) => o.setName('text').setDescription('Show plain text instead of the player card picture').setRequired(false)))
     .addSubcommand((s) => s.setName('head-to-head').setDescription('Record between two wrestlers')
         .addStringOption((o) => charOpt(o, 'character1', 'First wrestler')).addStringOption((o) => charOpt(o, 'character2', 'Second wrestler')).addStringOption(periodOpt))
     .addSubcommand((s) => s.setName('versus').setDescription('Record between two players (all of their wrestlers)')
@@ -32,6 +34,10 @@ const data = new SlashCommandBuilder()
             .addChoices(...Object.entries(PERIOD_LABELS).map(([value, name]) => ({ name, value })))))
     .addSubcommand((s) => s.setName('tape').setDescription('Tale of the tape graphic for two wrestlers')
         .addStringOption((o) => charOpt(o, 'character1', 'First wrestler')).addStringOption((o) => charOpt(o, 'character2', 'Second wrestler')))
+    .addSubcommand((s) => s.setName('timeline').setDescription('Career timeline graphic: debut, title reigns, milestones and more')
+        .addStringOption((o) => charOpt(o)))
+    .addSubcommand((s) => s.setName('badges').setDescription('Achievement badges a wrestler has earned')
+        .addStringOption((o) => charOpt(o)))
     .addSubcommand((s) => s.setName('opponents').setDescription('A wrestler\'s record against everyone they have faced')
         .addStringOption((o) => charOpt(o)).addStringOption(periodOpt))
     .addSubcommand((s) => s.setName('history').setDescription("A wrestler's most recent matches")
@@ -79,7 +85,31 @@ module.exports = {
             if (allOwners.total !== s.total) embed.addFields({ name: 'All owners (before transfer)', value: rec(allOwners), inline: true });
             const types = Object.entries(s.byType);
             if (types.length) embed.addFields({ name: 'By Match Type', value: types.map(([k, v]) => `${matchLabel(k)}: **${v.w}-${v.l}**${v.d ? `-${v.d}` : ''}`).join('\n') });
+            const sb = await stipulationBreakdown(c.id, c.owner_id, days);
+            const sips = Object.entries(sb.bySip);
+            if (sips.length) embed.addFields({ name: 'By Stipulation', value: sips.sort((a, b) => (b[1].w + b[1].l) - (a[1].w + a[1].l)).slice(0, 8).map(([k, v]) => `${k}: **${v.w}-${v.l}**`).join('\n') });
+            const fins = Object.entries(sb.winFinishes);
+            if (fins.length) embed.addFields({ name: 'Wins By', value: fins.sort((a, b) => b[1] - a[1]).map(([k, n]) => `${FINISH_LABEL[k] || k}: **${n}**`).join(' · ') });
             if (periodNote) embed.setFooter({ text: periodNote });
+            return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'timeline') {
+            const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            await interaction.deferReply();
+            const buffer = await renderCareerCard(await buildCareerData(interaction.guild, c));
+            return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'career.png' })] });
+        }
+
+        if (sub === 'badges') {
+            const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            const s = await characterSummary(c.id, null, c.owner_id);
+            const { rows: st } = await pool.query(
+                `SELECT COUNT(DISTINCT tr.id)::int AS reigns, COALESCE(SUM(tr.defenses), 0)::int AS defenses FROM title_reigns tr
+                 WHERE (tr.team_id IS NULL AND tr.character_id = $1) OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1)`, [c.id]);
+            const badges = await characterBadges(c, s, st[0]);
+            const embed = new EmbedBuilder().setTitle(`${c.name} — Badges`).setColor(DIVISION_THEME[c.division].embed)
+                .setDescription(badges.length ? badges.map((b) => `🏅 **${b.label}**`).join('\n') : '_No badges yet. Wins, title reigns, streaks and classics earn them._');
             return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
 
@@ -88,6 +118,11 @@ module.exports = {
             const ownerId = await ensureUser(guildId, target.id);
             const u = await userSummary(guildId, ownerId);
             if (!u.chars.length) throw new UserError(`<@${target.id}> has no approved characters yet.`);
+            if (!interaction.options.getBoolean('text')) {
+                await interaction.deferReply();
+                const buffer = await renderPlayerCard(await buildPlayerData(interaction.guild, target, ownerId));
+                return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'player.png' })] });
+            }
             const divLines = Object.entries(u.byDivision).map(([d, v]) => `${DIVISION_LABELS[d] || d}: **${rec(v)}**${v.winPct && v.wins + v.losses ? ` (${v.winPct.toFixed(0)}%)` : ''}`);
             const embed = new EmbedBuilder().setTitle(`${target.displayName || target.username} — Overall`).setColor(0xC0392B)
                 .addFields(

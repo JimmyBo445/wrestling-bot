@@ -2,13 +2,14 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('disc
 const { pool } = require('../db/pool');
 const { UserError } = require('../utils/errors');
 const { logAudit } = require('../utils/audit');
-const { MATCH_CONFIG, matchLabel } = require('../utils/constants');
+const { MATCH_CONFIG, matchLabel, FINISHES } = require('../utils/constants');
 const { autocompleteCharacters } = require('../utils/characterUtils');
 const { autocompleteTitles } = require('../utils/titleLogic');
 const { logMatch, undoMatch, editMatch } = require('../utils/matchService');
 const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
 const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
 const { recentMatches } = require('../utils/statsQueries');
+const { addDetailOptions, readDetails, stipulationChoices } = require('../utils/matchOptions');
 
 const RESULT_CHOICES = [
     { name: 'Decisive (has a winner)', value: 'decisive' },
@@ -31,7 +32,8 @@ function buildLogSubcommand(sub, key, config) {
     sub.addStringOption((o) => o.setName('title').setDescription('Make it a championship match for this title').setRequired(false).setAutocomplete(true));
     sub.addStringOption((o) => o.setName('contender_for').setDescription('Make it a #1 contender match for this title (winner becomes #1 contender)').setRequired(false).setAutocomplete(true));
     sub.addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES));
-    sub.addStringOption((o) => o.setName('notes').setDescription('Stipulation or notes (shown on the card)').setRequired(false).setMaxLength(300));
+    sub.addStringOption((o) => o.setName('notes').setDescription('Extra notes (shown on the card)').setRequired(false).setMaxLength(300));
+    addDetailOptions(sub);
     if (key === 'singles') {
         sub.addBooleanOption((o) => o.setName('override_cooldown').setDescription('Book it even though the repeat-matchup cooldown is active').setRequired(false));
     }
@@ -57,7 +59,10 @@ data.addSubcommand((sub) => sub.setName('edit').setDescription('Fix the notes, w
     .addStringOption((o) => o.setName('notes').setDescription('New notes (type a single - to clear)').setRequired(false).setMaxLength(300))
     .addIntegerOption((o) => o.setName('winner').setDescription('New winner by slot number (non-team matches)').setRequired(false).setMinValue(1).setMaxValue(8))
     .addIntegerOption((o) => o.setName('winning_team').setDescription('New winning team (team matches)').setRequired(false).addChoices({ name: 'Team 1', value: 1 }, { name: 'Team 2', value: 2 }))
-    .addStringOption((o) => o.setName('result_type').setDescription('Change the result type').setRequired(false).addChoices(...RESULT_CHOICES)));
+    .addStringOption((o) => o.setName('result_type').setDescription('Change the result type').setRequired(false).addChoices(...RESULT_CHOICES))
+    .addStringOption((o) => o.setName('stipulation').setDescription('New stipulation (type a single - to clear)').setRequired(false).setMaxLength(40).setAutocomplete(true))
+    .addStringOption((o) => o.setName('finish').setDescription('How it ended').setRequired(false).addChoices(...FINISHES))
+    .addStringOption((o) => o.setName('score').setDescription('Falls or score (type a single - to clear)').setRequired(false).setMaxLength(20)));
 data.addSubcommand((sub) => sub.setName('recent').setDescription('Show the latest matches with their IDs')
     .addIntegerOption((o) => o.setName('count').setDescription('How many (default 10, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
 
@@ -83,6 +88,7 @@ module.exports = {
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'match_id') return interaction.respond(await matchIdAutocomplete(interaction, focused.value));
+        if (focused.name === 'stipulation') return interaction.respond(stipulationChoices(focused.value));
         if (focused.name === 'title' || focused.name === 'contender_for') return interaction.respond(await autocompleteTitles(interaction, focused.value));
         return interaction.respond(await autocompleteCharacters(interaction, focused.value));
     },
@@ -108,6 +114,7 @@ module.exports = {
                 titleValue: interaction.options.getString('title'),
                 contenderTitleValue: interaction.options.getString('contender_for'),
                 overrideCooldown: interaction.options.getBoolean('override_cooldown') || false,
+                ...readDetails(interaction),
                 actor: interaction.user.id
             });
 
@@ -143,12 +150,18 @@ module.exports = {
                 notes: rawNotes === null ? null : rawNotes.trim() === '-' ? '' : rawNotes,
                 winnerIndex: interaction.options.getInteger('winner') !== null ? interaction.options.getInteger('winner') - 1 : null,
                 winningTeam: interaction.options.getInteger('winning_team'),
-                resultType: interaction.options.getString('result_type')
+                resultType: interaction.options.getString('result_type'),
+                stipulation: interaction.options.getString('stipulation'),
+                finish: interaction.options.getString('finish'),
+                score: interaction.options.getString('score')
             });
             const bits = [];
             if (changes.result) bits.push(`result is now **${changes.result.replace('_', ' ')}**`);
             if (changes.winners !== undefined && changes.winners > 0) bits.push('winner updated');
             if (changes.notes !== undefined) bits.push(changes.notes ? 'notes updated' : 'notes cleared');
+            if (changes.stipulation !== undefined) bits.push(changes.stipulation ? 'stipulation updated' : 'stipulation cleared');
+            if (changes.finish !== undefined) bits.push('finish updated');
+            if (changes.score !== undefined) bits.push(changes.score ? 'score updated' : 'score cleared');
             return respond(interaction, { content: `✏️ Match **#${matchId}** edited: ${bits.join(', ')}.`, allowedMentions: NO_MENTIONS });
         }
 

@@ -7,6 +7,8 @@ const { logAudit } = require('../utils/audit');
 const { UserError } = require('../utils/errors');
 const { buildMonthlyEmbed, prevMonthKey } = require('../utils/monthly');
 const { sendBackup } = require('../utils/backup');
+const importer = require('../utils/importer');
+const { AttachmentBuilder } = require('discord.js');
 
 const data = new SlashCommandBuilder()
     .setName('admin')
@@ -33,6 +35,23 @@ const data = new SlashCommandBuilder()
             .addChoices({ name: 'Turn on (weekly, to me)', value: 'on' }, { name: 'Turn off', value: 'off' }, { name: 'Send one now', value: 'now' })))
     .addSubcommand((s) => s.setName('milestones').setDescription('Auto shout-outs for win streaks, career wins and title reigns')
         .addStringOption((o) => o.setName('action').setDescription('On or off').setRequired(true).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })))
+    .addSubcommand((s) => s.setName('set-admin-channel').setDescription('Staff channel for reminders: tonight\'s card, rematches, title warnings (empty = off)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('set-newsletter-channel').setDescription('Where the weekly newsletter is posted (leave empty to turn off)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('deadlines').setDescription('Warn when a champion has not defended, and optionally vacate belts of inactive champions')
+        .addIntegerOption((o) => o.setName('defense_days').setDescription('Warn staff if a title has not been defended in this many days (0 = off)').setRequired(false).setMinValue(0).setMaxValue(365))
+        .addIntegerOption((o) => o.setName('vacate_days').setDescription('Auto-vacate if the champion has not wrestled at all in this many days (0 = off)').setRequired(false).setMinValue(0).setMaxValue(730)))
+    .addSubcommand((s) => s.setName('rematches').setDescription('Rematch clause: a champion who loses the belt is owed a rematch')
+        .addStringOption((o) => o.setName('action').setDescription('On or off').setRequired(true).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
+        .addIntegerOption((o) => o.setName('days').setDescription('How many days the rematch is good for (default 30)').setRequired(false).setMinValue(1).setMaxValue(365)))
+    .addSubcommand((s) => s.setName('set-timezone').setDescription('Your time zone, so show dates and reminders line up (e.g. America/New_York)')
+        .addStringOption((o) => o.setName('zone').setDescription('Time zone name like America/New_York, Europe/London, or UTC').setRequired(true).setMaxLength(40)))
+    .addSubcommand((s) => s.setName('import').setDescription('Bring in characters or past results from a spreadsheet file (CSV). Shows a preview first.')
+        .addStringOption((o) => o.setName('what').setDescription('What the file contains').setRequired(true).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }))
+        .addAttachmentOption((o) => o.setName('file').setDescription('A .csv file (save your spreadsheet as CSV)').setRequired(true))
+        .addBooleanOption((o) => o.setName('apply').setDescription('Leave empty to only preview. Set to true to really import.').setRequired(false)))
+    .addSubcommand((s) => s.setName('import-template').setDescription('Get example CSV files showing the columns to use for /admin import'))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('audit').setDescription('Recent admin actions')
         .addIntegerOption((o) => o.setName('count').setDescription('How many (default 15, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
@@ -85,6 +104,64 @@ module.exports = {
                 ? (action === 'on' ? '✅ Weekly backups are **on**. I just sent the first one to your DMs, and I\'ll send a new one every week.' : '✅ Sent to your DMs.')
                 : '⚠️ I couldn\'t DM you. Open Discord Settings → Privacy & Safety → allow direct messages from server members, then try again.' });
         }
+        if (sub === 'set-admin-channel' || sub === 'set-newsletter-channel') {
+            const channel = interaction.options.getChannel('channel');
+            const col = sub === 'set-admin-channel' ? 'admin_channel_id' : 'newsletter_channel_id';
+            await pool.query(`UPDATE guilds SET ${col} = $1 WHERE guild_id = $2`, [channel?.id || null, guildId]);
+            await logAudit(guildId, interaction.user.id, `setting_${col}`, { channel: channel?.id || null });
+            if (sub === 'set-admin-channel') return respond(interaction, { content: channel ? `Staff reminders (tonight's card, rematches owed, title warnings) will post in <#${channel.id}>. Make sure only staff can see that channel.` : 'Staff reminders are **off**.' });
+            return respond(interaction, { content: channel ? `The weekly newsletter will post in <#${channel.id}> (use \`/newsletter\` to add your own lines or post it now).` : 'The weekly newsletter is **off**.' });
+        }
+        if (sub === 'deadlines') {
+            const d = interaction.options.getInteger('defense_days');
+            const v = interaction.options.getInteger('vacate_days');
+            if (d === null && v === null) throw new UserError('Fill in `defense_days`, `vacate_days`, or both.');
+            await pool.query(`UPDATE guilds SET defense_days = COALESCE($1, defense_days), vacate_days = COALESCE($2, vacate_days) WHERE guild_id = $3`, [d, v, guildId]);
+            await logAudit(guildId, interaction.user.id, 'setting_deadlines', { defense_days: d, vacate_days: v });
+            const s = await getGuildSettings(guildId);
+            const bits = [s.defense_days ? `warn staff when a title has gone **${s.defense_days} days** without a defense` : 'no defense warnings',
+                s.vacate_days ? `auto-vacate a belt when the champion has not wrestled in **${s.vacate_days} days**` : 'no auto-vacate'];
+            return respond(interaction, { content: `Title deadlines: ${bits.join('; ')}.${(s.defense_days || s.vacate_days) && !s.admin_channel_id ? '\nTip: set a staff channel with `/admin set-admin-channel` so the warnings have somewhere to go.' : ''}` });
+        }
+        if (sub === 'rematches') {
+            const on = interaction.options.getString('action') === 'on';
+            const days = interaction.options.getInteger('days');
+            await pool.query(`UPDATE guilds SET rematch_enabled = $1, rematch_days = COALESCE($2, rematch_days) WHERE guild_id = $3`, [on, days, guildId]);
+            await logAudit(guildId, interaction.user.id, 'setting_rematches', { on, days });
+            const s = await getGuildSettings(guildId);
+            return respond(interaction, { content: on ? `Rematch clauses are **on**: a champion who loses the belt is owed a rematch for **${s.rematch_days} days**.` : 'Rematch clauses are **off**.' });
+        }
+        if (sub === 'set-timezone') {
+            const zone = interaction.options.getString('zone').trim();
+            try { new Intl.DateTimeFormat('en-CA', { timeZone: zone }).format(new Date()); }
+            catch (_) { throw new UserError('I don\'t know that time zone. Use a name like `America/New_York`, `America/Los_Angeles`, `Europe/London` or `UTC`.'); }
+            await pool.query(`UPDATE guilds SET tz = $1 WHERE guild_id = $2`, [zone, guildId]);
+            await logAudit(guildId, interaction.user.id, 'setting_timezone', { zone });
+            return respond(interaction, { content: `Time zone set to **${zone}**. Show dates and reminders now follow it.` });
+        }
+        if (sub === 'import-template') {
+            const files = Object.entries(importer.TEMPLATES).map(([k, v]) => new AttachmentBuilder(Buffer.from(v), { name: `import-${k}.csv` }));
+            return respond(interaction, { content: '📄 Two example files. Open them in Excel or Google Sheets, replace the rows with yours, save as **CSV**, then attach to `/admin import`.\n**Characters:** `name, division, owner` (Discord ID or exact username) + optional `alignment, bio, finisher`.\n**Results:** `winner, loser` (character names) + optional `date` (YYYY-MM-DD), `stipulation, notes`, `result` (win or draw). Title history is better added with `/championship backfill-reign`.', files, flags: 64 });
+        }
+        if (sub === 'import') {
+            const what = interaction.options.getString('what');
+            const att = interaction.options.getAttachment('file');
+            const apply = interaction.options.getBoolean('apply') === true;
+            if (!att) throw new UserError('Attach a .csv file.');
+            if (!/\.(csv|txt|tsv)$/i.test(att.name || '') && !/text|csv/i.test(att.contentType || '')) throw new UserError('That doesn\'t look like a CSV file. In Excel or Google Sheets choose File → Save as / Download → CSV.');
+            await interaction.deferReply({ flags: 64 });
+            const rows = importer.parseCsv(await importer.downloadCsv(att));
+            const res = what === 'characters'
+                ? await importer.importCharacters(interaction.guild, rows, { apply, actor: interaction.user.id })
+                : await importer.importResults(guildId, rows, { apply, actor: interaction.user.id });
+            const noun = what === 'characters' ? 'character' : 'result';
+            const head = apply
+                ? `✅ Imported **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'}.`
+                : `👀 Preview: **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'} are ready to import${res.problems.length ? ` and **${res.problems.length}** line(s) have problems` : ''}. Nothing was saved yet. Run the same command with \`apply: true\` to import.`;
+            const sample = res.ok.slice(0, 5).map((r) => (what === 'characters' ? `• ${r.name} (${r.division}) → <@${r.discordId}>` : `• ${r.a.name} def. ${r.b.name}${r.draw ? ' (draw)' : ''} on ${r.date}`)).join('\n');
+            const probs = res.problems.slice(0, 12).map((p) => `⚠️ ${p}`).join('\n');
+            return respond(interaction, { content: [head, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
+        }
         if (sub === 'milestones') {
             const on = interaction.options.getString('action') === 'on';
             await pool.query(`UPDATE guilds SET milestones_enabled = $1 WHERE guild_id = $2`, [on, guildId]);
@@ -115,6 +192,11 @@ module.exports = {
                 { name: 'Win-streak prompt', value: s.streak_threshold ? `Every ${s.streak_threshold} wins in a row` : 'Off' },
                 { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin set-monthly-channel`)' },
                 { name: 'Milestone shout-outs', value: s.milestones_enabled === false ? 'Off' : 'On' },
+                { name: 'Staff reminders channel', value: s.admin_channel_id ? `<#${s.admin_channel_id}>` : 'Off (use `/admin set-admin-channel`)' },
+                { name: 'Weekly newsletter', value: s.newsletter_channel_id ? `<#${s.newsletter_channel_id}>` : 'Off (use `/admin set-newsletter-channel`)' },
+                { name: 'Title deadlines', value: `${s.defense_days ? `Warn after ${s.defense_days}d without a defense` : 'No defense warnings'} · ${s.vacate_days ? `auto-vacate after ${s.vacate_days}d of champion inactivity` : 'no auto-vacate'}` },
+                { name: 'Rematch clause', value: s.rematch_enabled ? `On (${s.rematch_days} days)` : 'Off' },
+                { name: 'Time zone', value: s.tz || 'UTC' },
                 { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin backup`)' }
             );
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });

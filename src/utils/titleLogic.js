@@ -48,11 +48,11 @@ async function setVacancy(client, titleId) {
     );
 }
 
-async function startReign(client, { guildId, title, subject, memberIds, matchId, actor, notes = null }) {
+async function startReign(client, { guildId, title, subject, memberIds, matchId, actor, notes = null, interim = false }) {
     const { rows } = await client.query(
-        `INSERT INTO title_reigns (guild_id, title_id, character_id, team_id, won_match_id, won_date, entered_by, notes)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7) RETURNING id`,
-        [guildId, title.id, subject.type === 'character' ? subject.id : null, subject.type === 'team' ? subject.id : null, matchId, actor, notes]
+        `INSERT INTO title_reigns (guild_id, title_id, character_id, team_id, won_match_id, won_date, entered_by, notes, is_interim)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_DATE, $6, $7, $8) RETURNING id`,
+        [guildId, title.id, subject.type === 'character' ? subject.id : null, subject.type === 'team' ? subject.id : null, matchId, actor, notes, interim]
     );
     const reignId = rows[0].id;
     if (subject.type === 'team') {
@@ -86,7 +86,8 @@ async function applyTitleResult(client, { guildId, title, matchId, subject, memb
         await client.query(`UPDATE title_reigns SET lost_date = CURRENT_DATE WHERE id = $1`, [current.id]);
         effect.type = 'title_change';
         effect.prev_reign_id = String(current.id);
-        effect.new_reign_id = String(await startReign(client, { guildId, title, subject, memberIds, matchId, actor }));
+        effect.new_reign_id = String(await startReign(client, { guildId, title, subject, memberIds, matchId, actor, interim: Boolean(current.is_interim) }));
+        effect.dethroned = { character_id: current.character_id ? String(current.character_id) : null, team_id: current.team_id ? String(current.team_id) : null, name: current.team_name || current.character_name || current.reign_char_name || null, interim: Boolean(current.is_interim) };
     }
     await setVacancy(client, title.id);
 
@@ -152,6 +153,11 @@ async function undoMatchEffect(client, match) {
         }
         await setVacancy(client, titleId);
 
+        if (effect.used_rematch_ids?.length) {
+            await client.query(`UPDATE rematch_rights SET status = 'active', used_match_id = NULL WHERE id = ANY($1::bigint[]) AND status = 'used'`, [effect.used_rematch_ids]);
+        }
+        if (effect.rematch_id) await client.query(`DELETE FROM rematch_rights WHERE id = $1`, [effect.rematch_id]);
+
         if (effect.fulfilled_contender_id) {
             // Only bring the contender back if nobody else has taken the spot meanwhile.
             const { rows: active } = await client.query(`SELECT 1 FROM contenders WHERE title_id = $1 AND status = 'active'`, [titleId]);
@@ -180,7 +186,7 @@ async function undoMatchEffect(client, match) {
 
 /** Human-friendly name of whoever holds a reign row (character, team, or backfilled text). */
 function reignHolderName(r) {
-    return r.team_name || r.character_name || r.reign_char_name || 'Unknown';
+    return `${r.team_name || r.character_name || r.reign_char_name || 'Unknown'}${r.is_interim ? ' (Interim)' : ''}`;
 }
 
 module.exports = {

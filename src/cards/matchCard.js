@@ -52,12 +52,13 @@ async function renderMatchCard(data) {
     ctx.textAlign = 'left';
     ctx.fillStyle = C.text;
     ctx.font = font(30, 'bold');
-    ctx.fillText(data.label.toUpperCase(), 40, 56);
+    fitText(ctx, `${data.label}${data.stipulation ? `  •  ${data.stipulation}` : ''}`.toUpperCase(), 40, 56, 640, 30, 'bold', 16);
     ctx.fillStyle = C.sub;
     ctx.font = font(16, 'medium');
-    const resultWord = decisive ? 'OFFICIAL RESULT' : data.resultType === 'draw' ? 'DRAW' : 'NO CONTEST';
+    const resultBase = decisive ? 'OFFICIAL RESULT' : data.resultType === 'draw' ? 'DRAW' : 'NO CONTEST';
+    const resultWord = `${resultBase}${data.finish ? `  •  BY ${data.finish.toUpperCase()}` : ''}${data.score ? `  •  ${data.score}` : ''}`;
     const showLine = brand ? `  •  ${brand.label}${data.show.name ? ` ${data.show.name.toUpperCase()}` : ''}  •  MATCH ${data.show.position}` : '';
-    fitText(ctx, `${resultWord}${showLine}`, 40, 84, 520, 16, 'medium', 11);
+    fitText(ctx, `${resultWord}${showLine}`, 40, 84, 560, 16, 'medium', 10);
     ctx.textAlign = 'right';
     ctx.fillStyle = C.sub;
     ctx.fillText(`MATCH #${data.matchId}`, W - 40, 56);

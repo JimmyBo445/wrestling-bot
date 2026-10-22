@@ -109,6 +109,51 @@ async function handleStreak(interaction) {
 async function handleButtonInteraction(interaction) {
     const id = interaction.customId || '';
 
+    // ---- Match of the Night voting: anyone can vote ----
+    if (interaction.isButton() && id.startsWith('motn:')) {
+        const [, pollId, matchId] = id.split(':');
+        const motn = require('../utils/motn');
+        const poll = await motn.castVote(pollId, interaction.guildId, interaction.user.id, matchId);
+        const names = await motn.matchNames([matchId]);
+        const idx = poll.match_ids.map(String).indexOf(String(matchId)) + 1;
+        const total = (await pool.query(`SELECT COUNT(*)::int AS n FROM motn_votes WHERE poll_id = $1`, [poll.id])).rows[0].n;
+        const msg = await motn.buildPollMessage(poll);
+        await interaction.update({ embeds: msg.embeds, components: msg.components }).catch(() => {});
+        return interaction.followUp({ content: `✅ Your vote: **${idx}. ${motn.shortNames(names.get(String(matchId)))}**. (${total} vote${total === 1 ? '' : 's'} so far)`, flags: EPHEMERAL });
+    }
+
+    // ---- profile "Story" page: private to whoever clicked ----
+    if (interaction.isButton() && id.startsWith('prof:story:')) {
+        const { rows } = await pool.query(`SELECT * FROM characters WHERE id = $1 AND guild_id = $2`, [id.split(':')[2], interaction.guildId]);
+        const c = rows[0];
+        if (!c) return respond(interaction, { content: 'That character no longer exists.', flags: EPHEMERAL });
+        const embed = new EmbedBuilder().setTitle(`${c.name} — Story`).setColor(0xE8BF4A);
+        if (c.catchphrase) embed.addFields({ name: 'Catchphrase', value: `“${c.catchphrase}”` });
+        if (c.finisher) embed.addFields({ name: 'Finisher', value: c.finisher, inline: true });
+        if (c.signatures) embed.addFields({ name: 'Signature moves', value: c.signatures.split(',').map((x) => x.trim()).filter(Boolean).map((x) => `• ${x}`).join('\n').slice(0, 1000), inline: true });
+        embed.setDescription((c.lore || '_No story written yet. Owners can add one with `/character story`._').slice(0, 4000));
+        return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
+    }
+
+    // ---- roster pager: only the person who opened it can flip through ----
+    if (interaction.isButton() && id.startsWith('roster:')) {
+        const [, division, index, retired, ownerId] = id.split(':');
+        if (interaction.user.id !== ownerId) {
+            return respond(interaction, { content: 'This roster belongs to someone else. Use `/roster` to open your own.', flags: EPHEMERAL });
+        }
+        await interaction.deferUpdate();
+        try {
+            const { buildRosterPage } = require('../commands/roster');
+            const page = await buildRosterPage(interaction.guild, { division, index: parseInt(index, 10), includeRetired: retired === '1', userId: ownerId });
+            return await interaction.editReply(page);
+        } catch (err) {
+            // never delete the roster message on a failure: tell the user privately instead
+            const known = err instanceof UserError;
+            if (!known) console.error('Roster page failed:', err);
+            return interaction.followUp({ content: known ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Please try again.', flags: EPHEMERAL }).catch(() => {});
+        }
+    }
+
     // ---- public browsing menus: anyone can use ----
     if (interaction.isStringSelectMenu()) {
         if (id.startsWith('lb_cat_') || id.startsWith('lb_period_')) {
@@ -121,7 +166,9 @@ async function handleButtonInteraction(interaction) {
         }
         if (id === 'rank_div') {
             const division = interaction.values[0];
-            return interaction.update({ embeds: [await buildRankingsEmbed(interaction.guildId, division)], components: rankingsComponents(division) });
+            await interaction.deferUpdate();
+            const { rankingsPayload } = require('../commands/rankings');
+            return interaction.editReply(await rankingsPayload(interaction.guild, division));
         }
     }
 

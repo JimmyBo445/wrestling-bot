@@ -1,6 +1,7 @@
 const { pool, withTransaction } = require('../db/pool');
 const { MATCH_CONFIG, isTeamMatch, matchLabel, MAX_CARD_MATCHES, CARD_BRANDS, DIVISION_THEME } = require('./constants');
 const { UserError } = require('./errors');
+const { injuryWarnings } = require('./injuryUtils');
 const { requireCharacter, getCharacterById } = require('./characterUtils');
 const { requireTitle, getCurrentReign } = require('./titleLogic');
 const { findTeamForCharacters, getTeamMembers } = require('./teamUtils');
@@ -71,7 +72,7 @@ async function linkMatchToCard(guildId, matchId, matchType, characterIds) {
         const config = MATCH_CONFIG[matchType];
         const idList = ids(characterIds);
         const { rows } = await pool.query(
-            `SELECT cdm.id, cdm.character_ids, cdm.position, cd.brand, cd.division, cd.name
+            `SELECT cdm.id, cdm.character_ids, cdm.position, cdm.stipulation, cd.brand, cd.division, cd.name
              FROM card_draft_matches cdm JOIN card_drafts cd ON cd.id = cdm.draft_id
              WHERE cd.guild_id = $1 AND cdm.match_type = $2 AND cdm.match_id IS NULL
                AND cdm.character_ids <@ $3::bigint[] AND cdm.character_ids @> $3::bigint[]
@@ -89,6 +90,8 @@ async function linkMatchToCard(guildId, matchId, matchType, characterIds) {
         const hit = rows.find((r) => sameSides(r.character_ids));
         if (!hit) return null;
         await pool.query(`UPDATE card_draft_matches SET match_id = $1 WHERE id = $2`, [matchId, hit.id]);
+        // the stipulation planned on the card carries over to the logged match (unless one was typed in)
+        if (hit.stipulation) await pool.query(`UPDATE matches SET stipulation = COALESCE(stipulation, $2) WHERE id = $1`, [matchId, hit.stipulation]);
         return { brand: hit.brand, division: hit.division, name: hit.name, position: hit.position };
     } catch (err) {
         console.error('Could not link match to a card:', err.message);
@@ -122,7 +125,7 @@ async function addMatchToCard(guildId, brand, division, { matchType, characterId
         throw new UserError(`This is the **${divisionLabel(division)}** card, but ${wrong.map((c) => `**${c.name}**`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} in a different division.`);
     }
 
-    const warnings = [];
+    const warnings = [...await injuryWarnings(chars)];
     let title = null;
     if (titleId) {
         title = await requireTitle(guildId, titleId);
@@ -332,7 +335,8 @@ const RIVALRY_DAYS = 90;
  */
 async function planCard(guildId, division, count) {
     const { rows: pool_ } = await pool.query(
-        `SELECT c.id, c.name, c.owner_id FROM characters c WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved'`,
+        `SELECT c.id, c.name, c.owner_id FROM characters c WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved'
+           AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
         [guildId, division]
     );
     if (pool_.length < 2) throw new UserError(`There aren't enough approved ${divisionLabel(division)} wrestlers to build a card (need at least 2).`);

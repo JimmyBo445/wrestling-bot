@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.7.0 — Booking depth: stipulations, rematches, calendar, tournaments and more
+- **Fix any reign, even ones the bot logged.** `/championship edit-reign` now works on every reign: won/lost dates, defenses, notes, the champion (wrestler, team or typed name) and an interim flag. `/championship remove-reign` also works on bot-logged reigns. The overlap check still stops two champions at once.
+- **Stipulations, finishes and scores.** Every `/match log-...` and both `/championship log-...-title-match` commands take `stipulation` (pick Ladder, Hell in a Cell, Last Man Standing, Iron Man, Steel Cage... or type your own), `finish` (pinfall, submission, DQ, count-out, knockout, interference, escape, forfeit) and `score` (like 3-2 for Iron Man). They show on the result graphic. A stipulation planned on a `/card` carries over when you log the match. `/stats character` shows a record per stipulation and wins by finish. `/match edit` can change them later.
+- **Rematch clause.** When a champion loses the belt they are owed a rematch (default 30 days). The result says so, `/championship rematches` lists who is owed one, the staff channel gets a reminder 3 days before it runs out, and it is ticked off when they get the match. `/admin rematches` turns it on/off and sets the days; `/championship waive-rematch` cancels one.
+- **Title deadlines.** `/admin deadlines` warns staff when a belt has gone N days without a defense (once a week per belt) and can auto-vacate a belt when the champion has not wrestled at all for N days. `/championship watch` shows the days for every title.
+- **Interim champions.** `/championship interim` crowns one (the old reign is ended and noted); `/championship unify` makes the real champion undisputed. Interim reigns are labelled everywhere.
+- **Staff channel + booking calendar.** `/admin set-admin-channel` picks a private staff channel. `/card schedule` gives a card a show date, `/card upcoming` lists them, and from noon on show day the bot posts "Tonight's card" with the picture in the staff channel. `/admin set-timezone` makes dates and times follow your time zone.
+- **Match of the Night vote.** `/card vote` posts a poll with a button per match logged from that card (one vote each, changeable). `/card vote-close` announces the winner; winners earn a profile badge.
+- **Character depth (all optional).** `/character story` adds signature moves, a catchphrase, a finisher and a long story. Moves and catchphrase show on the profile card; a **Story & moves** button opens the full story page.
+- **Badges, grand slam and career timeline.** Profile cards show achievement badges (undefeated, win milestones, hot streaks, multi-time champion, five-star classic, match of the night, tournament winner, grand slam). `/stats badges` lists them. `/championship grand-slam` shows who has held every title in a division. `/stats timeline` draws a career timeline picture.
+- **Feuds.** `/feud start` `log` `view` `list` `heat` `end`: a storyline timeline per rivalry (your notes plus every match between the two) with a record and a heat meter that rises with recent matches and storyline moments and cools down over time.
+- **Tournaments.** `/tournament create` `add` `start` `bracket` `advance` `cancel`: 4 to 16 singles wrestlers, random draw with byes, a bracket picture, and the bracket advances by itself when you log the match with `/match log-singles`. Optionally the winner is crowned champion of a title.
+- **Weekly newsletter.** `/admin set-newsletter-channel` and the bot posts every Monday morning: championship news, stars of the week, match of the week, hottest feuds, upcoming cards, injuries, and your own lines. `/newsletter add` `list` `remove` `preview` `post`.
+- **Bulk import.** `/admin import` brings in characters or past singles results from a CSV file, with a preview first (nothing saved until you add `apply:true`). `/admin import-template` sends example files.
+- Database: migration 010 runs by itself.
+
+## 2.6.0 — Pictures, rankings graphic, injuries, seasons
+- **Easy picture upload.** Attach an image when you use `/character submit`, `assign` or `edit` (the new **picture** option), or use the new `/character picture` command. No link needed. The picture is saved inside the bot's database, so it never expires. Links still work too. Owners can change their own wrestler's picture; admins can change anyone's.
+- **`/rankings` is now a picture**: the top 10 of a division with portraits, points, records, and CHAMPION / #1 CONTENDER tags. The dropdown still switches divisions.
+- **`/stats user` is now a player card picture**: overall record, a record for each division, streaks, and all of the player's wrestlers (former ones are marked). Add `text:true` for the old text version.
+- **Belt cards show the last 3 champions** with how long each held it.
+- **Injuries** (`/injury add` `clear` `list`): a wrestler is out until a return date. Auto cards skip them, `/match` and `/card add` warn when you book them anyway, their profile shows an INJURED badge, and the bot posts in your matches channel when they are back.
+- **Seasons** (`/season recap` and `/season standings`): a calendar-year view with top wrestlers and players, who held each title at the end of the year, and match of the year. Nothing is ever reset. If a Wrestler of the Month channel is set, the bot also posts last year's recap in January.
+- Database: migrations 008 and 009 run by themselves.
+
+## 2.5.1
+- **`/roster division:`**: flip through every wrestler in a division, A to Z, as full profile cards with picture. **◀ Prev** and **Next ▶** buttons (it loops from Z back to A). Only the person who opened it can press the buttons, so two people can browse at once. Add `include_retired:true` to include retired wrestlers.
+
 ## 2.5.0 — Player records, factions and more
 - **Records now follow the player.** Every match remembers who owned each wrestler at the time. `/stats user` shows a player's overall record plus one for each division (Men's, Women's, Custom, Custom Women's). Switching characters, or leaving and rejoining the server, never resets it. If a character is transferred, the old player keeps what they earned and the new player starts at 0-0 with it. A character's page shows the current owner's record, and "All owners" when it has changed hands. Old matches are credited to each character's current owner.
 - **Factions** (`/faction`): groups of 3 to 8 wrestlers with a shared record and a graphic. Separate from tag teams: a wrestler can be in both, but only one faction.

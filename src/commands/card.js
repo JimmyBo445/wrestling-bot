@@ -8,6 +8,8 @@ const { renderShowCard } = require('../cards/showCard');
 const { renderTapeCard } = require('../cards/tapeCard');
 const { buildTapeData } = require('../utils/cardData');
 const svc = require('../utils/cardService');
+const { parseDate, fmtYmd } = require('../utils/dates');
+const motn = require('../utils/motn');
 
 const BRAND_CHOICES = Object.entries(CARD_BRANDS).map(([value, b]) => ({ name: b.label === 'RAW' ? 'RAW (red)' : 'SmackDown (blue)', value }));
 const DIVISION_CHOICES = Object.entries(DIVISION_THEME).map(([value, t]) => ({ name: t.label, value }));
@@ -59,6 +61,13 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => showOpts(s.setName('recap').setDescription('Post a results graphic for the show (matches you have logged with /match)'))
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => showOpts(s.setName('schedule').setDescription('Set the show date for this card (the bot posts a reminder in the staff channel that day)'))
+        .addStringOption((o) => o.setName('date').setDescription('Show date as YYYY-MM-DD, or - to unschedule').setRequired(true).setMaxLength(10)))
+    .addSubcommand((s) => s.setName('upcoming').setDescription('Cards that are scheduled, soonest first'))
+    .addSubcommand((s) => showOpts(s.setName('vote').setDescription('Open a Match of the Night vote for the matches logged from this card'))
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post the vote (default: here)').setRequired(false)
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('vote-close').setDescription('Close the open Match of the Night vote and announce the winner'))
     .addSubcommand((s) => showOpts(s.setName('clear').setDescription('Delete the card')));
 
 
@@ -96,7 +105,7 @@ module.exports = {
         const guildId = interaction.guildId;
         const brand = interaction.options.getString('brand');
         const division = interaction.options.getString('division');
-        const label = `${svc.brandLabel(brand)} ${svc.divisionLabel(division)}`;
+        const label = brand ? `${svc.brandLabel(brand)} ${svc.divisionLabel(division)}` : '';
         const list = async () => svc.describeCard(await svc.requireDraft(guildId, brand, division));
 
         if (sub === 'new') {
@@ -218,6 +227,64 @@ module.exports = {
             await interaction.deferReply();
             const buffer = await renderTapeCard(await buildTapeData(interaction.guild, targets));
             return respond(interaction, { files: [new AttachmentBuilder(buffer, { name: 'tale-of-the-tape.png' })] });
+        }
+
+        if (sub === 'schedule') {
+            const raw = interaction.options.getString('date').trim();
+            const draft = await svc.requireDraft(guildId, brand, division);
+            if (raw === '-') {
+                await pool.query(`UPDATE card_drafts SET show_date = NULL, reminded_on = NULL WHERE id = $1`, [draft.id]);
+                return respond(interaction, { content: `The ${label} card is no longer scheduled.` });
+            }
+            const date = parseDate(raw, 'The show date');
+            await pool.query(`UPDATE card_drafts SET show_date = $2, reminded_on = NULL WHERE id = $1`, [draft.id, date]);
+            const s = await require('../utils/ensureGuild').getGuildSettings(guildId);
+            return respond(interaction, { content: `📅 The **${label}** card is set for **${date}**.${s.admin_channel_id ? ` I'll post "tonight's card" in <#${s.admin_channel_id}> from noon that day.` : ' Set a staff channel with `/admin set-admin-channel` and I\'ll remind you on the day.'}` });
+        }
+
+        if (sub === 'upcoming') {
+            const { rows } = await pool.query(
+                `SELECT cd.*, (SELECT COUNT(*)::int FROM card_draft_matches WHERE draft_id = cd.id) AS n
+                 FROM card_drafts cd WHERE cd.guild_id = $1 AND cd.show_date IS NOT NULL ORDER BY cd.show_date, cd.id`, [guildId]);
+            if (!rows.length) return respond(interaction, { content: 'No cards are scheduled. Use `/card schedule` on a card you are building.', flags: 64 });
+            const lines = rows.map((r) => `**${fmtYmd(r.show_date)}** — ${svc.cardLabel(r)}${r.name ? ` “${r.name}”` : ''} · ${r.n} match${r.n === 1 ? '' : 'es'}`);
+            return respond(interaction, { content: `📅 **Upcoming cards**\n${lines.join('\n')}`, flags: 64 });
+        }
+
+        if (sub === 'vote') {
+            const draft = await svc.requireDraft(guildId, brand, division);
+            const slots = (await svc.getDraftMatches(draft.id)).filter((s) => s.match_id);
+            const target = interaction.options.getChannel('channel');
+            await interaction.deferReply(target ? { flags: 64 } : {});
+            const poll = await motn.createPoll(guildId, slots.map((s) => s.match_id), interaction.user.id);
+            const payload = { ...(await motn.buildPollMessage(poll)), allowedMentions: NO_MENTIONS };
+            let msg;
+            if (target) {
+                const channel = await interaction.guild.channels.fetch(target.id).catch(() => null);
+                if (!channel?.isTextBased()) throw new UserError('I can\'t post in that channel.');
+                msg = await channel.send(payload).catch(() => { throw new UserError('I couldn\'t post there. Check that I can view the channel and send messages.'); });
+                await respond(interaction, { content: `Vote opened in <#${target.id}>. Close it with \`/card vote-close\`.` });
+            } else {
+                msg = await interaction.editReply(payload);
+            }
+            await pool.query(`UPDATE motn_polls SET channel_id = $2, message_id = $3 WHERE id = $1`, [poll.id, msg?.channelId || target?.id || interaction.channelId, msg?.id || null]);
+            return;
+        }
+
+        if (sub === 'vote-close') {
+            const { poll, winners, topVotes } = await motn.closePoll(guildId);
+            const names = await motn.matchNames(winners);
+            const text = !winners.length
+                ? 'The vote is closed. Nobody voted.'
+                : `⭐ **Match of the Night:** ${winners.map((w) => `**${motn.shortNames(names.get(String(w)))}**`).join(' and ')} (${topVotes} vote${topVotes === 1 ? '' : 's'}${winners.length > 1 ? ' each, a tie' : ''}).`;
+            try {
+                if (poll.channel_id && poll.message_id) {
+                    const ch = await interaction.client.channels.fetch(poll.channel_id);
+                    const m = await ch.messages.fetch(poll.message_id);
+                    await m.edit({ ...(await motn.buildPollMessage(poll, { showCounts: true })) });
+                }
+            } catch (err) { console.error('Could not update vote message:', err.message); }
+            return respond(interaction, { content: text, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'clear') {

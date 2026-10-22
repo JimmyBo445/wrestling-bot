@@ -1,4 +1,4 @@
-# Wrestling Bot 2.5.0
+# Wrestling Bot 2.7.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -8,21 +8,31 @@ servers at once. Everything is saved permanently in Postgres.
 
 | Area | Commands |
 |---|---|
-| **Characters** | `/character submit` `assign` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, entrance theme) |
+| **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
-| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman`, plus `undo` `edit` `rate` `recent` |
-| **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `backfill-reign` `edit-reign` `remove-reign` |
+| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
+| **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `interim` `unify` `backfill-reign` `edit-reign` `remove-reign` `watch` `grand-slam` `rematches` `waive-rematch` |
 | **#1 contenders** | `/contender challenge` `award` `revoke` `list` |
-| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `history` |
+| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
 | **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
 | **Matchmaking** | `/matchmaking suggest` `request` |
 | **Match cards** (admins) | `/card new` `auto` `request` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
+| **Injuries** | `/injury add` `clear` `list` (out until a return date; auto cards skip them) |
+| **Seasons** | `/season recap` `standings` (calendar-year view; nothing resets) |
+| **Roster** | `/roster division:` flip through a division A to Z with profile cards (Prev / Next buttons) |
+| **Feuds** | `/feud start` `log` `view` `list` `heat` `end` (timeline + heat meter) |
+| **Tournaments** | `/tournament create` `add` `remove` `start` `bracket` `list` `advance` `cancel` |
+| **Newsletter** (admins) | `/newsletter add` `list` `remove` `preview` `post` |
 | **Factions** | `/faction create` `add-member` `remove-member` `disband` `list` `profile` (3 to 8 wrestlers, shared record, separate from tag teams) |
 | **Hall of Fame** | `/halloffame induct` `remove` `list` `view` |
 | **Help** | `/help` (everyone) and `/help command:<name>` |
-| **Admin** | `/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
+| **Admin** | `/admin pending` `import` `import-template` `set-admin-channel` `set-newsletter-channel` `deadlines` `rematches` `set-timezone` `set-monthly-channel` `monthly-awards` `backup` `milestones` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 
 ### How the rules work
+- **Stipulations & finishes**: optional on every match. They only decorate and record; they don't change who wins or the belts.
+- **Rematch clause**: the champion who loses a belt is owed a rematch for N days (`/admin rematches`). It is used when that wrestler or team appears in the next title match for that belt.
+- **Title deadlines** (`/admin deadlines`): `defense_days` only warns the staff channel; `vacate_days` vacates a belt when the champion has not wrestled any match for that many days. Both are off until you set them.
+- **Tournaments**: singles only. Log the real matches with `/match log-singles` (or any command that logs a singles match) and the bracket advances; use `/tournament advance` for walkovers.
 - **Match cards**: one card per brand + division (RAW or SmackDown, and each division), up to 10 matches. `/card auto` books one from recent matches; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). A wrestler can be in one match per card, and everyone on a card must be in that division. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.

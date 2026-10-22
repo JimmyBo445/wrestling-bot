@@ -39,6 +39,26 @@ const MATCH_CONFIG = {
 const isTeamMatch = (matchType) => MATCH_CONFIG[matchType]?.winnerMode === 'team';
 const matchLabel = (matchType) => MATCH_CONFIG[matchType]?.label || matchType;
 
+// Suggested stipulations (autocomplete). Admins can still type their own (max 40 characters).
+const STIPULATIONS = [
+    'Ladder Match', 'TLC', 'Tables Match', 'Steel Cage', 'Hell in a Cell', 'Last Man Standing', 'Iron Man',
+    'Street Fight', 'Falls Count Anywhere', 'Submission Match', 'I Quit Match', 'No DQ', 'No Holds Barred',
+    'Strap Match', 'Casket Match', 'Royal Rumble', 'Elimination Chamber', 'Money in the Bank Ladder',
+    'Title vs Career', 'Winner Takes All', 'Loser Leaves Town', 'First Blood', 'Last Woman Standing',
+    'Open Challenge', 'Rematch', 'Rivalry'
+];
+const FINISHES = [
+    { name: 'Pinfall', value: 'pinfall' },
+    { name: 'Submission', value: 'submission' },
+    { name: 'Disqualification (DQ)', value: 'dq' },
+    { name: 'Count-out', value: 'countout' },
+    { name: 'Knockout / Referee stoppage', value: 'knockout' },
+    { name: 'Outside interference', value: 'interference' },
+    { name: 'Escape / retrieve / last eliminated', value: 'escape' },
+    { name: 'Forfeit', value: 'forfeit' }
+];
+const FINISH_LABEL = Object.fromEntries(FINISHES.map((f) => [f.value, f.name.replace(/ \(DQ\)/, '').replace('Knockout / Referee stoppage', 'Knockout').replace('Escape / retrieve / last eliminated', 'Escape / Retrieve')]));
+
 const MAX_CHARACTERS_PER_USER = 4;
 const MAX_CARD_MATCHES = 10;
 const DEFAULT_COOLDOWN_HOURS = 24;
@@ -60,7 +80,7 @@ const CARD_BRANDS = {
 };
 
 module.exports = {
-    MAX_CARD_MATCHES, CARD_BRANDS,
+    MAX_CARD_MATCHES, CARD_BRANDS, STIPULATIONS, FINISHES, FINISH_LABEL,
     DEFAULT_TITLES, MATCH_CONFIG, isTeamMatch, matchLabel,
     MAX_CHARACTERS_PER_USER, DEFAULT_COOLDOWN_HOURS, DEFAULT_STREAK_THRESHOLD, RANKING_WINDOW_DAYS,
     DIVISION_THEME,

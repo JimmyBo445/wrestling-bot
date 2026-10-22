@@ -4,7 +4,7 @@ const { buildMatchCardData, outcomeText } = require('./cardData');
 const { getGuildSettings } = require('./ensureGuild');
 const { maybePromptStreak } = require('./contenderLogic');
 const { NO_MENTIONS } = require('./discordHelpers');
-const { isTeamMatch } = require('./constants');
+const { isTeamMatch, FINISH_LABEL } = require('./constants');
 const { detectMilestones } = require('./milestones');
 
 /** Plain-text alt/summary of a match, used if the image can't be drawn. */
@@ -23,6 +23,18 @@ function textSummary(result) {
 async function presentMatch(interaction, result) {
     const notices = [];
     if (result.cooldownOverridden) notices.push('⏱️ Cooldown was overridden for this booking.');
+    for (const n of result.injuryNotes || []) notices.push(`🤕 ${n}`);
+    if (result.tournament) {
+        const t = result.tournament;
+        const winner = result.characters.find((c) => String(c.id) === String(t.winnerId))?.name;
+        notices.push(t.finished
+            ? `🏆 **${winner}** wins **${t.name}**!${t.crowned ? ` They are the new **${t.crowned}** champion.` : ''}`
+            : `🏟️ **${t.name}**: **${winner}** advances to the ${t.nextRound}. See \`/tournament bracket\`.`);
+    }
+    if (result.rematch) {
+        const until = new Date(result.rematch.expires_on).toISOString().slice(0, 10);
+        notices.push(`🔁 Rematch clause: **${result.rematch.name}** is owed a rematch for the **${result.title.name}** (use it by ${until}).`);
+    }
 
     let file = null;
     try {
@@ -37,7 +49,7 @@ async function presentMatch(interaction, result) {
         .setColor(result.title ? 0xE8BF4A : result.contenderTitle ? 0xF08C32 : result.resultType === 'decisive' ? 0x27AE60 : 0x95A5A6)
         .setFooter({ text: `Logged by ${interaction.user.username} · Match #${result.matchId} · /match undo ${result.matchId} to reverse` });
     if (file) embed.setImage('attachment://match.png');
-    else embed.setTitle(`${result.label} Result`).setDescription([textSummary(result), outcomeText(result)].filter(Boolean).join('\n'));
+    else embed.setTitle(`${result.label}${result.stipulation ? ` • ${result.stipulation}` : ''} Result`).setDescription([textSummary(result), result.finish ? `Finish: ${FINISH_LABEL[result.finish] || result.finish}${result.score ? ` (${result.score})` : ''}` : null, outcomeText(result)].filter(Boolean).join('\n'));
 
     // Win-streak prompts (admin picks the title). Characters for non-team matches, registered teams for tag matches.
     if (result.resultType === 'decisive') {

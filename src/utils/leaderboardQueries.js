@@ -157,9 +157,9 @@ async function buildLeaderboardEmbed(guildId, category = 'win_pct', period = 'al
  * Division ranking ladder: 3 points per win, 1 per draw, over the last N days.
  * Champions and #1 contenders are flagged.
  */
-async function buildRankingsEmbed(guildId, division = 'mens') {
+async function rankingRows(guildId, division, limit = 15) {
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, u.discord_id,
+        `SELECT c.id, c.name, c.division, c.image_url, u.discord_id,
                 COUNT(*) FILTER (WHERE m.result_type = 'decisive' AND mp.is_winner)::int AS w,
                 COUNT(*) FILTER (WHERE m.result_type = 'decisive' AND NOT mp.is_winner)::int AS l,
                 COUNT(*) FILTER (WHERE m.result_type = 'draw')::int AS d,
@@ -172,13 +172,18 @@ async function buildRankingsEmbed(guildId, division = 'mens') {
          JOIN match_participants mp ON mp.character_id = c.id
          JOIN matches m ON m.id = mp.match_id AND m.created_at >= now() - ($3 || ' days')::interval
          WHERE c.guild_id = $1 AND c.status = 'approved' AND c.division = $2
-         GROUP BY c.id, c.name, u.discord_id
+         GROUP BY c.id, c.name, c.division, c.image_url, u.discord_id
          ORDER BY (COUNT(*) FILTER (WHERE m.result_type = 'decisive' AND mp.is_winner) * 3
                  + COUNT(*) FILTER (WHERE m.result_type = 'draw')) DESC,
                  COUNT(*) FILTER (WHERE m.result_type = 'decisive' AND NOT mp.is_winner) ASC, c.name
-         LIMIT 15`,
+         LIMIT ${Number(limit)}`,
         [guildId, division, String(RANKING_WINDOW_DAYS)]
     );
+    return rows;
+}
+
+async function buildRankingsEmbed(guildId, division = 'mens') {
+    const rows = await rankingRows(guildId, division);
     const theme = DIVISION_THEME[division];
     const lines = rows.map((r, i) => {
         const pts = r.w * 3 + r.d;
@@ -192,4 +197,4 @@ async function buildRankingsEmbed(guildId, division = 'mens') {
         .setFooter({ text: `3 pts per win, 1 per draw · last ${RANKING_WINDOW_DAYS} days · 👑 champion  🎯 #1 contender` });
 }
 
-module.exports = { buildLeaderboardEmbed, buildRankingsEmbed, CATEGORY_LABELS, TIME_INDEPENDENT };
+module.exports = { buildLeaderboardEmbed, buildRankingsEmbed, rankingRows, CATEGORY_LABELS, TIME_INDEPENDENT };

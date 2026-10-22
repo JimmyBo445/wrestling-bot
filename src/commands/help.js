@@ -3,9 +3,9 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'match', 'card', 'faction', 'halloffame', 'admin'];
+const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'match', 'card', 'roster', 'season', 'injury', 'feud', 'tournament', 'faction', 'halloffame', 'newsletter', 'admin'];
 const BLURB = {
-    character: 'Your wrestlers: submit, edit, view profile cards',
+    character: 'Your wrestlers: submit, edit, profile cards, story and moves',
     team: 'Registered tag teams',
     stats: 'Records, streaks, head-to-head, history',
     leaderboard: 'Leaderboards with category and time dropdowns',
@@ -15,8 +15,14 @@ const BLURB = {
     matchmaking: 'Find fresh opponents or request a match',
     match: 'Log, undo and edit match results',
     card: 'Build and post RAW / SmackDown match cards',
+    season: 'Yearly standings and a season recap picture',
+    injury: 'Injury report: who is out and until when',
+    roster: 'Flip through a division A to Z with profile cards',
     faction: 'Factions: groups of 3-8 with a shared record',
     halloffame: 'Hall of Fame: retired legends',
+    feud: 'Rivalries: a timeline and heat meter for each feud',
+    tournament: 'Tournaments with a bracket picture',
+    newsletter: 'Weekly newsletter: add lines, preview, post',
     admin: 'Server settings, monthly awards, backups and the approval queue'
 };
 
@@ -75,9 +81,18 @@ module.exports = {
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
         }
 
+        const subList = (subs) => {
+            let out = '';
+            for (const s of subs) {
+                const token = `\`${s.name}\``;
+                if ((out + ' ' + token).length > 320) return `${out} …`;
+                out = out ? `${out} ${token}` : token;
+            }
+            return out;
+        };
         const fields = cmds.map((c) => ({
             name: `/${c.name}${admin && c.adminOnly ? ' 🔒' : ''}`,
-            value: `${BLURB[c.name] || clean(c.description)}${c.subs.length ? `\n${c.subs.map((s) => `\`${s.name}\``).join(' ')}`.slice(0, 700) : ''}`.slice(0, 1000)
+            value: `${BLURB[c.name] || clean(c.description)}${c.subs.length ? `\n${subList(c.subs)}` : ''}`.slice(0, 700)
         }));
         const embed = new EmbedBuilder().setTitle('Wrestling Bot: Help').setColor(0xC0392B)
             .setDescription([

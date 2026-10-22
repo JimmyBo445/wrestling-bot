@@ -2,7 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discor
 const { pool, withTransaction } = require('../db/pool');
 const { autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
 const { autocompleteTeams, requireTeam, getTeamMembers } = require('../utils/teamUtils');
-const { autocompleteTitles, requireTitle, setVacancy, vacateTitle, reignHolderName } = require('../utils/titleLogic');
+const { autocompleteTitles, requireTitle, setVacancy, vacateTitle, reignHolderName, getCurrentReign, startReign } = require('../utils/titleLogic');
 const { logMatch } = require('../utils/matchService');
 const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
 const { renderBeltCard, renderLineageCard } = require('../utils/cardRenderer');
@@ -10,7 +10,10 @@ const { buildBeltData, buildLineageData } = require('../utils/cardData');
 const { requireAdmin, respond, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { logAudit } = require('../utils/audit');
-const { DIVISION_THEME } = require('../utils/constants');
+const { DIVISION_THEME, FINISHES } = require('../utils/constants');
+const { readDetails, stipulationChoices } = require('../utils/matchOptions');
+const { titleStatus } = require('../utils/titleWatch');
+const { grandSlamProgress } = require('../utils/badges');
 
 const RESULT_CHOICES = [
     { name: 'Decisive (has a winner)', value: 'decisive' },
@@ -36,7 +39,10 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('challenger_or_p2').setDescription('Challenger (or wrestler 2 if vacant)').setRequired(true).setAutocomplete(true))
         .addIntegerOption((o) => o.setName('winner').setDescription('Who won').setRequired(true).addChoices({ name: 'Wrestler 1 (champion / first listed)', value: 1 }, { name: 'Wrestler 2 (challenger / second listed)', value: 2 }))
         .addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES))
-        .addStringOption((o) => o.setName('notes').setDescription('Stipulation or notes').setRequired(false).setMaxLength(300)))
+        .addStringOption((o) => o.setName('notes').setDescription('Extra notes').setRequired(false).setMaxLength(300))
+        .addStringOption((o) => o.setName('stipulation').setDescription('Match type or stipulation (Ladder, Hell in a Cell...)').setRequired(false).setMaxLength(40).setAutocomplete(true))
+        .addStringOption((o) => o.setName('finish').setDescription('How it ended').setRequired(false).addChoices(...FINISHES))
+        .addStringOption((o) => o.setName('score').setDescription('Falls or score, like 3-2').setRequired(false).setMaxLength(20)))
     .addSubcommand((s) => s.setName('log-tag-title-match').setDescription('[Admin] Log a 2v2 tag championship match (both sides must be registered teams)')
         .addStringOption((o) => titleOpt(o, 'Tag title on the line'))
         .addStringOption((o) => o.setName('team1_p1').setDescription('Team 1 - Wrestler 1').setRequired(true).setAutocomplete(true))
@@ -45,7 +51,10 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('team2_p2').setDescription('Team 2 - Wrestler 2').setRequired(true).setAutocomplete(true))
         .addIntegerOption((o) => o.setName('winning_team').setDescription('Which team won').setRequired(true).addChoices({ name: 'Team 1', value: 1 }, { name: 'Team 2', value: 2 }))
         .addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES))
-        .addStringOption((o) => o.setName('notes').setDescription('Stipulation or notes').setRequired(false).setMaxLength(300)))
+        .addStringOption((o) => o.setName('notes').setDescription('Extra notes').setRequired(false).setMaxLength(300))
+        .addStringOption((o) => o.setName('stipulation').setDescription('Match type or stipulation (Ladder, Hell in a Cell...)').setRequired(false).setMaxLength(40).setAutocomplete(true))
+        .addStringOption((o) => o.setName('finish').setDescription('How it ended').setRequired(false).addChoices(...FINISHES))
+        .addStringOption((o) => o.setName('score').setDescription('Falls or score, like 3-2').setRequired(false).setMaxLength(20)))
     .addSubcommand((s) => s.setName('vacate').setDescription('[Admin] Vacate a title (the reign is ended)')
         .addStringOption((o) => titleOpt(o)))
     .addSubcommand((s) => s.setName('backfill-reign').setDescription('[Admin] Add a reign from before the bot (pick a character, a team, or type a name)')
@@ -57,14 +66,33 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('champion_name').setDescription('Champion name as text (when not in the bot)').setRequired(false).setMaxLength(60))
         .addIntegerOption((o) => o.setName('defenses').setDescription('Successful defenses').setRequired(false).setMinValue(0).setMaxValue(999))
         .addStringOption((o) => o.setName('notes').setDescription('Optional note').setRequired(false).setMaxLength(200)))
-    .addSubcommand((s) => s.setName('edit-reign').setDescription('[Admin] Fix a backfilled reign')
+    .addSubcommand((s) => s.setName('edit-reign').setDescription('[Admin] Fix any reign: dates, defenses or notes (also reigns the bot logged)')
         .addStringOption((o) => titleOpt(o))
         .addIntegerOption((o) => o.setName('reign').setDescription('Reign to edit').setRequired(true).setAutocomplete(true))
         .addStringOption((o) => o.setName('won_date').setDescription('New won date, YYYY-MM-DD').setRequired(false))
         .addStringOption((o) => o.setName('lost_date').setDescription('New lost date, YYYY-MM-DD (or - for still champion)').setRequired(false))
         .addIntegerOption((o) => o.setName('defenses').setDescription('Defenses').setRequired(false).setMinValue(0).setMaxValue(999))
-        .addStringOption((o) => o.setName('notes').setDescription('Note (or - to clear)').setRequired(false).setMaxLength(200)))
-    .addSubcommand((s) => s.setName('remove-reign').setDescription('[Admin] Delete a backfilled reign entered by mistake')
+        .addStringOption((o) => o.setName('notes').setDescription('Note (or - to clear)').setRequired(false).setMaxLength(200))
+        .addStringOption((o) => o.setName('character').setDescription('Change the champion to this wrestler').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('team').setDescription('Change the champion to this team (tag titles)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('champion_name').setDescription('Change the champion to a plain-text name').setRequired(false).setMaxLength(60))
+        .addBooleanOption((o) => o.setName('interim').setDescription('Mark or unmark this as an interim reign').setRequired(false)))
+    .addSubcommand((s) => s.setName('watch').setDescription('[Admin] Days since each title was defended and since each champion last wrestled'))
+    .addSubcommand((s) => s.setName('grand-slam').setDescription('Who has held every title in a division (and who is close)')
+        .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...Object.entries(DIVISION_THEME).map(([value, t]) => ({ name: t.label, value })))))
+    .addSubcommand((s) => s.setName('rematches').setDescription('Champions who lost a belt and are owed a rematch'))
+    .addSubcommand((s) => s.setName('waive-rematch').setDescription('[Admin] Cancel a rematch that is owed')
+        .addIntegerOption((o) => o.setName('rematch').setDescription('Rematch to cancel').setRequired(true).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName('interim').setDescription('[Admin] Crown an interim champion (the current reign is ended and noted)')
+        .addStringOption((o) => titleOpt(o))
+        .addStringOption((o) => o.setName('character').setDescription('Interim champion (singles titles)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('team').setDescription('Interim champions (tag titles)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('reason').setDescription('Why (injury, absence...)').setRequired(false).setMaxLength(100)))
+    .addSubcommand((s) => s.setName('unify').setDescription('[Admin] Unify: the real or interim champion becomes the undisputed champion')
+        .addStringOption((o) => titleOpt(o))
+        .addStringOption((o) => o.setName('character').setDescription('Undisputed champion (singles titles)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('team').setDescription('Undisputed champions (tag titles)').setRequired(false).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName('remove-reign').setDescription('[Admin] Delete a reign entered by mistake (backfilled or bot-logged)')
         .addStringOption((o) => titleOpt(o))
         .addIntegerOption((o) => o.setName('reign').setDescription('Reign to delete').setRequired(true).setAutocomplete(true)));
 
@@ -109,12 +137,39 @@ async function assertNoOverlap(client, titleId, won, lost, exceptId = null) {
     }
 }
 
+/** Works out who held a reign from the character / team / champion_name options (exactly one). */
+async function resolveHolder(guildId, title, interaction) {
+    const charVal = interaction.options.getString('character');
+    const teamVal = interaction.options.getString('team');
+    const nameVal = interaction.options.getString('champion_name');
+    if ([charVal, teamVal, nameVal].filter(Boolean).length !== 1) {
+        throw new UserError('Fill in exactly ONE of: `character` (a wrestler in the bot), `team` (a registered team) or `champion_name` (plain text).');
+    }
+    let character = null, team = null, members = [];
+    if (charVal) {
+        if (title.is_tag_title) throw new UserError('That is a tag title. Pick a `team` or type a `champion_name`.');
+        character = await requireCharacter(guildId, charVal, { statuses: ['approved', 'retired'] });
+        if (character.division !== title.division) throw new UserError(`**${character.name}** is in a different division than the **${title.name}**.`);
+    } else if (teamVal) {
+        if (!title.is_tag_title) throw new UserError('That is a singles title. Pick a `character` or type a `champion_name`.');
+        team = await requireTeam(guildId, teamVal, { active: false });
+        if (team.division !== title.division) throw new UserError(`**${team.name}** is in a different division than the **${title.name}**.`);
+        members = await getTeamMembers(team.id);
+        if (!members.length) {
+            const { rows } = await pool.query(`SELECT c.* FROM team_members tm JOIN characters c ON c.id = tm.character_id WHERE tm.team_id = $1`, [team.id]);
+            members = rows;
+        }
+    }
+    return { character, team, members, nameVal };
+}
+
 async function runTitleMatch(interaction, matchType, slotIds, winnerIndex, winningTeam) {
     const result = await logMatch({
         guildId: interaction.guildId, matchType, slotCharacterIds: slotIds, winnerIndex, winningTeam,
         resultType: interaction.options.getString('result_type') || 'decisive',
         notes: interaction.options.getString('notes'),
         titleValue: interaction.options.getString('title'),
+        ...readDetails(interaction),
         actor: interaction.user.id
     });
     await interaction.deferReply();
@@ -128,7 +183,14 @@ module.exports = {
 
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
+        if (focused.name === 'stipulation') return interaction.respond(stipulationChoices(focused.value));
         if (focused.name === 'title') return interaction.respond(await autocompleteTitles(interaction, focused.value));
+        if (focused.name === 'rematch') {
+            const { rows } = await pool.query(
+                `SELECT rr.id, rr.holder_name, t.name AS title_name FROM rematch_rights rr JOIN titles t ON t.id = rr.title_id
+                 WHERE rr.guild_id = $1 AND rr.status = 'active' ORDER BY rr.expires_on LIMIT 25`, [interaction.guildId]);
+            return interaction.respond(rows.map((r) => ({ name: `${r.holder_name} — ${r.title_name}`.slice(0, 100), value: Number(r.id) })));
+        }
         if (focused.name === 'reign') return interaction.respond(await reignAutocomplete(interaction, focused.value));
         if (focused.name === 'team') return interaction.respond(await autocompleteTeams(interaction, focused.value));
         return interaction.respond(await autocompleteCharacters(interaction, focused.value));
@@ -141,7 +203,7 @@ module.exports = {
         if (sub === 'list') {
             const { rows } = await pool.query(
                 `SELECT t.id, t.name, t.division, t.is_tag_title,
-                        tr.id AS reign_id, tr.defenses, tr.won_date, tr.character_id, tr.team_id,
+                        tr.id AS reign_id, tr.is_interim, tr.defenses, tr.won_date, tr.character_id, tr.team_id,
                         c.name AS champ_name, u.discord_id, tm.name AS team_name, tr.reign_char_name,
                         (SELECT COALESCE(t2.name, c2.name) FROM contenders co LEFT JOIN teams t2 ON t2.id = co.team_id LEFT JOIN characters c2 ON c2.id = co.character_id
                           WHERE co.title_id = t.id AND co.status = 'active') AS contender
@@ -162,7 +224,7 @@ module.exports = {
                 else if (r.team_id) holder = `**${r.team_name}** (${(members.get(r.reign_id) || []).join(' & ')})`;
                 else if (r.character_id) holder = `**${r.champ_name}** (<@${r.discord_id}>)`;
                 else holder = `**${r.reign_char_name}**`;
-                const extra = r.reign_id ? ` · ${r.defenses} def. · ${daysBetween(r.won_date)}d` : '';
+                const extra = r.reign_id ? `${r.is_interim ? ' · _interim_' : ''} · ${r.defenses} def. · ${daysBetween(r.won_date)}d` : '';
                 return `**${r.name}**\n${holder}${extra}${r.contender ? `\n🎯 #1 contender: ${r.contender}` : ''}`;
             };
             const embed = new EmbedBuilder().setTitle('🏆 Championship Titles').setColor(0xE8BF4A);
@@ -255,27 +317,7 @@ module.exports = {
             if (lost && lost < won) throw new UserError('The lost date can\'t be before the won date.');
             if (lost && lost > today()) throw new UserError('The lost date can\'t be in the future.');
 
-            const charVal = interaction.options.getString('character');
-            const teamVal = interaction.options.getString('team');
-            const nameVal = interaction.options.getString('champion_name');
-            if ([charVal, teamVal, nameVal].filter(Boolean).length !== 1) {
-                throw new UserError('Fill in exactly ONE of: `character` (a wrestler in the bot), `team` (a registered team) or `champion_name` (plain text).');
-            }
-            let character = null, team = null, members = [];
-            if (charVal) {
-                if (title.is_tag_title) throw new UserError('That is a tag title. Pick a `team` or type a `champion_name`.');
-                character = await requireCharacter(guildId, charVal, { statuses: ['approved', 'retired'] });
-                if (character.division !== title.division) throw new UserError(`**${character.name}** is in a different division than the **${title.name}**.`);
-            } else if (teamVal) {
-                if (!title.is_tag_title) throw new UserError('That is a singles title. Pick a `character` or type a `champion_name`.');
-                team = await requireTeam(guildId, teamVal, { active: false });
-                if (team.division !== title.division) throw new UserError(`**${team.name}** is in a different division than the **${title.name}**.`);
-                members = await getTeamMembers(team.id);
-                if (!members.length) {
-                    const { rows } = await pool.query(`SELECT c.* FROM team_members tm JOIN characters c ON c.id = tm.character_id WHERE tm.team_id = $1`, [team.id]);
-                    members = rows;
-                }
-            }
+            const { character, team, members, nameVal } = await resolveHolder(guildId, title, interaction);
             const defenses = interaction.options.getInteger('defenses') || 0;
             const notes = interaction.options.getString('notes');
 
@@ -293,21 +335,113 @@ module.exports = {
             return respond(interaction, { content: `Added **${who}**'s reign of the **${title.name}** (${won} → ${lost || 'present'}${defenses ? `, ${defenses} defenses` : ''}).`, allowedMentions: NO_MENTIONS });
         }
 
+        if (sub === 'watch') {
+            requireAdmin(interaction, 'see the title watch');
+            const status = await titleStatus(guildId);
+            if (!status.length) return respond(interaction, { content: 'No title currently has a champion that I can track.', flags: 64 });
+            const settings = await require('../utils/ensureGuild').getGuildSettings(guildId);
+            const lines = status.map((s) => {
+                const warnD = settings.defense_days && s.daysSinceDefense >= settings.defense_days ? ' ⚠️' : '';
+                const warnA = settings.vacate_days && s.daysSinceActive >= settings.vacate_days - 7 ? ' ⏳' : '';
+                return `**${s.title_name}**${s.is_interim ? ' _(interim)_' : ''}: ${s.holder}${s.injured ? ' 🤕' : ''}\nlast defense **${s.daysSinceDefense}d** ago${warnD} · champion last wrestled **${s.daysSinceActive}d** ago${warnA}`;
+            });
+            const embed = new EmbedBuilder().setTitle('Title Watch').setColor(0xE8BF4A).setDescription(lines.join('\n\n').slice(0, 4000))
+                .setFooter({ text: `Warn after ${settings.defense_days || '—'}d without a defense · auto-vacate after ${settings.vacate_days || '—'}d inactive (/admin deadlines)` });
+            return respond(interaction, { embeds: [embed], flags: 64, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'grand-slam') {
+            const division = interaction.options.getString('division');
+            const gs = await grandSlamProgress(guildId, division);
+            if (!gs.total) return respond(interaction, { content: 'That division has no titles.', flags: 64 });
+            const done = gs.rows.filter((r) => r.complete);
+            const close = gs.rows.filter((r) => !r.complete && r.n >= Math.max(1, gs.total - 2)).slice(0, 10);
+            const embed = new EmbedBuilder().setTitle(`Grand Slam — ${DIVISION_THEME[division].label}`).setColor(DIVISION_THEME[division].embed)
+                .setDescription(`A grand slam means holding **every** title in the division (${gs.total} titles).`)
+                .addFields(
+                    { name: '🏅 Grand Slam Champions', value: done.length ? done.map((r) => `**${r.name}**`).join('\n') : '_Nobody yet_' },
+                    { name: 'Closest', value: close.length ? close.map((r) => `${r.name}: ${r.n}/${gs.total}`).join('\n') : '—' });
+            return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'rematches') {
+            const { rows } = await pool.query(
+                `SELECT rr.id, rr.holder_name, rr.expires_on, t.name AS title_name FROM rematch_rights rr JOIN titles t ON t.id = rr.title_id
+                 WHERE rr.guild_id = $1 AND rr.status = 'active' ORDER BY rr.expires_on`, [guildId]);
+            if (!rows.length) return respond(interaction, { content: 'Nobody is owed a rematch right now.', flags: 64 });
+            const lines = rows.map((r) => `🔁 **${r.holder_name}** — ${r.title_name} (until ${fmtDate(r.expires_on)})`);
+            return respond(interaction, { embeds: [new EmbedBuilder().setTitle('Rematches Owed').setColor(0xE8BF4A).setDescription(lines.join('\n'))], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'waive-rematch') {
+            requireAdmin(interaction, 'cancel rematches');
+            const { rowCount } = await pool.query(`UPDATE rematch_rights SET status = 'waived' WHERE id = $1 AND guild_id = $2 AND status = 'active'`, [interaction.options.getInteger('rematch'), guildId]);
+            if (!rowCount) throw new UserError('I couldn\'t find that rematch. Pick one from the list.');
+            await logAudit(guildId, interaction.user.id, 'rematch_waived', {});
+            return respond(interaction, { content: 'Rematch cancelled.' });
+        }
+
+        if (sub === 'interim' || sub === 'unify') {
+            const title = await requireTitle(guildId, interaction.options.getString('title'));
+            const charVal = interaction.options.getString('character');
+            const teamVal = interaction.options.getString('team');
+            if ([charVal, teamVal].filter(Boolean).length !== 1) throw new UserError('Fill in exactly ONE of `character` (singles title) or `team` (tag title).');
+            let subject, members = [], name;
+            if (charVal) {
+                if (title.is_tag_title) throw new UserError('That is a tag title. Pick a `team`.');
+                const c = await requireCharacter(guildId, charVal, { statuses: ['approved'] });
+                if (c.division !== title.division) throw new UserError(`**${c.name}** is in a different division than the **${title.name}**.`);
+                subject = { type: 'character', id: c.id }; name = c.name;
+            } else {
+                if (!title.is_tag_title) throw new UserError('That is a singles title. Pick a `character`.');
+                const t = await requireTeam(guildId, teamVal, { active: true });
+                if (t.division !== title.division) throw new UserError(`**${t.name}** is in a different division than the **${title.name}**.`);
+                members = await getTeamMembers(t.id);
+                subject = { type: 'team', id: t.id }; name = t.name;
+            }
+            const reason = sub === 'interim' ? interaction.options.getString('reason') : null;
+            const text = await withTransaction(async (client) => {
+                const cur = await getCurrentReign(title.id, client, true);
+                if (sub === 'interim') {
+                    if (cur?.is_interim) throw new UserError('There is already an interim champion. Use `/championship unify` or `/championship vacate` first.');
+                    if (cur) {
+                        await client.query(`UPDATE title_reigns SET lost_date = CURRENT_DATE, notes = COALESCE(notes || ' · ', '') || $2 WHERE id = $1`,
+                            [cur.id, `Interim champion crowned${reason ? ` (${reason})` : ''}`]);
+                    }
+                    await startReign(client, { guildId, title, subject, memberIds: members.map((m) => m.id), matchId: null, actor: interaction.user.id,
+                        notes: reason ? `Interim: ${reason}` : 'Interim champion', interim: true });
+                    await setVacancy(client, title.id);
+                    return `**${name}** is the interim champion of the **${title.name}**${cur ? ` (${reignHolderName(cur)}'s reign was ended)` : ''}.`;
+                }
+                // unify: close any current reign and start a normal one
+                if (cur) await client.query(`UPDATE title_reigns SET lost_date = CURRENT_DATE WHERE id = $1`, [cur.id]);
+                const same = cur && ((subject.type === 'team' && String(cur.team_id) === String(subject.id)) || (subject.type === 'character' && !cur.team_id && String(cur.character_id) === String(subject.id)));
+                if (same && cur.is_interim) {
+                    // the interim champion simply becomes the real one: keep their reign running as a normal reign
+                    await client.query(`UPDATE title_reigns SET lost_date = NULL, is_interim = false, notes = COALESCE(notes || ' · ', '') || 'Unified' WHERE id = $1`, [cur.id]);
+                } else {
+                    await startReign(client, { guildId, title, subject, memberIds: members.map((m) => m.id), matchId: null, actor: interaction.user.id, notes: 'Unified champion' });
+                }
+                await setVacancy(client, title.id);
+                return `**${name}** is the undisputed champion of the **${title.name}**.`;
+            });
+            await logAudit(guildId, interaction.user.id, sub === 'interim' ? 'interim_crowned' : 'title_unified', { title: title.name, who: name });
+            return respond(interaction, { content: text, allowedMentions: NO_MENTIONS });
+        }
+
         if (sub === 'edit-reign' || sub === 'remove-reign') {
             const title = await requireTitle(guildId, interaction.options.getString('title'));
             const reignId = interaction.options.getInteger('reign');
             const { rows } = await pool.query(`SELECT * FROM title_reigns WHERE id = $1 AND title_id = $2 AND guild_id = $3`, [reignId, title.id, guildId]);
             const reign = rows[0];
             if (!reign) throw new UserError('I couldn\'t find that reign. Choose it from the dropdown after picking the title.');
-            if (!reign.is_backfilled) throw new UserError('That reign was created from a logged match. To change it, use `/match undo` on the match instead (editing it here could make records disagree).');
-
             if (sub === 'remove-reign') {
                 await withTransaction(async (client) => {
                     await client.query(`DELETE FROM title_reigns WHERE id = $1`, [reign.id]);
                     await setVacancy(client, title.id);
                 });
-                await logAudit(guildId, interaction.user.id, 'reign_removed', { title: title.name, reignId });
-                return respond(interaction, { content: `Deleted that backfilled reign from the **${title.name}** history.` });
+                await logAudit(guildId, interaction.user.id, 'reign_removed', { title: title.name, reignId, botLogged: !reign.is_backfilled });
+                return respond(interaction, { content: `Deleted that reign from the **${title.name}** history.${reign.is_backfilled ? '' : ' It came from a logged match, so that match can no longer be undone with `/match undo` (the match result itself stays in the records).'}` });
             }
 
             const wonRaw = interaction.options.getString('won_date');
@@ -317,15 +451,25 @@ module.exports = {
             if (lost && lost < won) throw new UserError('The lost date can\'t be before the won date.');
             const defenses = interaction.options.getInteger('defenses');
             const notesRaw = interaction.options.getString('notes');
+            const interim = interaction.options.getBoolean('interim');
+            const changeHolder = ['character', 'team', 'champion_name'].some((k) => interaction.options.getString(k));
+            const holder = changeHolder ? await resolveHolder(guildId, title, interaction) : null;
             await withTransaction(async (client) => {
                 await assertNoOverlap(client, title.id, won, lost, reign.id);
                 await client.query(
-                    `UPDATE title_reigns SET won_date = $2, lost_date = $3, defenses = COALESCE($4, defenses), notes = $5 WHERE id = $1`,
-                    [reign.id, won, lost, defenses, notesRaw === null ? reign.notes : notesRaw === '-' ? null : notesRaw]);
+                    `UPDATE title_reigns SET won_date = $2, lost_date = $3, defenses = COALESCE($4, defenses), notes = $5,
+                            is_interim = COALESCE($6, is_interim) WHERE id = $1`,
+                    [reign.id, won, lost, defenses, notesRaw === null ? reign.notes : notesRaw === '-' ? null : notesRaw, interim]);
+                if (holder) {
+                    await client.query(`UPDATE title_reigns SET character_id = $2, team_id = $3, reign_char_name = $4 WHERE id = $1`,
+                        [reign.id, holder.character?.id || null, holder.team?.id || null, holder.nameVal || null]);
+                    await client.query(`DELETE FROM title_reign_members WHERE reign_id = $1`, [reign.id]);
+                    for (const m of holder.members) await client.query(`INSERT INTO title_reign_members (reign_id, character_id) VALUES ($1,$2)`, [reign.id, m.id]);
+                }
                 await setVacancy(client, title.id);
             });
             await logAudit(guildId, interaction.user.id, 'reign_edited', { title: title.name, reignId });
-            return respond(interaction, { content: `Updated that reign: ${won} → ${lost || 'present'}.` });
+            return respond(interaction, { content: `Updated that reign: ${won} → ${lost || 'present'}${holder ? `, champion is now **${holder.character?.name || holder.team?.name || holder.nameVal}**` : ''}.`, allowedMentions: NO_MENTIONS });
         }
     }
 };

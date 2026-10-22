@@ -192,7 +192,29 @@ async function userSummary(guildId, ownerId) {
     return { chars, byDivision, ...summarize(merged) };
 }
 
+/** Record per stipulation and wins by finish for one wrestler (their current owner's matches only). */
+async function stipulationBreakdown(characterId, ownerId = null, days = null) {
+    const { rows } = await pool.query(
+        `SELECT m.stipulation, m.finish, m.result_type, mp.is_winner
+         FROM match_participants mp JOIN matches m ON m.id = mp.match_id
+         WHERE mp.character_id = $1 AND ($2::bigint IS NULL OR mp.owner_id = $2)
+           AND ($3::int IS NULL OR m.created_at >= now() - ($3 || ' days')::interval)
+           AND (m.stipulation IS NOT NULL OR m.finish IS NOT NULL)`,
+        [characterId, ownerId, days]);
+    const bySip = {};
+    const winFinishes = {};
+    for (const r of rows) {
+        if (r.stipulation && r.result_type === 'decisive') {
+            const b = (bySip[r.stipulation] ||= { w: 0, l: 0 });
+            if (r.is_winner) b.w++; else b.l++;
+        }
+        if (r.finish && r.is_winner && r.result_type === 'decisive') winFinishes[r.finish] = (winFinishes[r.finish] || 0) + 1;
+    }
+    return { bySip, winFinishes };
+}
+
 module.exports = {
+    stipulationBreakdown,
     PERIODS, PERIOD_LABELS, characterSummary, characterTimeline, opponentBreakdown, headToHead,
     recentMatches, teamSummary, userSummary, tally
 };
