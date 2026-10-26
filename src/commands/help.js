@@ -3,7 +3,7 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'match', 'card', 'roster', 'season', 'injury', 'feud', 'tournament', 'faction', 'halloffame', 'newsletter', 'admin'];
+const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'signup', 'match', 'card', 'roster', 'season', 'injury', 'feud', 'tournament', 'faction', 'halloffame', 'newsletter', 'admin'];
 const BLURB = {
     character: 'Your wrestlers: submit, edit, profile cards, story and moves',
     team: 'Registered tag teams',
@@ -13,6 +13,7 @@ const BLURB = {
     championship: 'Titles, belts, reign history',
     contender: '#1 contender challenges and awards',
     matchmaking: 'Find fresh opponents or request a match',
+    signup: 'Show signups: players click to say who is available',
     match: 'Log, undo and edit match results',
     card: 'Build and post RAW / SmackDown match cards',
     season: 'Yearly standings and a season recap picture',

@@ -9,6 +9,7 @@ const { runTitleWatch, runRematchWatch } = require('./titleWatch');
 const { runCardReminders } = require('./cardReminders');
 const { postNewsletter, weekKey } = require('./newsletter');
 const { localNow } = require('./titleWatch');
+const { closeSignup } = require('./signupUtils');
 
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
@@ -49,6 +50,12 @@ async function tick(client) {
                     }
                 }
             } catch (err) { console.error('Newsletter failed:', err.message); }
+            try {
+                // signups close once their deadline day is over (server time zone)
+                const { date } = localNow(g.tz);
+                const { rows: due } = await pool.query(`SELECT * FROM signups WHERE guild_id = $1 AND status = 'open' AND deadline IS NOT NULL AND deadline < $2::date`, [g.guild_id, date]);
+                for (const sg of due) await closeSignup(client, sg, g);
+            } catch (err) { console.error('Signup close failed:', err.message); }
             try { await runTitleWatch(client, g); } catch (err) { console.error('Title watch failed:', err.message); }
         }
     } catch (err) { console.error('Title checks failed:', err.message); }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.8.0 — Show signups
+- **`/signup open`** posts a signup (title, optional deadline date, optional channel) with a **Sign up / change** button and a **Withdraw** button. Players pick any of their approved wrestlers from a private menu (every division at once, as many as they like) and can change their picks until it closes. The post shows who is in each division. Injured wrestlers aren't offered.
+- **`/signup list`** (admins) shows who is available by division with records, champions and how many earlier shows they were passed over for. **`/signup add`** and **`remove`** let you sign someone up or take them off. **`/signup close`** locks it and sends the final list to the staff channel; a deadline closes it by itself after that day.
+- **Matchmaking uses it.** `/matchmaking suggest` lists signed-up wrestlers first (📝) and wrestlers who were passed over before (⏭️); add `only_signed_up:true` to show only them. `/card auto` books from the signup (falls back to everyone, and says so, if fewer than 2 signed up in that division); `use_signup:false` ignores it. A signup counts for a week after it closes.
+- **Passed over:** a wrestler who signed up for shows but hasn't wrestled since is moved up in booking until they get a match.
+- Database: migration 011 runs by itself.
+
 ## 2.7.0 — Booking depth: stipulations, rematches, calendar, tournaments and more
 - **Fix any reign, even ones the bot logged.** `/championship edit-reign` now works on every reign: won/lost dates, defenses, notes, the champion (wrestler, team or typed name) and an interim flag. `/championship remove-reign` also works on bot-logged reigns. The overlap check still stops two champions at once.
 - **Stipulations, finishes and scores.** Every `/match log-...` and both `/championship log-...-title-match` commands take `stipulation` (pick Ladder, Hell in a Cell, Last Man Standing, Iron Man, Steel Cage... or type your own), `finish` (pinfall, submission, DQ, count-out, knockout, interference, escape, forfeit) and `score` (like 3-2 for Iron Man). They show on the result graphic. A stipulation planned on a `/card` carries over when you log the match. `/stats character` shows a record per stipulation and wins by finish. `/match edit` can change them later.

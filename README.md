@@ -1,4 +1,4 @@
-# Wrestling Bot 2.7.0
+# Wrestling Bot 2.8.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -16,6 +16,7 @@ servers at once. Everything is saved permanently in Postgres.
 | **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
 | **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
 | **Matchmaking** | `/matchmaking suggest` `request` |
+| **Signups** (admins) | `/signup open` `list` `close` `add` `remove` (players click a button to pick their wrestlers; matchmaking and `/card auto` use it) |
 | **Match cards** (admins) | `/card new` `auto` `request` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
 | **Injuries** | `/injury add` `clear` `list` (out until a return date; auto cards skip them) |
 | **Seasons** | `/season recap` `standings` (calendar-year view; nothing resets) |

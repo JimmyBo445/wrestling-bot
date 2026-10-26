@@ -9,6 +9,9 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands'))) {
     if (c.data) commands.set(c.data.name, c);
 }
 const client = { commands };
+client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async () => ({ edit: async () => {} }) } }) };
+client.guilds = { cache: new Map() };
+let getChannelLazy = (id) => ({ id, isTextBased: () => true, send: async () => ({ id: 'x' }) });
 
 const sent = []; // messages posted to channels by the bot
 const channelMock = (id) => ({
@@ -17,6 +20,7 @@ const channelMock = (id) => ({
 });
 const channels = new Map();
 const getChannel = (id) => { if (!channels.has(id)) channels.set(id, channelMock(id)); return channels.get(id); };
+getChannelLazy = getChannel;
 
 const guild = (id = 'g1') => ({
     id, name: 'Test Wrestling Federation',

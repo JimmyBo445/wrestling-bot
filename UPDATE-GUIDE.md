@@ -1,4 +1,4 @@
-# How to install the Version 2.7.0 update (Mac, step by step)
+# How to install the Version 2.8.0 update (Mac, step by step)
 
 (This zip contains the whole bot, so it works whether or not you already installed Version 2.)
 
@@ -15,9 +15,9 @@ and press Return. Only one command at a time.
 
 ## Step 1: Get the new files onto your Mac
 
-1. Download the file **wrestling-bot-v2.7.0.zip** I sent you in this chat.
+1. Download the file **wrestling-bot-v2.8.0.zip** I sent you in this chat.
 2. Open your **Downloads** folder and double-click the zip. A new folder named
-   **wrestling-bot-v2.7.0** appears next to it. (Your old folder is called **wrestling-bot**.
+   **wrestling-bot-v2.8.0** appears next to it. (Your old folder is called **wrestling-bot**.
    Don't mix them up: v2 is the NEW one.)
 
 ## Step 2: Open Terminal and go to your old folder
@@ -35,7 +35,7 @@ and press Return. Only one command at a time.
 
 Type this (it is ONE line) and press Return:
 
-`rsync -a ~/Downloads/wrestling-bot-v2.7.0/ ~/Downloads/wrestling-bot/`
+`rsync -a ~/Downloads/wrestling-bot-v2.8.0/ ~/Downloads/wrestling-bot/`
 
 Nothing prints when it works. This copies the new files in and **keeps** your hidden
 settings (`.env`) and git history. Important: do NOT do this by dragging folders in Finder
@@ -53,7 +53,7 @@ Type: `git status` and press Return.
 Run these three commands, one at a time:
 
 1. `git add .`
-2. `git commit -m "Version 2.7.0"`
+2. `git commit -m "Version 2.8.0"`
 3. `git push`
 
 `git push` will ask for a **Username** and **Password**:
@@ -79,8 +79,8 @@ When it works you'll see a line like `main -> main`. That means the upload succe
 2. Click **Deployments**. A new deployment starts by itself. Wait until it says **Active**/**Success**.
 3. Click that deployment → **View logs**. You should see lines like:
    - `Logged in as <your bot name>`
-   - `Applying migration 010_booking_depth.sql`
-   - `Registering 20 slash commands`
+   - `Applying migration 010_booking_depth.sql` (if new) and `Applying migration 011_signups.sql`
+   - `Registering 21 slash commands`
    - `Slash commands registered.`
 
    If you see `Database not ready ... Retrying`, just wait a minute. It retries on its own.
@@ -93,7 +93,7 @@ When it works you'll see a line like `main -> main`. That means the upload succe
 3. Type `/admin set-pending-channel` and pick the channel where approvals should appear.
 4. Fix your accidental character: `/character transfer` (pick the character, then choose the
    right owner). Or, if it's a mistake that has no matches yet: `/character remove`.
-5. Try `/championship edit-reign` (now works on every reign), `/character story`, `/feud list`, `/tournament list`, `/newsletter preview`, `/admin settings`, `/admin import-template`, then log a match with a `stipulation` and `finish`. Also try `/character picture` (attach a picture), `/rankings`, `/stats user`, `/injury list`, `/season recap`, `/roster` (pick a division and press Next), `/help`, `/card auto` (pick RAW or SmackDown and a division), then log one of its matches with `/match` and look at the result. Also try `/stats user` (it now shows your record by division), `/faction create`, `/halloffame induct`, `/match rate`, and `/admin backup action:Send one now`. Have fun!
+5. Try `/signup open` (title it, then press the button yourself), `/signup list`, then `/championship edit-reign` (now works on every reign), `/character story`, `/feud list`, `/tournament list`, `/newsletter preview`, `/admin settings`, `/admin import-template`, then log a match with a `stipulation` and `finish`. Also try `/character picture` (attach a picture), `/rankings`, `/stats user`, `/injury list`, `/season recap`, `/roster` (pick a division and press Next), `/help`, `/card auto` (pick RAW or SmackDown and a division), then log one of its matches with `/match` and look at the result. Also try `/stats user` (it now shows your record by division), `/faction create`, `/halloffame induct`, `/match rate`, and `/admin backup action:Send one now`. Have fun!
 
 ---
 

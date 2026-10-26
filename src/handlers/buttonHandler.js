@@ -109,6 +109,32 @@ async function handleStreak(interaction) {
 async function handleButtonInteraction(interaction) {
     const id = interaction.customId || '';
 
+    // ---- show signups: anyone can use ----
+    if (id.startsWith('signup:')) {
+        const [, action, signupId] = id.split(':');
+        const su = require('../utils/signupUtils');
+        const signup = await su.getSignup(signupId, interaction.guildId);
+        if (!signup) return respond(interaction, { content: 'That signup no longer exists.', flags: EPHEMERAL });
+        if (signup.status !== 'open') return respond(interaction, { content: '🔒 That signup is closed.', flags: EPHEMERAL });
+        if (interaction.isButton() && action === 'join') {
+            return respond(interaction, { ...(await su.buildPicker(signup, interaction.guildId, interaction.user.id)), flags: EPHEMERAL });
+        }
+        if (interaction.isButton() && action === 'leave') {
+            await su.setEntries(signup, interaction.guildId, interaction.user.id, []);
+            await su.refreshSignupPost(interaction.client, signup);
+            return respond(interaction, { content: `You're withdrawn from **${signup.title}**.`, flags: EPHEMERAL });
+        }
+        if (interaction.isStringSelectMenu() && action === 'pick') {
+            const chosen = await su.setEntries(signup, interaction.guildId, interaction.user.id, interaction.values);
+            await su.refreshSignupPost(interaction.client, signup);
+            const msg = chosen.length
+                ? `✅ You're signed up for **${signup.title}**: ${chosen.map((c) => `**${c.name}**`).join(', ')}. Press the button again to change it.`
+                : `You're withdrawn from **${signup.title}**.`;
+            return interaction.update({ content: msg, components: [] });
+        }
+        return;
+    }
+
     // ---- Match of the Night voting: anyone can vote ----
     if (interaction.isButton() && id.startsWith('motn:')) {
         const [, pollId, matchId] = id.split(':');

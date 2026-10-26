@@ -30,7 +30,8 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40)))
     .addSubcommand((s) => showOpts(s.setName('auto').setDescription('Generate a card from recent matches: rematches, title shots and fresh matchups'))
         .addIntegerOption((o) => o.setName('matches').setDescription(`How many matches (default 5, max ${MAX_CARD_MATCHES})`).setRequired(false).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
-        .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40)))
+        .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40))
+        .addBooleanOption((o) => o.setName('use_signup').setDescription('Book from the current signup (default: yes when there is one)').setRequired(false)))
     .addSubcommand((s) => {
         showOpts(s.setName('add').setDescription('Add a match to the card and pick who is in it'))
             .addStringOption((o) => o.setName('match_type').setDescription('Type of match').setRequired(true).addChoices(...TYPE_CHOICES))
@@ -117,9 +118,16 @@ module.exports = {
         if (sub === 'auto') {
             await interaction.deferReply({ flags: 64 });
             const wanted = interaction.options.getInteger('matches') || 5;
-            const { draft, planned } = await svc.autoCard(guildId, brand, division, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null);
+            const su = require('../utils/signupUtils');
+            const wantSignup = interaction.options.getBoolean('use_signup');
+            const signup = wantSignup === false ? null : await su.activeSignup(guildId);
+            const signupIds = signup ? await su.signedUpIds(signup.id) : null;
+            const priority = signup ? await su.passedOverCounts(guildId, [...signupIds]) : null;
+            const { draft, planned, signupMode, signedCount } = await svc.autoCard(guildId, brand, division, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null, { signupIds, priority });
+            const via = signupMode === 'used' ? `\n📝 Booked from the **${signup.title}** signup (${signedCount} wrestler${signedCount === 1 ? '' : 's'} available in this division).`
+                : signupMode === 'fallback' ? `\n⚠️ Fewer than 2 ${label} wrestlers signed up for **${signup.title}**, so I booked from everyone.` : '';
             const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
-            const short = planned < wanted ? `\nOnly ${planned} of ${wanted} matches could be booked (not enough free wrestlers).` : '';
+            const short = (planned < wanted ? `\nOnly ${planned} of ${wanted} matches could be booked (not enough free wrestlers).` : '') + via;
             return respond(interaction, {
                 content: `Booked a **${label}** card from recent matches:\n${await svc.describeCard(draft)}${short}\n\nTweak it with \`/card add\`, \`/card remove\` and \`/card move\`, then \`/card post\`.`,
                 files: [new AttachmentBuilder(buffer, { name: 'card-preview.png' })]

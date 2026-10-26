@@ -333,13 +333,19 @@ const RIVALRY_DAYS = 90;
  *  3. fresh matchups for wrestlers who are not booked yet (least-faced opponents, different players first)
  * Returns matches in running order: fresh first, then rematches, then title matches last.
  */
-async function planCard(guildId, division, count) {
-    const { rows: pool_ } = await pool.query(
+async function planCard(guildId, division, count, { signupIds = null, priority = null } = {}) {
+    let { rows: pool_ } = await pool.query(
         `SELECT c.id, c.name, c.owner_id FROM characters c WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved'
            AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
         [guildId, division]
     );
     if (pool_.length < 2) throw new UserError(`There aren't enough approved ${divisionLabel(division)} wrestlers to build a card (need at least 2).`);
+    // prefer wrestlers who signed up; if fewer than 2 did, fall back to everyone
+    let signupMode = null;
+    if (signupIds) {
+        const signed = pool_.filter((c) => signupIds.has(String(c.id)));
+        if (signed.length >= 2) { pool_ = signed; signupMode = 'used'; } else signupMode = 'fallback';
+    }
     const chars = new Map(pool_.map((c) => [String(c.id), c]));
     const used = new Set();
     const free = (id) => chars.has(String(id)) && !used.has(String(id));
@@ -473,7 +479,7 @@ async function planCard(guildId, division, count) {
 
     // ---- 3. fresh matchups for everyone still free
     const order = [...chars.values()].filter((c) => free(c.id))
-        .sort((x, y) => (lastSeen.get(String(x.id)) || 0) - (lastSeen.get(String(y.id)) || 0) || Math.random() - 0.5);
+        .sort((x, y) => ((priority?.get(String(y.id)) || 0) - (priority?.get(String(x.id)) || 0)) || (lastSeen.get(String(x.id)) || 0) - (lastSeen.get(String(y.id)) || 0) || Math.random() - 0.5);
     while (remaining() > 0) {
         const a = order.find((c) => free(c.id));
         if (!a) break;
@@ -502,17 +508,20 @@ async function planCard(guildId, division, count) {
     }
 
     // main event last: title matches in reverse catalogue order (top title closes the show)
-    return [...fresh, ...rematches, ...titleMatches.reverse()].slice(0, count);
+    const result = [...fresh, ...rematches, ...titleMatches.reverse()].slice(0, count);
+    result.signupMode = signupMode;
+    result.signedCount = signupMode === 'used' ? chars.size : 0;
+    return result;
 }
 
 /** Generates a card and saves it as the draft for this brand + division. */
-async function autoCard(guildId, brand, division, createdBy, count, name = null) {
-    const plan = await planCard(guildId, division, count);
+async function autoCard(guildId, brand, division, createdBy, count, name = null, { signupIds = null, priority = null } = {}) {
+    const plan = await planCard(guildId, division, count, { signupIds, priority });
     if (!plan.length) throw new UserError('I couldn\'t find enough free wrestlers to book any matches.');
     return withTransaction(async (client) => {
         const draft = await startDraft(guildId, brand, division, createdBy, name, client);
         await saveMatches(client, draft.id, plan);
-        return { draft, planned: plan.length };
+        return { draft, planned: plan.length, signupMode: plan.signupMode, signedCount: plan.signedCount };
     });
 }
 

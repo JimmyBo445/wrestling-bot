@@ -6,6 +6,7 @@ const { singlesCooldownHoursLeft } = require('../utils/matchService');
 const { postPendingCard } = require('../handlers/pendingQueue');
 const { respond, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
+const su = require('../utils/signupUtils');
 
 const data = new SlashCommandBuilder()
     .setName('matchmaking')
@@ -15,7 +16,8 @@ const data = new SlashCommandBuilder()
         .setDescription('Find fresh opponents: people this wrestler (and player) has faced the least')
         .addStringOption((o) => o.setName('character').setDescription('Wrestler to find opponents for').setRequired(true).setAutocomplete(true))
         .addIntegerOption((o) => o.setName('count').setDescription('How many suggestions (default 5, max 15)').setRequired(false).setMinValue(1).setMaxValue(15))
-        .addBooleanOption((o) => o.setName('any_division').setDescription('Include other divisions (default: same division only)').setRequired(false)))
+        .addBooleanOption((o) => o.setName('any_division').setDescription('Include other divisions (default: same division only)').setRequired(false))
+        .addBooleanOption((o) => o.setName('only_signed_up').setDescription('Only wrestlers signed up for the current show (default: they just come first)').setRequired(false)))
     .addSubcommand((s) => s.setName('request')
         .setDescription('Ask admins to book a singles match between two wrestlers')
         .addStringOption((o) => o.setName('character').setDescription('Your wrestler').setRequired(true).setAutocomplete(true))
@@ -59,23 +61,40 @@ module.exports = {
             );
             if (!rows.length) throw new UserError('No other players\' wrestlers to suggest yet.');
 
+            // wrestlers signed up for the current show come first; ones passed over before come before that
+            const signup = await su.activeSignup(guildId);
+            const signed = signup ? await su.signedUpIds(signup.id) : new Set();
+            const passed = await su.passedOverCounts(guildId, rows.map((r) => r.id));
+            for (const r of rows) { r.signed = signed.has(String(r.id)); r.passed = passed.get(String(r.id)) || 0; }
+            let pool_ = rows;
+            if (interaction.options.getBoolean('only_signed_up')) {
+                if (!signup) throw new UserError('There is no current signup. Admins open one with `/signup open`.');
+                pool_ = rows.filter((r) => r.signed);
+                if (!pool_.length) throw new UserError(`Nobody else has signed up for **${signup.title}** yet.`);
+            }
+
             for (const r of rows) {
                 r.cooldown = await singlesCooldownHoursLeft(guildId, me, { id: r.id, owner_id: r.owner_id }, settings);
             }
-            rows.sort((a, b) =>
+            for (const r of pool_) {
+                r.cooldown = r.cooldown ?? 0;
+            }
+            pool_.sort((a, b) =>
                 (a.cooldown > 0) - (b.cooldown > 0) ||
+                (b.signed - a.signed) ||
+                b.passed - a.passed ||
                 a.char_meetings - b.char_meetings ||
                 a.user_meetings - b.user_meetings ||
                 (a.last_met ? new Date(a.last_met).getTime() : 0) - (b.last_met ? new Date(b.last_met).getTime() : 0) ||
                 Math.random() - 0.5);
 
-            const lines = rows.slice(0, count).map((r, i) => {
-                const flags = `${r.champ ? ' 👑' : ''}${r.contender ? ' 🎯' : ''}${r.cooldown ? ` ⏳${r.cooldown}h` : ''}`;
+            const lines = pool_.slice(0, count).map((r, i) => {
+                const flags = `${r.signed ? ' 📝' : ''}${r.passed ? ' ⏭️' : ''}${r.champ ? ' 👑' : ''}${r.contender ? ' 🎯' : ''}${r.cooldown ? ` ⏳${r.cooldown}h` : ''}`;
                 const last = r.last_met ? `last faced <t:${Math.floor(new Date(r.last_met).getTime() / 1000)}:R>` : 'never faced';
                 return `**${i + 1}. ${r.name}** (<@${r.discord_id}>)${anyDivision ? ` · ${DIVISION_LABELS[r.division]}` : ''}${flags}\n${r.char_meetings} match${r.char_meetings === 1 ? '' : 'es'} vs ${me.name} · ${r.user_meetings} between the players · ${last}`;
             });
             const embed = new EmbedBuilder().setTitle(`Fresh matchups for ${me.name}`).setColor(0x3498DB)
-                .setDescription(lines.join('\n\n')).setFooter({ text: '👑 champion  🎯 #1 contender  ⏳ singles cooldown still active' });
+                .setDescription(lines.join('\n\n')).setFooter({ text: `👑 champion  🎯 #1 contender  ⏳ singles cooldown still active${signup ? `  📝 signed up for ${signup.title}  ⏭️ passed over before` : ''}` });
             return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
 
