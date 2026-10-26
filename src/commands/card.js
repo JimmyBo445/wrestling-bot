@@ -62,6 +62,8 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => showOpts(s.setName('recap').setDescription('Post a results graphic for the show (matches you have logged with /match)'))
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('auto-recap').setDescription('Turn the automatic show recap on or off (posted when a card\'s last match is logged)')
+        .addBooleanOption((o) => o.setName('enabled').setDescription('On or off').setRequired(true)))
     .addSubcommand((s) => showOpts(s.setName('schedule').setDescription('Set the show date for this card (the bot posts a reminder in the staff channel that day)'))
         .addStringOption((o) => o.setName('date').setDescription('Show date as YYYY-MM-DD, or - to unschedule').setRequired(true).setMaxLength(10)))
     .addSubcommand((s) => s.setName('upcoming').setDescription('Cards that are scheduled, soonest first'))
@@ -108,6 +110,12 @@ module.exports = {
         const division = interaction.options.getString('division');
         const label = brand ? `${svc.brandLabel(brand)} ${svc.divisionLabel(division)}` : '';
         const list = async () => svc.describeCard(await svc.requireDraft(guildId, brand, division));
+
+        if (sub === 'auto-recap') {
+            const on = interaction.options.getBoolean('enabled');
+            await pool.query(`UPDATE guilds SET auto_recap = $1 WHERE guild_id = $2`, [on, guildId]);
+            return respond(interaction, { content: on ? '✅ I\'ll post a written recap and results picture when the last match of a card is logged.' : 'Automatic show recaps are off. You can still use `/card recap`.', flags: 64 });
+        }
 
         if (sub === 'new') {
             await interaction.deferReply({ flags: 64 });
@@ -213,15 +221,17 @@ module.exports = {
                     } catch (err) { console.error('Tale of the tape failed:', err.message); }
                 }
             }
+            const written = recap ? await require('../utils/showRecap').buildShowRecap(draft) : null;
+            const embeds = written ? [written.embed] : [];
             const noun = recap ? 'recap' : 'card';
             if (target) {
                 const channel = await interaction.guild.channels.fetch(target.id).catch(() => null);
                 if (!channel || !channel.isTextBased()) throw new UserError('I can\'t post in that channel. Pick a text channel I can see and send messages in.');
-                try { await channel.send({ files, allowedMentions: NO_MENTIONS }); }
+                try { await channel.send({ files, embeds, allowedMentions: NO_MENTIONS }); }
                 catch (e) { throw new UserError('I couldn\'t post there. Check that I can view the channel, send messages and attach files.'); }
                 return respond(interaction, { content: `Posted the ${label} ${noun} in <#${target.id}>.` });
             }
-            return respond(interaction, { files });
+            return respond(interaction, { files, embeds });
         }
 
         if (sub === 'tape') {

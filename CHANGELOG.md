@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.9.0 — Show recaps, staff reports and contracts
+- **Show recaps.** When the last match of a card is logged, the bot posts "That's a wrap!" with a written recap and the results picture (to your matches channel, or where you logged it). Each match gets a sentence: who won, how, the stipulation, title changes, defenses, and "their 3rd meeting, X leads the series 2-1". `/card recap` now includes the written version too. `/card auto-recap enabled:false` turns the automatic post off.
+- **Weekly staff report.** Every Monday morning the staff channel gets idle wrestlers (30+ days), the busiest ones, thin divisions, titles that haven't been defended or are vacant, wrestlers passed over on signups, contracts ending soon and things waiting for you. `/report now` shows it any time (admins).
+- **Contracts (just for fun).** `/contract offer` (admin) sets months, monthly pay and optional clauses; the wrestler's owner presses **Accept & sign** and the bot posts a signed contract graphic. Owners can ask for a new deal with `/contract request` and an admin approves with a button. `/contract view`, `list`, `free-agents`, `release`. Not everyone needs a contract and contracts never affect booking. Profiles show "Contract through ...".
+- **Earnings.** Wrestlers under contract earn their monthly pay for the days they are signed, plus a bonus per win and an extra bonus per title-match win (`/contract bonuses`, defaults $500 and $2,000). `/contract earnings` is the career-earnings leaderboard. It is worked out from the matches, so undoing a match corrects it.
+- **Warnings.** The staff channel is told 14 days before a contract ends and when it expires. Expired contracts only show as expired.
+- Database: migration 012 runs by itself.
+
 ## 2.8.0 — Show signups
 - **`/signup open`** posts a signup (title, optional deadline date, optional channel) with a **Sign up / change** button and a **Withdraw** button. Players pick any of their approved wrestlers from a private menu (every division at once, as many as they like) and can change their picks until it closes. The post shows who is in each division. Injured wrestlers aren't offered.
 - **`/signup list`** (admins) shows who is available by division with records, champions and how many earlier shows they were passed over for. **`/signup add`** and **`remove`** let you sign someone up or take them off. **`/signup close`** locks it and sends the final list to the staff channel; a deadline closes it by itself after that day.

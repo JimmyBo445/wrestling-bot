@@ -208,7 +208,8 @@ module.exports = {
             const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
             await interaction.deferReply();
             const buffer = await renderProfileCard(await buildProfileData(interaction.guild, character));
-            return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'profile.png' })], components: storyButtons(character) });
+            const contractLine = await require('../utils/contractUtils').profileLine(character).catch(() => null);
+            return interaction.editReply({ content: contractLine || undefined, files: [new AttachmentBuilder(buffer, { name: 'profile.png' })], components: storyButtons(character) });
         }
 
         if (sub === 'story') {

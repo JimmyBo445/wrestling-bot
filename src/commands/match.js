@@ -7,6 +7,7 @@ const { autocompleteCharacters } = require('../utils/characterUtils');
 const { autocompleteTitles } = require('../utils/titleLogic');
 const { logMatch, undoMatch, editMatch } = require('../utils/matchService');
 const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
+const { maybeAutoRecap } = require('../utils/showRecap');
 const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
 const { recentMatches } = require('../utils/statsQueries');
 const { addDetailOptions, readDetails, stipulationChoices } = require('../utils/matchOptions');
@@ -122,6 +123,7 @@ module.exports = {
             const { payload } = await presentMatch(interaction, result);
             await interaction.editReply(payload);
             await mirrorToMatchesChannel(interaction, payload);
+            await maybeAutoRecap(interaction, result);
             return;
         }
 

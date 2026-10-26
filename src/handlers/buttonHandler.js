@@ -109,6 +109,36 @@ async function handleStreak(interaction) {
 async function handleButtonInteraction(interaction) {
     const id = interaction.customId || '';
 
+    // ---- contracts: the wrestler's owner answers an offer; admins answer a request ----
+    if (interaction.isButton() && id.startsWith('contract:')) {
+        const [, action, contractId] = id.split(':');
+        const cu = require('../utils/contractUtils');
+        const { cardFor } = require('../commands/contract');
+        const k = await cu.getContract(contractId, interaction.guildId);
+        if (!k) return respond(interaction, { content: 'That contract no longer exists.', flags: EPHEMERAL });
+        const ownerAction = ['accept', 'decline'].includes(action);
+        const allowed = ownerAction ? (interaction.user.id === k.owner_discord_id || isAdmin(interaction)) : isAdmin(interaction);
+        if (!allowed) return respond(interaction, { content: ownerAction ? `Only ${k.char_name}'s owner (or an admin) can answer this offer.` : 'Only admins/mods (Manage Server) can answer a contract request.', flags: EPHEMERAL });
+        if (!['offered', 'requested'].includes(k.status)) return respond(interaction, { content: 'That one was already answered.', flags: EPHEMERAL });
+        await interaction.deferUpdate();
+        try {
+            if (action === 'accept' || action === 'approve') {
+                const signed = await cu.activate(contractId, interaction.guildId);
+                const full = await cu.getContract(signed.id, interaction.guildId);
+                return await interaction.editReply({
+                    content: `✍️ **${k.char_name}** signed a ${k.months}-month deal worth ${cu.money(k.salary)}/month!`,
+                    embeds: [], components: [], files: [await cardFor(interaction.guild, full)], allowedMentions: NO_MENTIONS
+                });
+            }
+            await cu.closePending(contractId, interaction.guildId, action === 'decline' ? 'declined' : 'rejected');
+            return await interaction.editReply({ content: action === 'decline' ? `❌ ${k.char_name}'s owner declined the offer.` : `❌ The request for ${k.char_name} was rejected.`, embeds: [], components: [], allowedMentions: NO_MENTIONS });
+        } catch (err) {
+            const known = err instanceof UserError;
+            if (!known) console.error('Contract button failed:', err);
+            return interaction.followUp({ content: known ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Please try again.', flags: EPHEMERAL }).catch(() => {});
+        }
+    }
+
     // ---- show signups: anyone can use ----
     if (id.startsWith('signup:')) {
         const [, action, signupId] = id.split(':');

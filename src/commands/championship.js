@@ -5,6 +5,7 @@ const { autocompleteTeams, requireTeam, getTeamMembers } = require('../utils/tea
 const { autocompleteTitles, requireTitle, setVacancy, vacateTitle, reignHolderName, getCurrentReign, startReign } = require('../utils/titleLogic');
 const { logMatch } = require('../utils/matchService');
 const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresenter');
+const { maybeAutoRecap } = require('../utils/showRecap');
 const { renderBeltCard, renderLineageCard } = require('../utils/cardRenderer');
 const { buildBeltData, buildLineageData } = require('../utils/cardData');
 const { requireAdmin, respond, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
@@ -176,6 +177,7 @@ async function runTitleMatch(interaction, matchType, slotIds, winnerIndex, winni
     const { payload } = await presentMatch(interaction, result);
     await interaction.editReply(payload);
     await mirrorToMatchesChannel(interaction, payload);
+    await maybeAutoRecap(interaction, result);
 }
 
 module.exports = {

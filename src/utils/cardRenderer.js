@@ -15,3 +15,4 @@ module.exports.renderPlayerCard = require('../cards/playerCard').renderPlayerCar
 module.exports.renderSeasonCard = require('../cards/seasonCard').renderSeasonCard;
 module.exports.renderCareerCard = require('../cards/careerCard').renderCareerCard;
 module.exports.renderBracketCard = require('../cards/bracketCard').renderBracketCard;
+module.exports.renderContractCard = require('../cards/contractCard').renderContractCard;

@@ -33,7 +33,7 @@ async function startDraft(guildId, brand, division, createdBy, name = null, clie
     const { rows } = await client.query(
         `INSERT INTO card_drafts (guild_id, brand, division, name, created_by) VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (guild_id, brand, division)
-         DO UPDATE SET name = EXCLUDED.name, created_by = EXCLUDED.created_by, created_at = now(), updated_at = now()
+         DO UPDATE SET name = EXCLUDED.name, created_by = EXCLUDED.created_by, created_at = now(), updated_at = now(), recap_posted = false
          RETURNING *`,
         [guildId, brand, division, name, createdBy]
     );
