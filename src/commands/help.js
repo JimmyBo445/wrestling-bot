@@ -3,10 +3,21 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'leaderboard', 'rankings', 'championship', 'contender', 'matchmaking', 'signup', 'contract', 'report', 'match', 'card', 'roster', 'season', 'injury', 'feud', 'tournament', 'faction', 'halloffame', 'newsletter', 'admin'];
+const ORDER = ['character', 'team', 'stats', 'standings', 'championship', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
+// Old command names that were merged into combined commands (so `/help command:injury` can point people to the new home).
+const MOVED = {
+    leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season-standings | season-recap', roster: '/directory roster',
+    halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
+    contender: '/championship contender-challenge | contender-award | contender-revoke | contender-list',
+    matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-add | signup-remove',
+    newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report'
+};
 const BLURB = {
     character: 'Your wrestlers: submit, edit, profile cards, story and moves',
     team: 'Registered tag teams',
+    standings: 'Leaderboards, division rankings and season standings',
+    booking: 'Find opponents, request matches, run show signups',
+    directory: 'Roster pages, Hall of Fame and the injury report',
     stats: 'Records, streaks, head-to-head, history',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
@@ -47,11 +58,11 @@ function visibleCommands(interaction) {
         .filter((j) => j.name !== 'help')
         .filter((j) => admin || j.default_member_permissions == null)
         .map((j) => {
-            const subs = (j.options || []).filter((o) => o.type === 1)
+            const subs = (j.options || []).flatMap((o) => (o.type === 2 ? (o.options || []).map((x) => ({ ...x, name: `${o.name} ${x.name}` })) : o.type === 1 ? [o] : []))
                 .filter((s) => admin || !isAdminSub(s.description));
             return { ...j, subs, adminOnly: j.default_member_permissions != null || /^\[Admin\]/i.test(j.description) };
         })
-        .filter((j) => !((j.options || []).some((o) => o.type === 1) && j.subs.length === 0))
+        .filter((j) => !((j.options || []).some((o) => o.type === 1 || o.type === 2) && j.subs.length === 0))
         .sort((a, b) => {
             const ia = ORDER.indexOf(a.name), ib = ORDER.indexOf(b.name);
             return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.name.localeCompare(b.name);
@@ -74,6 +85,9 @@ module.exports = {
 
         if (wanted) {
             const c = cmds.find((x) => x.name === wanted);
+            if (!c && MOVED[wanted]) {
+                return respond(interaction, { content: `\`/${wanted}\` was merged into a combined command: **${MOVED[wanted]}**. Try \`/help command:${MOVED[wanted].split(' ')[0].slice(1)}\` for the full list.`, flags: EPHEMERAL });
+            }
             if (!c) throw new UserError(`I don't have a \`/${wanted}\` command${admin ? '' : ' that you can use'}. Type \`/help\` to see the list.`);
             const lines = c.subs.length
                 ? c.subs.map((s) => `**/${c.name} ${s.name}**${admin && isAdminSub(s.description) ? ' 🔒' : ''}\n${clean(s.description)}`)
@@ -100,7 +114,7 @@ module.exports = {
         const embed = new EmbedBuilder().setTitle('Wrestling Bot: Help').setColor(0xC0392B)
             .setDescription([
                 '**Players:** `/character submit` to add a wrestler (an admin approves it), then `/character profile` for their card. ' +
-                'Check records with `/stats`, ladders with `/rankings`, and ask for matches with `/matchmaking request`.',
+                'Check records with `/stats`, ladders with `/standings rankings`, and ask for matches with `/booking request`.',
                 admin ? '**Admins:** book shows with `/card auto` or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
                 '',
                 'Use **`/help command:<name>`** for the full list of one command, for example `/help command:match`.'

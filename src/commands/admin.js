@@ -110,7 +110,7 @@ module.exports = {
             await pool.query(`UPDATE guilds SET ${col} = $1 WHERE guild_id = $2`, [channel?.id || null, guildId]);
             await logAudit(guildId, interaction.user.id, `setting_${col}`, { channel: channel?.id || null });
             if (sub === 'set-admin-channel') return respond(interaction, { content: channel ? `Staff reminders (tonight's card, rematches owed, title warnings) will post in <#${channel.id}>. Make sure only staff can see that channel.` : 'Staff reminders are **off**.' });
-            return respond(interaction, { content: channel ? `The weekly newsletter will post in <#${channel.id}> (use \`/newsletter\` to add your own lines or post it now).` : 'The weekly newsletter is **off**.' });
+            return respond(interaction, { content: channel ? `The weekly newsletter will post in <#${channel.id}> (use \`/admin newsletter add\` to add your own lines or post it now).` : 'The weekly newsletter is **off**.' });
         }
         if (sub === 'deadlines') {
             const d = interaction.options.getInteger('defense_days');
@@ -223,10 +223,19 @@ module.exports = {
                 const msg = await buildPendingMessage(r);
                 if (r.request_type === 'streak_contender') {
                     const jump = r.message_id && r.channel_id ? `\nUse the prompt posted in <#${r.channel_id}> to pick the title.` : '';
-                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/contender award` to pick a title, or ignore it.'}`);
+                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/championship contender-award` to pick a title, or ignore it.'}`);
                 }
                 await interaction.followUp({ ...msg, flags: EPHEMERAL });
             }
         }
     }
 };
+
+// Newsletter and the staff report also live here: /admin newsletter <add|list|remove|preview|post> and /admin report
+{
+    const { partsOf, extend } = require('../utils/umbrella');
+    extend(module.exports, {
+        extras: partsOf(require('../modules/report'), { prefix: '' }).map((p) => ({ ...p, json: { ...p.json, name: 'report', description: '[Admin] Staff report: idle wrestlers, thin divisions, stale titles, contracts' } })),
+        groups: [{ name: 'newsletter', description: '[Admin] Weekly newsletter: add lines, preview, post', parts: partsOf(require('../modules/newsletter')) }]
+    });
+}

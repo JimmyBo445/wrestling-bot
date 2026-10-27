@@ -13,20 +13,28 @@ async function getSignup(id, guildId) {
     return rows[0] || null;
 }
 
-/** The signup an admin most likely means: the newest open one, else the newest closed one. */
+/** The signup an admin most likely means: the newest open one, else the newest closed one, else the newest finished one. */
 async function latestSignup(guildId, { openOnly = false } = {}) {
     const { rows } = await pool.query(
         `SELECT * FROM signups WHERE guild_id = $1 ${openOnly ? `AND status = 'open'` : ''}
-         ORDER BY (status = 'open') DESC, created_at DESC, id DESC LIMIT 1`, [guildId]);
+         ORDER BY (status = 'open') DESC, (status = 'closed') DESC, created_at DESC, id DESC LIMIT 1`, [guildId]);
     return rows[0] || null;
 }
 
-/** For matchmaking and /card auto: the open signup, or one that closed in the last 7 days. */
+/**
+ * The signup that guides booking and matchmaking: the newest one that is open or closed but not yet marked done.
+ * It stays in effect (no timer) until an admin runs `signup-done` or opens a new signup.
+ */
 async function activeSignup(guildId) {
-    const s = await latestSignup(guildId);
-    if (!s) return null;
-    if (s.status === 'open') return s;
-    return s.closed_at && Date.now() - new Date(s.closed_at).getTime() < 7 * 24 * 3600 * 1000 ? s : null;
+    const { rows } = await pool.query(
+        `SELECT * FROM signups WHERE guild_id = $1 AND status IN ('open','closed') ORDER BY created_at DESC, id DESC LIMIT 1`, [guildId]);
+    return rows[0] || null;
+}
+
+/** Marks a signup finished so booking goes back to using everyone. */
+async function markDone(signupId, guildId) {
+    const { rowCount } = await pool.query(`UPDATE signups SET status = 'done', closed_at = COALESCE(closed_at, now()) WHERE id = $1 AND guild_id = $2 AND status <> 'done'`, [signupId, guildId]);
+    return rowCount > 0;
 }
 
 async function resolveSignup(guildId, value) {
@@ -36,7 +44,7 @@ async function resolveSignup(guildId, value) {
         return s;
     }
     const s = await latestSignup(guildId);
-    if (!s) throw new UserError('There are no signups yet. Open one with `/signup open`.');
+    if (!s) throw new UserError('There are no signups yet. Open one with `/booking signup-open`.');
     return s;
 }
 
@@ -63,7 +71,7 @@ async function passedOverCounts(guildId, characterIds) {
     const { rows } = await pool.query(
         `SELECT e.character_id, COUNT(*)::int AS n
          FROM signup_entries e JOIN signups s ON s.id = e.signup_id
-         WHERE s.guild_id = $1 AND s.status = 'closed' AND e.character_id = ANY($2::bigint[])
+         WHERE s.guild_id = $1 AND s.status IN ('closed','done') AND e.character_id = ANY($2::bigint[])
            AND NOT EXISTS (SELECT 1 FROM match_participants mp JOIN matches m ON m.id = mp.match_id
                            WHERE mp.character_id = e.character_id AND m.created_at >= s.created_at)
          GROUP BY e.character_id`, [guildId, ids]);
@@ -193,7 +201,7 @@ async function buildBookingList(signup, division = null) {
     const champSet = new Set(champs.map((r) => String(r.character_id)));
 
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`📋 ${signup.title} — available wrestlers`)
-        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · /card auto and /matchmaking suggest use this list' });
+        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · /card auto and /booking suggest use this list' });
     let count = 0;
     for (const d of DIV_ORDER) {
         const list = entries.filter((e) => e.division === d).sort((a, b) => (passed.get(String(b.character_id)) || 0) - (passed.get(String(a.character_id)) || 0) || a.name.localeCompare(b.name));
@@ -212,7 +220,7 @@ async function buildBookingList(signup, division = null) {
 }
 
 module.exports = {
-    getSignup, latestSignup, activeSignup, resolveSignup, getEntries, signedUpIds, passedOverCounts,
+    getSignup, latestSignup, activeSignup, markDone, resolveSignup, getEntries, signedUpIds, passedOverCounts,
     eligibleCharacters, setEntries, addEntry, removeEntry, buildSignupMessage, refreshSignupPost,
     buildPicker, closeSignup, buildBookingList, DIV_ORDER
 };

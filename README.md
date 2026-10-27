@@ -1,4 +1,4 @@
-# Wrestling Bot 2.9.0
+# Wrestling Bot 2.11.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -6,28 +6,29 @@ servers at once. Everything is saved permanently in Postgres.
 
 ## What it does
 
+**Combined commands:** `/standings` (leaderboard, rankings, season), `/directory` (roster, Hall of Fame, injuries), `/booking` (matchmaking and signups), `/championship contender-*`, `/admin newsletter` and `/admin report`. The older separate names were removed in 2.11.
+
 | Area | Commands |
 |---|---|
 | **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
 | **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
 | **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `interim` `unify` `backfill-reign` `edit-reign` `remove-reign` `watch` `grand-slam` `rematches` `waive-rematch` |
-| **#1 contenders** | `/contender challenge` `award` `revoke` `list` |
+| **#1 contenders** | `/championship contender-challenge` `contender-award` `contender-revoke` `contender-list` |
 | **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
-| **Boards** | `/leaderboard` (category + time period dropdowns), `/rankings` |
-| **Matchmaking** | `/matchmaking suggest` `request` |
+| **Boards** | `/standings leaderboard` (category + time period dropdowns), `/standings rankings`, `/standings season-standings` `season-recap` |
+| **Booking** | `/booking suggest` `request` (players), `/booking signup-open` `signup-list` `signup-close` `signup-done` `signup-add` `signup-remove` (admins) |
 | **Contracts** | `/contract offer` `view` `request` `release` `list` `free-agents` `earnings` `bonuses` (fun only: salary + win bonuses = career earnings) |
-| **Reports** (admins) | `/report now` (also posted weekly to the staff channel) |
-| **Signups** (admins) | `/signup open` `list` `close` `add` `remove` (players click a button to pick their wrestlers; matchmaking and `/card auto` use it) |
+| **Reports** (admins) | `/admin report` (also posted weekly to the staff channel) |
 | **Match cards** (admins) | `/card new` `auto` `request` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
-| **Injuries** | `/injury add` `clear` `list` (out until a return date; auto cards skip them) |
-| **Seasons** | `/season recap` `standings` (calendar-year view; nothing resets) |
-| **Roster** | `/roster division:` flip through a division A to Z with profile cards (Prev / Next buttons) |
+| **Injuries** | `/directory injury-add` `injury-clear` `injury-list` (out until a return date; auto cards skip them) |
+| **Seasons** | `/standings season-recap` `season-standings` (calendar-year view; nothing resets) |
+| **Roster** | `/directory roster` flip through a division A to Z with profile cards (Prev / Next buttons) |
 | **Feuds** | `/feud start` `log` `view` `list` `heat` `end` (timeline + heat meter) |
 | **Tournaments** | `/tournament create` `add` `remove` `start` `bracket` `list` `advance` `cancel` |
-| **Newsletter** (admins) | `/newsletter add` `list` `remove` `preview` `post` |
+| **Newsletter** (admins) | `/admin newsletter add` `list` `remove` `preview` `post` |
 | **Factions** | `/faction create` `add-member` `remove-member` `disband` `list` `profile` (3 to 8 wrestlers, shared record, separate from tag teams) |
-| **Hall of Fame** | `/halloffame induct` `remove` `list` `view` |
+| **Hall of Fame** | `/directory hof-induct` `hof-remove` `hof-list` `hof-view` |
 | **Help** | `/help` (everyone) and `/help command:<name>` |
 | **Admin** | `/admin pending` `import` `import-template` `set-admin-channel` `set-newsletter-channel` `deadlines` `rematches` `set-timezone` `set-monthly-channel` `monthly-awards` `backup` `milestones` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
 

@@ -475,3 +475,8 @@ module.exports = {
         }
     }
 };
+
+// #1 contender commands also live here: /championship contender-challenge | contender-award | contender-revoke | contender-list
+require('../utils/umbrella').extend(module.exports, {
+    extras: require('../utils/umbrella').partsOf(require('../modules/contender'), { prefix: 'contender-' })
+});

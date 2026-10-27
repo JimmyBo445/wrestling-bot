@@ -4,7 +4,7 @@ const path = require('path');
 const { handleInteraction } = require('../src/interactionHandler');
 
 const commands = new Map();
-for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands'))) {
+for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands')).filter((x) => !require('../src/commands.retired').has(x))) {
     const c = require(path.join(__dirname, '..', 'src', 'commands', f));
     if (c.data) commands.set(c.data.name, c);
 }
@@ -28,7 +28,7 @@ const guild = (id = 'g1') => ({
     channels: { fetch: async (cid) => getChannel(cid) }
 });
 
-function makeInteraction({ kind = 'command', commandName, sub = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null }) {
+function makeInteraction({ kind = 'command', commandName, sub = null, group = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null }) {
     const responses = [];
     const i = {
         client, kind, commandName, customId, values, guildId, channelId: 'chan1', channel: getChannel('chan1'), guild: guild(guildId),
@@ -41,6 +41,7 @@ function makeInteraction({ kind = 'command', commandName, sub = null, options = 
         isButton: () => kind === 'button', isStringSelectMenu: () => kind === 'select',
         options: {
             getSubcommand: () => sub,
+            getSubcommandGroup: () => group,
             getString: (n) => (options[n] !== undefined ? String(options[n]) : null),
             getInteger: (n) => (options[n] !== undefined ? Number(options[n]) : null),
             getBoolean: (n) => (options[n] !== undefined ? Boolean(options[n]) : null),
@@ -61,12 +62,27 @@ function makeInteraction({ kind = 'command', commandName, sub = null, options = 
     return i;
 }
 
+// Tests were written with the old command names; map them to where those commands live now.
+function remap(commandName, sub, opts) {
+    const m = {
+        leaderboard: () => ['standings', 'leaderboard', null], rankings: () => ['standings', 'rankings', null],
+        season: () => ['standings', `season-${sub}`, null], roster: () => ['directory', 'roster', null],
+        halloffame: () => ['directory', `hof-${sub}`, null], injury: () => ['directory', `injury-${sub}`, null],
+        contender: () => ['championship', `contender-${sub}`, null], matchmaking: () => ['booking', sub, null],
+        signup: () => ['booking', `signup-${sub}`, null], newsletter: () => ['admin', sub, 'newsletter'], report: () => ['admin', 'report', null]
+    };
+    if (!m[commandName]) return [commandName, sub, opts];
+    const [c, s, g] = m[commandName]();
+    return [c, s, g ? { ...opts, group: g } : opts];
+}
 async function run(commandName, sub, options = {}, opts = {}) {
+    [commandName, sub, opts] = remap(commandName, sub, opts);
     const i = makeInteraction({ commandName, sub, options, ...opts });
     await handleInteraction(client, i);
     return i;
 }
 async function auto(commandName, sub, name, value, options = {}, opts = {}) {
+    [commandName, sub, opts] = remap(commandName, sub, opts);
     const i = makeInteraction({ kind: 'autocomplete', commandName, sub, options, focused: { name, value }, ...opts });
     await handleInteraction(client, i);
     return i.responses.find((r) => r.type === 'autocomplete')?.choices || null;

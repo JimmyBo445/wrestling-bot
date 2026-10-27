@@ -12,13 +12,14 @@ function count(node) {
 }
 let bad = 0;
 const dir = path.join(__dirname, '..', 'src', 'commands');
-for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js') && !require('../src/commands.retired').has(x))) {
     const cmd = require(path.join(dir, f));
     if (!cmd.data) continue;
     const json = cmd.data.toJSON();
     const size = count(json);
-    const subs = (json.options || []).filter((o) => o.type === 1).length;
+    const subs = (json.options || []).filter((o) => o.type === 1 || o.type === 2).length;
     const maxOpts = Math.max(0, ...(json.options || []).map((o) => (o.options || []).length));
+    for (const o of json.options || []) if (o.type === 2 && (o.options || []).length > 25) bad++;
     console.log(`${json.name.padEnd(14)} chars=${String(size).padStart(5)}/8000  subcommands=${subs}/25  maxOptions=${maxOpts}/25`);
     if (size > 8000 || subs > 25 || maxOpts > 25) bad++;
 }
@@ -26,7 +27,7 @@ if (bad) { console.log(`\n${bad} command(s) over a limit`); process.exit(1); }
 
 // Discord rejects a command if a required option comes after an optional one, or names/descriptions are malformed.
 let structural = 0;
-for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js') && !require('../src/commands.retired').has(x))) {
     const cmd = require(path.join(dir, f));
     if (!cmd.data) continue;
     const json = cmd.data.toJSON();

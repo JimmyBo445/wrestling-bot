@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.11.0 — Old command names removed, stricter signups
+- **The old separate commands are gone** (their features all live in the combined commands from 2.10): `/leaderboard` `/rankings` `/season` → `/standings`; `/roster` `/halloffame` `/injury` → `/directory`; `/matchmaking` `/signup` → `/booking`; `/contender` → `/championship contender-…`; `/newsletter` `/report` → `/admin newsletter …` and `/admin report`. 15 commands are left. `/help command:injury` (etc.) tells you where each one went. No data changed.
+- **Signups are strict.** The newest signup guides booking from the moment it opens until you run **`/booking signup-done`** (or open a new signup). There is no 7-day timer, and closing a signup does not end it.
+  - `/card auto` books **only** signed-up, healthy wrestlers. It books fewer matches if it has to, tells you how many it could build, and refuses if fewer than 2 signed up in that division. It never quietly pulls in everyone.
+  - `/booking suggest` only suggests signed-up wrestlers. `include_everyone:true` ignores the signup; `/card auto use_signup:false` does the same for a card.
+  - Opening a new signup finishes the old one. A signup with nobody in it books nobody.
+  - The weekly staff report reminds you when a closed signup is still guiding booking.
+
+## 2.10.0 — Tidier commands
+Some commands now live together. **Nothing was removed and no data changed**: every old command still works exactly as before, so you can switch over at your own pace.
+- **`/standings`** = `leaderboard`, `rankings`, `season-standings`, `season-recap`.
+- **`/directory`** = `roster`, `hof-induct` `hof-remove` `hof-list` `hof-view` (Hall of Fame), `injury-add` `injury-clear` `injury-list`.
+- **`/booking`** = `suggest`, `request` (matchmaking) and `signup-open` `signup-list` `signup-close` `signup-add` `signup-remove` (admins).
+- **`/championship contender-challenge` `contender-award` `contender-revoke` `contender-list`** replace `/contender`.
+- **`/admin newsletter add|list|remove|preview|post`** and **`/admin report`** replace `/newsletter` and `/report`.
+- Admin-only parts stay admin-only wherever you find them. `/help` shows the combined commands and explains where an old name moved (`/help command:injury`).
+- When you're happy, ask me to remove the old names and the list drops from 26 commands to 15.
+
 ## 2.9.0 — Show recaps, staff reports and contracts
 - **Show recaps.** When the last match of a card is logged, the bot posts "That's a wrap!" with a written recap and the results picture (to your matches channel, or where you logged it). Each match gets a sentence: who won, how, the stipulation, title changes, defenses, and "their 3rd meeting, X leads the series 2-1". `/card recap` now includes the written version too. `/card auto-recap enabled:false` turns the automatic post off.
 - **Weekly staff report.** Every Monday morning the staff channel gets idle wrestlers (30+ days), the busiest ones, thin divisions, titles that haven't been defended or are vacant, wrestlers passed over on signups, contracts ending soon and things waiting for you. `/report now` shows it any time (admins).

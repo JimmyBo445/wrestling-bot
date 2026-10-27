@@ -222,9 +222,9 @@ const log = (a, b, extra = {}) => run('match', 'log-singles', { participant1: C[
     });
     await t('help lists contract for everyone and report for admins only', async () => {
         const a = await run('help', null, {}, ADM);
-        assert.match(text(a), /\/report 🔒:/); assert.match(text(a), /\/contract:/);
+        assert.match(text(a), /`report`/); assert.match(text(a), /\/contract:/);
         const p = await run('help', null, {}, P('u1'));
-        assert.match(text(p), /\/contract:/); assert.ok(!/\/report[ :]/.test(text(p)), text(p));
+        assert.match(text(p), /\/contract:/); assert.ok(!/`report`/.test(text(p)), text(p));
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);

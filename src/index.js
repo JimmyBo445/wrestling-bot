@@ -11,7 +11,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 client.commands = new Collection();
 
 const commandsPath = path.join(__dirname, 'commands');
-for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith('.js'))) {
+for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith('.js') && !require('./commands.retired').has(f))) {
     const command = require(path.join(commandsPath, file));
     if (command?.data?.name) client.commands.set(command.data.name, command);
 }

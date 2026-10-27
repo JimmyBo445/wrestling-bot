@@ -1,8 +1,8 @@
 const { EmbedBuilder } = require('discord.js');
 const { pool, withTransaction } = require('../db/pool');
 const { buildLeaderboardEmbed, buildRankingsEmbed } = require('../utils/leaderboardQueries');
-const { leaderboardComponents } = require('../commands/leaderboard');
-const { rankingsComponents } = require('../commands/rankings');
+const { leaderboardComponents } = require('../modules/leaderboard');
+const { rankingsComponents } = require('../modules/rankings');
 const { setContender } = require('../utils/contenderLogic');
 const { requireTitle } = require('../utils/titleLogic');
 const { isAdmin, respond, EPHEMERAL, NO_MENTIONS } = require('../utils/discordHelpers');
@@ -195,11 +195,11 @@ async function handleButtonInteraction(interaction) {
     if (interaction.isButton() && id.startsWith('roster:')) {
         const [, division, index, retired, ownerId] = id.split(':');
         if (interaction.user.id !== ownerId) {
-            return respond(interaction, { content: 'This roster belongs to someone else. Use `/roster` to open your own.', flags: EPHEMERAL });
+            return respond(interaction, { content: 'This roster belongs to someone else. Use `/directory roster` to open your own.', flags: EPHEMERAL });
         }
         await interaction.deferUpdate();
         try {
-            const { buildRosterPage } = require('../commands/roster');
+            const { buildRosterPage } = require('../modules/roster');
             const page = await buildRosterPage(interaction.guild, { division, index: parseInt(index, 10), includeRetired: retired === '1', userId: ownerId });
             return await interaction.editReply(page);
         } catch (err) {
@@ -223,7 +223,7 @@ async function handleButtonInteraction(interaction) {
         if (id === 'rank_div') {
             const division = interaction.values[0];
             await interaction.deferUpdate();
-            const { rankingsPayload } = require('../commands/rankings');
+            const { rankingsPayload } = require('../modules/rankings');
             return interaction.editReply(await rankingsPayload(interaction.guild, division));
         }
     }

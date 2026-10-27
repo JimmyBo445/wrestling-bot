@@ -4,7 +4,8 @@ const { REST, Routes } = require('discord.js');
 
 function loadCommandData() {
     const dir = path.join(__dirname, 'commands');
-    return fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
+    const retired = require('./commands.retired');
+    return fs.readdirSync(dir).filter((f) => f.endsWith('.js') && !retired.has(f))
         .map((f) => require(path.join(dir, f)))
         .filter((c) => c?.data)
         .map((c) => c.data.toJSON());

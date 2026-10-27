@@ -340,11 +340,14 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
         [guildId, division]
     );
     if (pool_.length < 2) throw new UserError(`There aren't enough approved ${divisionLabel(division)} wrestlers to build a card (need at least 2).`);
-    // prefer wrestlers who signed up; if fewer than 2 did, fall back to everyone
+    // a signup is guiding booking: only wrestlers who signed up (and are healthy) can be booked
     let signupMode = null;
     if (signupIds) {
         const signed = pool_.filter((c) => signupIds.has(String(c.id)));
-        if (signed.length >= 2) { pool_ = signed; signupMode = 'used'; } else signupMode = 'fallback';
+        if (signed.length < 2) {
+            throw new UserError(`Only ${signed.length} healthy ${divisionLabel(division)} wrestler${signed.length === 1 ? '' : 's'} signed up for the current signup, so I can't book a match. Sign more up with \`/booking signup-add\`, or use \`use_signup:false\` to book from everyone.`);
+        }
+        pool_ = signed; signupMode = 'used';
     }
     const chars = new Map(pool_.map((c) => [String(c.id), c]));
     const used = new Set();

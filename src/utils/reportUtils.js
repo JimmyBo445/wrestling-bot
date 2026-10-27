@@ -59,10 +59,10 @@ async function buildReport(guildId, guildName) {
     if (ct.length) embed.addFields({ name: '📝 Contracts', value: list(ct.map((r) => `• **${r.name}** — ${r.status === 'expired' ? 'expired' : 'ends'} ${new Date(r.end_date).toISOString().slice(0, 10)}`), 6) });
 
     const { rows: pend } = await pool.query(`SELECT COUNT(*)::int AS n FROM pending_requests WHERE guild_id = $1 AND status = 'pending'`, [guildId]);
-    const { rows: open } = await pool.query(`SELECT title FROM signups WHERE guild_id = $1 AND status = 'open' ORDER BY created_at DESC LIMIT 1`, [guildId]);
+    const { rows: open } = await pool.query(`SELECT title, status FROM signups WHERE guild_id = $1 AND status IN ('open','closed') ORDER BY created_at DESC LIMIT 1`, [guildId]);
     const todo = [];
     if (pend[0].n) todo.push(`${pend[0].n} request${pend[0].n === 1 ? '' : 's'} waiting in \`/admin pending\``);
-    if (open[0]) todo.push(`signup **${open[0].title}** is still open`);
+    if (open[0]) todo.push(open[0].status === 'open' ? `signup **${open[0].title}** is still open` : `signup **${open[0].title}** is closed but still guiding booking (run \`/booking signup-done\` when you've finished booking)`);
     if (todo.length) embed.addFields({ name: '📌 To do', value: todo.map((t) => `• ${t}`).join('\n') });
     return embed;
 }

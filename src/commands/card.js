@@ -132,10 +132,9 @@ module.exports = {
             const signupIds = signup ? await su.signedUpIds(signup.id) : null;
             const priority = signup ? await su.passedOverCounts(guildId, [...signupIds]) : null;
             const { draft, planned, signupMode, signedCount } = await svc.autoCard(guildId, brand, division, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null, { signupIds, priority });
-            const via = signupMode === 'used' ? `\n📝 Booked from the **${signup.title}** signup (${signedCount} wrestler${signedCount === 1 ? '' : 's'} available in this division).`
-                : signupMode === 'fallback' ? `\n⚠️ Fewer than 2 ${label} wrestlers signed up for **${signup.title}**, so I booked from everyone.` : '';
+            const via = signupMode === 'used' ? `\n📝 Booked only from the **${signup.title}** signup (${signedCount} wrestler${signedCount === 1 ? '' : 's'} signed up in this division).` : '';
             const buffer = await renderShowCard(await svc.buildShowData(interaction.guild, draft));
-            const short = (planned < wanted ? `\nOnly ${planned} of ${wanted} matches could be booked (not enough free wrestlers).` : '') + via;
+            const short = (planned < wanted ? `\nOnly ${planned} of ${wanted} matches could be booked (${signupMode === 'used' ? 'only that many signed-up wrestlers are free; add more with `/booking signup-add` or use `use_signup:false`' : 'not enough free wrestlers'}).` : '') + via;
             return respond(interaction, {
                 content: `Booked a **${label}** card from recent matches:\n${await svc.describeCard(draft)}${short}\n\nTweak it with \`/card add\`, \`/card remove\` and \`/card move\`, then \`/card post\`.`,
                 files: [new AttachmentBuilder(buffer, { name: 'card-preview.png' })]

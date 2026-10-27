@@ -85,27 +85,40 @@ const edits = [];
         i = await run('signup', 'remove', { character: C.Bree }, ADM);
         assert.ok(isErr(i, /isn't on/), text(i));
     });
-    await t('matchmaking puts signed-up wrestlers first and can restrict to them', async () => {
+    await t('while a signup is active, matchmaking only suggests signed-up wrestlers (include_everyone overrides)', async () => {
         // Ace's suggestions: Cruz is signed up, Bolt and Dane are not
         let i = await run('matchmaking', 'suggest', { character: C.Ace }, P('u1'));
-        const t1 = text(i);
-        assert.ok(t1.indexOf('Cruz') < t1.indexOf('Bolt') && t1.indexOf('Cruz') < t1.indexOf('Dane'), t1);
-        assert.match(t1, /📝/);
-        i = await run('matchmaking', 'suggest', { character: C.Ace, only_signed_up: true }, P('u1'));
-        assert.ok(/Cruz/.test(text(i)) && !/Bolt/.test(text(i)), text(i));
+        assert.ok(/Cruz/.test(text(i)) && !/Bolt/.test(text(i)) && !/Dane/.test(text(i)), text(i));
+        assert.match(text(i), /📝/);
+        i = await run('matchmaking', 'suggest', { character: C.Ace, include_everyone: true }, P('u1'));
+        assert.ok(/Cruz/.test(text(i)) && /Bolt/.test(text(i)), text(i));
     });
-    await t('card auto books from the signup, and falls back when too few signed up', async () => {
+    await t('card auto books ONLY signed-up wrestlers, books fewer matches rather than pulling in others, and refuses when under 2', async () => {
         await run('signup', 'add', { character: C.Dane }, ADM);
         let i = await run('card', 'auto', { brand: 'raw', division: 'mens', matches: 3 }, ADM);
-        assert.match(text(i), /Booked from the \*\*RAW - Nov 3\*\* signup \(3 wrestlers/, text(i));
+        assert.match(text(i), /Booked only from the \*\*RAW - Nov 3\*\* signup \(3 wrestlers/, text(i));
+        assert.match(text(i), /Only 1 of 3 matches could be booked/, text(i));
         const { rows } = await f.pool.query(`select character_ids from card_draft_matches`);
         const used = new Set(rows.flatMap((r) => r.character_ids.map(String)));
         assert.ok(!used.has(String(C.Bolt)), 'Bolt never signed up');
-        // custom has only Zed, who didn't sign up: not enough anyway
+        // women: Aria signed up (1 only) -> refuse, do not use Bree/Cleo
         i = await run('card', 'auto', { brand: 'raw', division: 'womens', matches: 2 }, ADM);
-        assert.match(text(i), /Fewer than 2|Booked from/, text(i));
+        assert.ok(isErr(i, /Only 1 healthy Women's wrestler/), text(i));
         i = await run('card', 'auto', { brand: 'smackdown', division: 'mens', matches: 2, use_signup: false }, ADM);
         assert.ok(!/signup/.test(text(i)), text(i));
+    });
+    await t('an empty new signup never makes booking fall back to everyone', async () => {
+        await run('signup', 'open', { title: 'Empty show' }, ADM);
+        const i = await run('card', 'auto', { brand: 'raw', division: 'mens', matches: 2 }, ADM);
+        assert.ok(isErr(i, /Only 0 healthy/), text(i));
+        const j = await run('matchmaking', 'suggest', { character: C.Ace }, P('u1'));
+        assert.ok(isErr(j, /Nobody else has signed up/), text(j));
+        // opening it finished the older one
+        const { rows } = await f.pool.query(`select title, status from signups order by id`);
+        assert.deepStrictEqual(rows.map((r) => r.status), ['done', 'done', 'open'].slice(-rows.length));
+        // go back to the first signup for the remaining tests
+        await f.pool.query(`delete from signups where title = 'Empty show'`);
+        await f.pool.query(`update signups set status = 'open' where id = $1`, [sid]);
     });
     await t('closing posts the final list to the staff channel and locks the buttons', async () => {
         await f.pool.query(`update guilds set admin_channel_id = 'staff1' where guild_id=$1`, [G]);
@@ -117,6 +130,18 @@ const edits = [];
         assert.match(text(j), /closed/, text(j));
         j = await run('signup', 'close', {}, ADM);
         assert.ok(isErr(j, /already closed/), text(j));
+    });
+    await t('a closed signup keeps guiding booking (no timer) until signup-done; then everyone is booked again', async () => {
+        await f.pool.query(`update signups set closed_at = now() - interval '40 days'`);
+        let i = await run('matchmaking', 'suggest', { character: C.Ace }, P('u1'));
+        assert.ok(/Cruz/.test(text(i)) && !/Bolt/.test(text(i)), text(i));
+        i = await run('signup', 'done', {}, ADM);
+        assert.match(text(i), /finished/, text(i));
+        i = await run('matchmaking', 'suggest', { character: C.Ace }, P('u1'));
+        assert.ok(/Bolt/.test(text(i)), text(i));
+        i = await run('signup', 'done', {}, ADM);
+        assert.ok(isErr(i, /already finished/), text(i));
+        await f.pool.query(`update signups set status = 'closed'`);
     });
     await t('wrestlers passed over are favored next time, until they wrestle', async () => {
         const p = await su.passedOverCounts(G, [C.Ace, C.Cruz]);
@@ -137,9 +162,9 @@ const edits = [];
     });
     await t('help lists signup for admins only', async () => {
         const a = await run('help', null, {}, ADM);
-        assert.match(text(a), /signup/, text(a));
+        assert.match(text(a), /signup-open/, text(a));
         const pl = await run('help', null, {}, P('u1'));
-        assert.ok(!/signup/.test(text(pl)), text(pl));
+        assert.ok(!/signup-open/.test(text(pl)), text(pl));
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);
