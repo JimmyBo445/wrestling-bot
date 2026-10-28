@@ -47,7 +47,9 @@ function cachedName(guildId, id) {
 async function getDisplayNames(guild, discordIds, timeoutMs = 1200) {
     const result = new Map();
     const missing = [];
+    const botId = guild.members?.me?.id || guild.client?.user?.id || null; // characters held by the bot are "unclaimed"
     for (const id of new Set(discordIds)) {
+        if (botId && id === botId) { result.set(id, 'Unclaimed'); continue; }
         const name = cachedName(guild.id, id);
         if (name) result.set(id, name);
         else missing.push(id);

@@ -55,7 +55,7 @@ module.exports = {
                     EXISTS (SELECT 1 FROM title_reigns tr WHERE tr.lost_date IS NULL AND tr.team_id IS NULL AND tr.character_id = o.id) AS champ,
                     EXISTS (SELECT 1 FROM contenders co WHERE co.status = 'active' AND co.character_id = o.id) AS contender
                  FROM characters o JOIN users u ON u.id = o.owner_id
-                 WHERE o.guild_id = $1 AND o.status = 'approved' AND o.id <> $2 AND o.owner_id <> $3
+                 WHERE o.guild_id = $1 AND o.status = 'approved' AND o.id <> $2 AND o.owner_id <> $3 AND NOT u.is_placeholder
                    AND ($4 OR o.division = $5)`,
                 [guildId, me.id, me.owner_id, anyDivision, me.division]
             );

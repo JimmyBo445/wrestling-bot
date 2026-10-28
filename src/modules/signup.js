@@ -102,7 +102,7 @@ module.exports = {
             return respond(interaction, { content: `🔒 Closed **${signup.title}** with ${n} wrestler${n === 1 ? '' : 's'} signed up. \`/card auto\` and \`/booking suggest\` will favor them for the next week.` });
         }
 
-        const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved'] });
+        const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved'], claimed: true });
         if (sub === 'add') {
             if (signup.status !== 'open') throw new UserError('That signup is closed. Pick an open one with the `signup` option.');
             await su.addEntry(signup, c);

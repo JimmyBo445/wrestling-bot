@@ -8,7 +8,7 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands')).fi
     const c = require(path.join(__dirname, '..', 'src', 'commands', f));
     if (c.data) commands.set(c.data.name, c);
 }
-const client = { commands };
+const client = { commands, user: { id: 'bot1' } };
 client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async () => ({ edit: async () => {} }) } }) };
 client.guilds = { cache: new Map() };
 let getChannelLazy = (id) => ({ id, isTextBased: () => true, send: async () => ({ id: 'x' }) });

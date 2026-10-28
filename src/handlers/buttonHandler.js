@@ -139,6 +139,47 @@ async function handleButtonInteraction(interaction) {
         }
     }
 
+    // ---- /character unclaim confirmation (admins only) ----
+    if (interaction.isButton() && id.startsWith('charunclaim:')) {
+        const [, charId, answer] = id.split(':');
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can answer this.', flags: EPHEMERAL });
+        await interaction.deferUpdate();
+        if (answer === 'no') return interaction.editReply({ content: 'Cancelled. Nothing changed.', embeds: [], components: [] });
+        try {
+            const { requireCharacter } = require('../utils/characterUtils');
+            const unclaim = require('../utils/unclaim');
+            const character = await requireCharacter(interaction.guildId, charId);
+            await unclaim.unclaimCharacter(interaction.client, interaction.guildId, character, interaction.user.id, interaction.client.user.id);
+            return await interaction.editReply({
+                content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history. Give them to a player any time with \`/character transfer\`.`,
+                embeds: [], components: [], allowedMentions: NO_MENTIONS
+            });
+        } catch (err) {
+            const known = err instanceof UserError;
+            if (!known) console.error('Unclaim button failed:', err);
+            return interaction.followUp({ content: known ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Please try again.', flags: EPHEMERAL }).catch(() => {});
+        }
+    }
+
+    // ---- /character swap-division confirmation (admins only) ----
+    if (interaction.isButton() && id.startsWith('divswap:')) {
+        const [, charId, to, answer] = id.split(':');
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can answer this.', flags: EPHEMERAL });
+        await interaction.deferUpdate();
+        if (answer === 'no') return interaction.editReply({ content: 'Cancelled. Nothing changed.', embeds: [], components: [] });
+        try {
+            const { requireCharacter } = require('../utils/characterUtils');
+            const { DIVISION_LABELS } = require('../utils/discordHelpers');
+            const character = await requireCharacter(interaction.guildId, charId);
+            await require('../utils/divisionSwap').swapDivision(interaction.client, interaction.guildId, character, to, interaction.user.id);
+            return await interaction.editReply({ content: `**${character.name}** moved to **${DIVISION_LABELS[to]}**. Their record and history came with them.`, embeds: [], components: [], allowedMentions: NO_MENTIONS });
+        } catch (err) {
+            const known = err instanceof UserError;
+            if (!known) console.error('Division swap button failed:', err);
+            return interaction.followUp({ content: known ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Please try again.', flags: EPHEMERAL }).catch(() => {});
+        }
+    }
+
     // ---- show signups: anyone can use ----
     if (id.startsWith('signup:')) {
         const [, action, signupId] = id.split(':');

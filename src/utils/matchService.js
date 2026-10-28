@@ -68,7 +68,7 @@ async function logMatch(input) {
         throw new UserError('The same character can\'t be booked twice in one match.');
     }
     const characters = [];
-    for (const v of slotCharacterIds) characters.push(await requireCharacter(guildId, v, { statuses: ['approved'] }));
+    for (const v of slotCharacterIds) characters.push(await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true }));
 
     const teamMode = isTeamMatch(matchType);
     const sideTeams = {}; // 1/2 -> team row or null

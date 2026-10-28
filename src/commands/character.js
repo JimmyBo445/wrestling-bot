@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { pool, withTransaction } = require('../db/pool');
 const { ensureUser } = require('../utils/ensureGuild');
-const { canAddCharacter, autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
+const { canAddCharacter, autocompleteCharacters, requireCharacter, assertNameFree } = require('../utils/characterUtils');
 const { postPendingCard } = require('../handlers/pendingQueue');
 const { renderProfileCard } = require('../utils/cardRenderer');
 const { buildProfileData } = require('../utils/cardData');
@@ -9,6 +9,9 @@ const { validateImageUrl, processUpload, saveCharacterImage, deleteCharacterImag
 const { getTitlesHeldByCharacter } = require('../utils/teamUtils');
 const { requireAdmin, isAdmin, respond, reply, DIVISION_LABELS, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const unclaim = require('../utils/unclaim');
+const divSwap = require('../utils/divisionSwap');
 const { logAudit } = require('../utils/audit');
 const { characterSummary } = require('../utils/statsQueries');
 const { DIVISION_THEME, MAX_CHARACTERS_PER_USER } = require('../utils/constants');
@@ -89,12 +92,19 @@ const data = new SlashCommandBuilder()
     .addSubcommand((sub) => sub.setName('transfer')
         .setDescription('[Admin] Give a character to a different player (keeps all stats and history)')
         .addStringOption((o) => charOpt(o))
-        .addUserOption((o) => o.setName('new_owner').setDescription('Who should own it').setRequired(true)));
+        .addUserOption((o) => o.setName('new_owner').setDescription('Who should own it').setRequired(true)))
+    .addSubcommand((sub) => sub.setName('swap-division')
+        .setDescription('[Admin] Move a character to another division (confirms first if titles or teams are affected)')
+        .addStringOption((o) => charOpt(o))
+        .addStringOption((o) => o.setName('division').setDescription('The new division').setRequired(true).addChoices(...DIVISION_CHOICES)))
+    .addSubcommand((sub) => sub.setName('unclaim')
+        .setDescription('[Admin] Take a character off its player (stays in the roster, unowned, until you transfer it)')
+        .addStringOption((o) => charOpt(o)));
 
 // Which statuses to offer in the dropdown for each subcommand
 const STATUS_BY_SUB = {
     profile: ['approved', 'retired'], story: ['approved', 'retired', 'pending'], picture: ['approved', 'retired', 'pending'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
-    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired']
+    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired']
 };
 
 /** Trims; empty text becomes null. */
@@ -143,6 +153,7 @@ module.exports = {
             const name = interaction.options.getString('name').trim();
             const division = interaction.options.getString('division');
             if (!name) throw new UserError('Please give the character a name.');
+            await assertNameFree(guildId, name);
             await interaction.deferReply({ flags: 64 });
             const upload = await readUpload(interaction);
             const imageUrl = upload ? null : await checkImage(interaction.options.getString('image_url'));
@@ -168,6 +179,7 @@ module.exports = {
             const targetUser = interaction.options.getUser('user');
             if (targetUser.bot) throw new UserError('Bots can\'t own characters.');
             const name = interaction.options.getString('name').trim();
+            await assertNameFree(guildId, name);
             await interaction.deferReply();
             const upload = await readUpload(interaction);
             const imageUrl = upload ? null : await checkImage(interaction.options.getString('image_url'));
@@ -242,7 +254,7 @@ module.exports = {
             const updates = []; const params = []; const changed = [];
             const set = (col, val, label) => { params.push(val); updates.push(`${col} = $${params.length}`); changed.push(label); };
             const name = interaction.options.getString('name');
-            if (name !== null) { if (!name.trim()) throw new UserError('Name can\'t be empty.'); set('name', name.trim(), 'name'); }
+            if (name !== null) { if (!name.trim()) throw new UserError('Name can\'t be empty.'); await assertNameFree(guildId, name.trim(), character.id); set('name', name.trim(), 'name'); }
             const upload = await readUpload(interaction);
             const img = interaction.options.getString('image_url');
             if (upload) { set('image_url', await saveCharacterImage(character.id, upload), 'picture'); }
@@ -342,6 +354,41 @@ module.exports = {
             });
             await logAudit(guildId, interaction.user.id, 'character_removed', { name: character.name, owner: character.owner_discord_id });
             return respond(interaction, { content: `Deleted **${character.name}** (was owned by <@${character.owner_discord_id}>).`, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'swap-division') {
+            requireAdmin(interaction, 'change divisions');
+            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            const to = interaction.options.getString('division');
+            if (character.division === to) throw new UserError(`**${character.name}** is already in ${DIVISION_LABELS[to]}.`);
+            const plan = await divSwap.swapPlan(guildId, character);
+            if (!divSwap.hasConflicts(plan)) {
+                await divSwap.swapDivision(interaction.client, guildId, character, to, interaction.user.id);
+                return respond(interaction, { content: `**${character.name}** moved from ${DIVISION_LABELS[character.division]} to **${DIVISION_LABELS[to]}**. Their record and history came with them.`, allowedMentions: NO_MENTIONS });
+            }
+            const embed = new EmbedBuilder().setColor(0xe67e22).setTitle(`Move ${character.name} to ${DIVISION_LABELS[to]}?`)
+                .setDescription(`Currently ${DIVISION_LABELS[character.division]}. Heads up:\n\n${divSwap.describeSwap(plan, to).join('\n')}`);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`divswap:${character.id}:${to}:ok`).setLabel('Move anyway').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`divswap:${character.id}:${to}:no`).setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+            return respond(interaction, { embeds: [embed], components: [row], allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'unclaim') {
+            requireAdmin(interaction, 'unclaim characters');
+            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            if (character.unclaimed) throw new UserError(`**${character.name}** is already unclaimed. Give them to someone with \`/character transfer\`.`);
+            const plan = await unclaim.unclaimPlan(guildId, character);
+            if (!unclaim.hasConflicts(plan)) {
+                await unclaim.unclaimCharacter(interaction.client, guildId, character, interaction.user.id, interaction.client.user.id);
+                return respond(interaction, { content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history, but can't be booked until you give them to a player with \`/character transfer\`.`, allowedMentions: NO_MENTIONS });
+            }
+            const embed = new EmbedBuilder().setColor(0xe67e22).setTitle(`Unclaim ${character.name}?`)
+                .setDescription(`This will take **${character.name}** off <@${character.owner_discord_id}>. Heads up:\n\n${unclaim.describePlan(character, plan).join('\n')}`);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`charunclaim:${character.id}:ok`).setLabel('Unclaim anyway').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`charunclaim:${character.id}:no`).setLabel('Cancel').setStyle(ButtonStyle.Secondary));
+            return respond(interaction, { embeds: [embed], components: [row], allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'transfer') {

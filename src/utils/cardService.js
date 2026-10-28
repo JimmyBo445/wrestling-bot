@@ -119,7 +119,7 @@ async function addMatchToCard(guildId, brand, division, { matchType, characterId
     if (stipulation && stipulation.length > 40) throw new UserError('Keep the stipulation under 40 characters (for example "No DQ" or "Steel Cage").');
 
     const chars = [];
-    for (const v of characterIds) chars.push(await requireCharacter(guildId, v, { statuses: ['approved'] }));
+    for (const v of characterIds) chars.push(await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true }));
     const wrong = chars.filter((c) => c.division !== division);
     if (wrong.length) {
         throw new UserError(`This is the **${divisionLabel(division)}** card, but ${wrong.map((c) => `**${c.name}**`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} in a different division.`);
@@ -335,7 +335,7 @@ const RIVALRY_DAYS = 90;
  */
 async function planCard(guildId, division, count, { signupIds = null, priority = null } = {}) {
     let { rows: pool_ } = await pool.query(
-        `SELECT c.id, c.name, c.owner_id FROM characters c WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved'
+        `SELECT c.id, c.name, c.owner_id FROM characters c JOIN users uo ON uo.id = c.owner_id WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT uo.is_placeholder
            AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
         [guildId, division]
     );

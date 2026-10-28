@@ -1,4 +1,4 @@
-# Wrestling Bot 2.11.0
+# Wrestling Bot 2.12.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -10,7 +10,7 @@ servers at once. Everything is saved permanently in Postgres.
 
 | Area | Commands |
 |---|---|
-| **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
+| **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` `unclaim` `swap-division` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
 | **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
 | **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `interim` `unify` `backfill-reign` `edit-reign` `remove-reign` `watch` `grand-slam` `rematches` `waive-rematch` |

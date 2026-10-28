@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.12.0 — /character unclaim
+- **`/character unclaim`** (admin) takes a character off its player. The character stays in the roster with no owner (shown as "Unclaimed"), keeping its name, picture, story and history. Give it to someone later with `/character transfer`.
+- The old owner **keeps their wins and losses**; the new owner starts at 0-0 with the character.
+- If the wrestler is a champion, on a team, in a signup, under contract or in a tournament, the bot lists what will happen and asks you to confirm with a button. Teams, signups and contracts are cleared (a team that drops below 2 members is disbanded and its tag titles become vacant). Singles titles stay on the character.
+- Unclaimed wrestlers can't be booked in matches, cards, signups or tournaments, and `/card auto` and `/booking suggest` skip them.
+- **`/character swap-division`** (admin) moves a wrestler to another division with their record and history. If they hold a title, are on a team, in a signup, a tournament or are #1 contender, the bot lists what will be cleared and asks you to confirm with a button.
+- **Duplicate names are blocked.** `/character submit`, `assign` and `edit` refuse a name that already exists in the server (ignoring capitals, spaces, punctuation, accents and a leading "The"), and tell you who owns the existing one. Retired characters count, so you are pointed to `/character restore`. Denied characters don't count.
+- New database change: migration 013 (one small column). Nothing existing changes.
+
 ## 2.11.0 — Old command names removed, stricter signups
 - **The old separate commands are gone** (their features all live in the combined commands from 2.10): `/leaderboard` `/rankings` `/season` → `/standings`; `/roster` `/halloffame` `/injury` → `/directory`; `/matchmaking` `/signup` → `/booking`; `/contender` → `/championship contender-…`; `/newsletter` `/report` → `/admin newsletter …` and `/admin report`. 15 commands are left. `/help command:injury` (etc.) tells you where each one went. No data changed.
 - **Signups are strict.** The newest signup guides booking from the moment it opens until you run **`/booking signup-done`** (or open a new signup). There is no 7-day timer, and closing a signup does not end it.

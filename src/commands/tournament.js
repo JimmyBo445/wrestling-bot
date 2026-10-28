@@ -110,7 +110,7 @@ module.exports = {
             for (let i = 1; i <= 8; i++) {
                 const v = interaction.options.getString(`wrestler${i}`);
                 if (v === null) continue;
-                const c = await requireCharacter(guildId, v, { statuses: ['approved'] });
+                const c = await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true });
                 if (c.division !== tour.division) throw new UserError(`**${c.name}** is in a different division than this tournament.`);
                 const { rows: n } = await pool.query(`SELECT COUNT(*)::int AS n FROM tournament_entrants WHERE tournament_id = $1`, [tour.id]);
                 if (n[0].n >= T.MAX_ENTRANTS) throw new UserError(`A tournament holds at most ${T.MAX_ENTRANTS} wrestlers.`);
