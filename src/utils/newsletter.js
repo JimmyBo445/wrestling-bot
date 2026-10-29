@@ -39,7 +39,7 @@ async function buildNewsletter(guildId, guildName, { end = new Date() } = {}) {
     const heated = (await Promise.all(feuds.map(async (f) => ({ f, heat: await feudHeat(f) })))).sort((x, y) => y.heat.score - x.heat.score).slice(0, 2);
 
     const { rows: upcoming } = await pool.query(
-        `SELECT brand, division, name, show_date FROM card_drafts WHERE guild_id = $1 AND show_date >= CURRENT_DATE AND show_date < CURRENT_DATE + 8 ORDER BY show_date`, [guildId]);
+        `SELECT brand, name, show_date FROM card_shows WHERE guild_id = $1 AND show_date >= CURRENT_DATE AND show_date < CURRENT_DATE + 8 ORDER BY show_date`, [guildId]);
     const { rows: injured } = await pool.query(
         `SELECT c.name, to_char(i.returns_at, 'YYYY-MM-DD') AS returns_at FROM injuries i JOIN characters c ON c.id = i.character_id
          WHERE c.guild_id = $1 AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE ORDER BY i.returns_at LIMIT 5`, [guildId]);

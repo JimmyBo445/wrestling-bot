@@ -1,4 +1,4 @@
-# Wrestling Bot 2.12.0
+# Wrestling Bot 2.13.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -20,7 +20,7 @@ servers at once. Everything is saved permanently in Postgres.
 | **Booking** | `/booking suggest` `request` (players), `/booking signup-open` `signup-list` `signup-close` `signup-done` `signup-add` `signup-remove` (admins) |
 | **Contracts** | `/contract offer` `view` `request` `release` `list` `free-agents` `earnings` `bonuses` (fun only: salary + win bonuses = career earnings) |
 | **Reports** (admins) | `/admin report` (also posted weekly to the staff channel) |
-| **Match cards** (admins) | `/card new` `auto` `request` `add` `remove` `move` `view` `post` `recap` `tape` `clear` (RAW red / SmackDown blue, up to 10 matches per division) |
+| **Match cards** (admins) | `/card new` `auto` `add` `request` `edit` `remove` `move` `view` `post` `recap` `tape` `schedule` `clear` (RAW red / SmackDown blue; one card per brand, up to 15 matches per division) |
 | **Injuries** | `/directory injury-add` `injury-clear` `injury-list` (out until a return date; auto cards skip them) |
 | **Seasons** | `/standings season-recap` `season-standings` (calendar-year view; nothing resets) |
 | **Roster** | `/directory roster` flip through a division A to Z with profile cards (Prev / Next buttons) |
@@ -37,7 +37,7 @@ servers at once. Everything is saved permanently in Postgres.
 - **Rematch clause**: the champion who loses a belt is owed a rematch for N days (`/admin rematches`). It is used when that wrestler or team appears in the next title match for that belt.
 - **Title deadlines** (`/admin deadlines`): `defense_days` only warns the staff channel; `vacate_days` vacates a belt when the champion has not wrestled any match for that many days. Both are off until you set them.
 - **Tournaments**: singles only. Log the real matches with `/match log-singles` (or any command that logs a singles match) and the bracket advances; use `/tournament advance` for walkovers.
-- **Match cards**: one card per brand + division (RAW or SmackDown, and each division), up to 10 matches. `/card auto` books one from recent matches; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). A wrestler can be in one match per card, and everyone on a card must be in that division. Cards are plans only: log the real result with `/match` afterwards.
+- **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. `/card auto` books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here and Edit/Move/Remove buttons; `/card post` sends one picture per division with the wrestlers pinged underneath. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
 - **Title match**: add the `title` option to any log command (or use the two `/championship log-...` commands). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.

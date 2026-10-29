@@ -95,21 +95,22 @@ const edits = [];
     });
     await t('card auto books ONLY signed-up wrestlers, books fewer matches rather than pulling in others, and refuses when under 2', async () => {
         await run('signup', 'add', { character: C.Dane }, ADM);
-        let i = await run('card', 'auto', { brand: 'raw', division: 'mens', matches: 3 }, ADM);
-        assert.match(text(i), /Booked only from the \*\*RAW - Nov 3\*\* signup \(3 wrestlers/, text(i));
-        assert.match(text(i), /Only 1 of 3 matches could be booked/, text(i));
+        let i = await run('card', 'auto', { brand: 'raw', matches: 3 }, ADM);
+        assert.match(text(i), /Booked only from the \*\*RAW - Nov 3\*\* signup/, text(i));
+        assert.match(text(i), /Men's:\*\* 1 match \(wanted 3\)/, text(i));
+        assert.match(text(i), /Women's\*\* was skipped: Only 1 healthy Women's wrestler/, text(i));
         const { rows } = await f.pool.query(`select character_ids from card_draft_matches`);
         const used = new Set(rows.flatMap((r) => r.character_ids.map(String)));
         assert.ok(!used.has(String(C.Bolt)), 'Bolt never signed up');
-        // women: Aria signed up (1 only) -> refuse, do not use Bree/Cleo
-        i = await run('card', 'auto', { brand: 'raw', division: 'womens', matches: 2 }, ADM);
-        assert.ok(isErr(i, /Only 1 healthy Women's wrestler/), text(i));
-        i = await run('card', 'auto', { brand: 'smackdown', division: 'mens', matches: 2, use_signup: false }, ADM);
+        // women: Aria signed up (1 only) -> skipped, Bree/Cleo are not pulled in
+        const wd = await f.pool.query(`select 1 from card_drafts where brand='raw' and division='womens'`);
+        assert.strictEqual(wd.rows.length, 0, 'no women\'s matches were booked');
+        i = await run('card', 'auto', { brand: 'smackdown', matches: 2, use_signup: false }, ADM);
         assert.ok(!/signup/.test(text(i)), text(i));
     });
     await t('an empty new signup never makes booking fall back to everyone', async () => {
         await run('signup', 'open', { title: 'Empty show' }, ADM);
-        const i = await run('card', 'auto', { brand: 'raw', division: 'mens', matches: 2 }, ADM);
+        const i = await run('card', 'auto', { brand: 'raw', matches: 2 }, ADM);
         assert.ok(isErr(i, /Only 0 healthy/), text(i));
         const j = await run('matchmaking', 'suggest', { character: C.Ace }, P('u1'));
         assert.ok(isErr(j, /Nobody else has signed up/), text(j));

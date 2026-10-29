@@ -60,7 +60,7 @@ const FINISHES = [
 const FINISH_LABEL = Object.fromEntries(FINISHES.map((f) => [f.value, f.name.replace(/ \(DQ\)/, '').replace('Knockout / Referee stoppage', 'Knockout').replace('Escape / retrieve / last eliminated', 'Escape / Retrieve')]));
 
 const MAX_CHARACTERS_PER_USER = 4;
-const MAX_CARD_MATCHES = 10;
+const MAX_CARD_MATCHES = 15; // per division, so up to 60 on one show
 const DEFAULT_COOLDOWN_HOURS = 24;
 const DEFAULT_STREAK_THRESHOLD = 3;
 const RANKING_WINDOW_DAYS = 90;

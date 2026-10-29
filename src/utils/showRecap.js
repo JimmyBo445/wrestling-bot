@@ -1,4 +1,4 @@
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const { pool } = require('../db/pool');
 const { NO_MENTIONS } = require('./discordHelpers');
 const { FINISH_LABEL, CARD_BRANDS, DIVISION_THEME } = require('./constants');
@@ -81,39 +81,54 @@ async function describeMatch(m, { position, total }) {
 }
 
 /**
- * Builds the written recap for a card. Only matches already logged with /match are included.
+ * Builds the written recap for a show. Pass one division's draft or a list of them (the whole show).
+ * Only matches already logged with /match are included; numbering restarts per division.
  * Returns { embed, count, total } or null when none are logged.
  */
-async function buildShowRecap(draft) {
-    const { rows: slots } = await pool.query(`SELECT * FROM card_draft_matches WHERE draft_id = $1 ORDER BY position`, [draft.id]);
-    const logged = slots.filter((s) => s.match_id);
-    if (!logged.length) return null;
-    const map = await loadMatches(logged.map((s) => s.match_id));
-    const lines = [];
-    let titleChanges = 0, defenses = 0;
-    for (let i = 0; i < logged.length; i++) {
-        const m = map.get(String(logged[i].match_id));
-        if (!m) continue;
-        if (m.title_effect?.type === 'defense') defenses++;
-        if (['new_reign', 'title_change'].includes(m.title_effect?.type)) titleChanges++;
-        lines.push(`**${i + 1}.** ${await describeMatch(m, { position: i + 1, total: logged.length })}`);
+async function buildShowRecap(draftOrDrafts) {
+    const drafts = Array.isArray(draftOrDrafts) ? draftOrDrafts : [draftOrDrafts];
+    const sections = [];
+    let logged = 0, total = 0, titleChanges = 0, defenses = 0;
+    for (const draft of drafts) {
+        const { rows: slots } = await pool.query(`SELECT * FROM card_draft_matches WHERE draft_id = $1 ORDER BY position`, [draft.id]);
+        const done = slots.filter((s) => s.match_id);
+        total += slots.length;
+        if (!done.length) continue;
+        const map = await loadMatches(done.map((s) => s.match_id));
+        const lines = [];
+        for (let i = 0; i < done.length; i++) {
+            const m = map.get(String(done[i].match_id));
+            if (!m) continue;
+            if (m.title_effect?.type === 'defense') defenses++;
+            if (['new_reign', 'title_change'].includes(m.title_effect?.type)) titleChanges++;
+            lines.push(`**${i + 1}.** ${await describeMatch(m, { position: i + 1, total: done.length })}`);
+        }
+        logged += done.length;
+        sections.push({ draft, text: lines.join('\n\n') });
     }
-    const brand = CARD_BRANDS[draft.brand]?.name || draft.brand;
-    const div = DIVISION_THEME[draft.division]?.label || draft.division;
+    if (!logged) return null;
+    const first = drafts[0];
+    const brand = CARD_BRANDS[first.brand]?.name || first.brand;
+    const name = drafts.map((d) => d.name).find(Boolean);
     const notes = [];
     if (titleChanges) notes.push(`${titleChanges} title change${titleChanges === 1 ? '' : 's'}`);
     if (defenses) notes.push(`${defenses} successful defense${defenses === 1 ? '' : 's'}`);
-    const pending = slots.length - logged.length;
+    const pending = total - logged;
+    const single = sections.length === 1 && drafts.length === 1;
+    const body = single ? sections[0].text : sections.map((x) => `__**${DIVISION_THEME[x.draft.division]?.label || x.draft.division}**__\n\n${x.text}`).join('\n\n');
+    const title = single
+        ? `📰 ${name ? `${name} — ` : ''}${brand} ${DIVISION_THEME[first.division]?.label || first.division} results`
+        : `📰 ${name ? `${name} — ` : ''}${brand} results`;
     const embed = new EmbedBuilder().setColor(0xE8BF4A)
-        .setTitle(`📰 ${draft.name ? `${draft.name} — ` : ''}${brand} ${div} results`)
-        .setDescription(lines.join('\n\n').slice(0, 4000))
-        .setFooter({ text: `${logged.length} match${logged.length === 1 ? '' : 'es'}${notes.length ? ` · ${notes.join(' · ')}` : ''}${pending ? ` · ${pending} not logged yet` : ''}` });
-    return { embed, count: logged.length, total: slots.length };
+        .setTitle(title)
+        .setDescription(body.slice(0, 4000))
+        .setFooter({ text: `${logged} match${logged === 1 ? '' : 'es'}${notes.length ? ` · ${notes.join(' · ')}` : ''}${pending ? ` · ${pending} not logged yet` : ''}` });
+    return { embed, count: logged, total };
 }
 
 /**
- * Called after any match is logged. When that was the last match of a card, posts the written recap
- * and the results picture once (matches channel, or where the command was used).
+ * Called after any match is logged. When that was the last match of the whole show card, posts the written
+ * recap and one results picture per division, once (matches channel, or where the command was used).
  * Never throws.
  */
 async function maybeAutoRecap(interaction, result) {
@@ -122,25 +137,22 @@ async function maybeAutoRecap(interaction, result) {
         if (!card) return;
         const { rows: g } = await pool.query(`SELECT auto_recap, matches_channel_id FROM guilds WHERE guild_id = $1`, [interaction.guildId]);
         if (!g[0]?.auto_recap) return;
-        const { rows: d } = await pool.query(`SELECT * FROM card_drafts WHERE guild_id = $1 AND brand = $2 AND division = $3`, [interaction.guildId, card.brand, card.division]);
-        const draft = d[0];
-        if (!draft || draft.recap_posted) return;
-        const { rows: open } = await pool.query(`SELECT 1 FROM card_draft_matches WHERE draft_id = $1 AND match_id IS NULL LIMIT 1`, [draft.id]);
+        const { rows: drafts } = await pool.query(`SELECT * FROM card_drafts WHERE guild_id = $1 AND brand = $2`, [interaction.guildId, card.brand]);
+        if (!drafts.length || drafts.some((d) => d.recap_posted)) return;
+        const ids = drafts.map((d) => d.id);
+        const { rows: open } = await pool.query(`SELECT 1 FROM card_draft_matches WHERE draft_id = ANY($1::bigint[]) AND match_id IS NULL LIMIT 1`, [ids]);
         if (open.length) return;
-        const { rows: any } = await pool.query(`SELECT 1 FROM card_draft_matches WHERE draft_id = $1 LIMIT 1`, [draft.id]);
+        const { rows: any } = await pool.query(`SELECT 1 FROM card_draft_matches WHERE draft_id = ANY($1::bigint[]) LIMIT 1`, [ids]);
         if (!any.length) return;
-        const { rowCount } = await pool.query(`UPDATE card_drafts SET recap_posted = true WHERE id = $1 AND recap_posted = false`, [draft.id]);
+        const { rowCount } = await pool.query(`UPDATE card_drafts SET recap_posted = true WHERE guild_id = $1 AND brand = $2 AND recap_posted = false`, [interaction.guildId, card.brand]);
         if (!rowCount) return;
-        const recap = await buildShowRecap(draft);
-        if (!recap) return;
-        const svc = require('./cardService');
-        const { renderShowCard } = require('../cards/showCard');
-        const files = [];
-        try { files.push(new AttachmentBuilder(await renderShowCard(await svc.buildRecapData(interaction.guild, draft)), { name: 'recap.png' })); } catch (err) { console.error('Auto recap picture failed:', err.message); }
         const channelId = g[0].matches_channel_id || interaction.channelId;
         const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
         if (!channel?.isTextBased()) return;
-        await channel.send({ content: '🎬 **That\'s a wrap!** Every match on the card is in the books.', embeds: [recap.embed], files, allowedMentions: NO_MENTIONS });
+        const { buildRecapMessages, sendToChannel } = require('./cardPost');
+        const messages = await buildRecapMessages(interaction.guild, interaction.guildId, card.brand);
+        messages[0].content = `🎬 **That's a wrap!** Every match on the card is in the books.\n${messages[0].content || ''}`;
+        await sendToChannel(channel, messages);
     } catch (err) { console.error('Auto recap failed:', err.message); }
 }
 

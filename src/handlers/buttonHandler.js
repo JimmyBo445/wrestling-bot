@@ -139,6 +139,64 @@ async function handleButtonInteraction(interaction) {
         }
     }
 
+    // ---- show card buttons and dropdowns (admins only) ----
+    if (id.startsWith('cardui:')) {
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can edit the card.', flags: EPHEMERAL });
+        const [, act, a, b, c, d] = id.split(':');
+        const cardUi = require('../utils/cardUi');
+        const svc = require('../utils/cardService');
+        const cardPost = require('../utils/cardPost');
+        try {
+            if (act === 'pv' || act === 'po') {
+                const preview = act === 'pv';
+                await interaction.deferReply(preview ? { flags: EPHEMERAL } : {});
+                const messages = await cardPost.buildCardMessages(interaction.guild, interaction.guildId, a, { ping: !preview });
+                return await cardPost.replyWith(interaction, messages, { ephemeral: preview });
+            }
+            await interaction.deferUpdate();
+            const guildId = interaction.guildId;
+            const show = (payload) => interaction.editReply(payload);
+            if (act === 'bk') return await show(await cardUi.viewMessage(guildId, a));
+            if (act === 'pg') return await show(await cardUi.viewMessage(guildId, a, { page: Number(b) }));
+            if (act === 'pick') { const [did, pos] = interaction.values[0].split(':'); return await show(await cardUi.matchPanel(guildId, did, Number(pos))); }
+            const draftId = a, pos = Number(b);
+            if (act === 'mp') return await show(await cardUi.matchPanel(guildId, draftId, pos));
+            const draft = await cardUi.getDraftById(guildId, draftId);
+            if (act === 'mu' || act === 'md') {
+                const to = act === 'mu' ? pos - 1 : pos + 1;
+                await svc.moveMatchOnCard(guildId, draft.brand, draft.division, pos, to);
+                return await show(await cardUi.matchPanel(guildId, draftId, to, { notice: '✅ Moved.' }));
+            }
+            if (act === 'rm') return await show(cardUi.removeConfirm(draftId, pos, draft.brand));
+            if (act === 'rmy') {
+                await svc.removeMatchFromCard(guildId, draft.brand, draft.division, pos);
+                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `🗑 Removed ${svc.divisionLabel(draft.division)} match ${pos}.` }));
+            }
+            if (act === 'ed') return await show(await cardUi.editPanel(guildId, draftId, pos));
+            if (act === 'sl') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(interaction.values[0]) }));
+            if (act === 'wp') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(c), page: Number(d) }));
+            if (act === 'wr') {
+                const slotIdx = Number(c);
+                const slotRow = (await svc.getDraftMatches(draftId))[pos - 1];
+                const out = slotRow?.character_ids[slotIdx];
+                const res = await svc.editMatchOnCard(guildId, draft.brand, draft.division, pos, { swapOut: out, swapIn: interaction.values[0] });
+                return await show(await cardUi.editPanel(guildId, draftId, pos, { notice: `✅ Swapped.${res.warnings.length ? `\n⚠️ ${res.warnings.join('\n⚠️ ')}` : ''}` }));
+            }
+            if (act === 'tt' || act === 'st') {
+                const v = interaction.values[0];
+                const edits = act === 'tt' ? { titleId: v === 'none' ? null : v } : { stipulation: v === 'none' ? null : v };
+                const res = await svc.editMatchOnCard(guildId, draft.brand, draft.division, pos, edits);
+                return await show(await cardUi.editPanel(guildId, draftId, pos, { notice: `✅ Updated.${res.warnings.length ? `\n⚠️ ${res.warnings.join('\n⚠️ ')}` : ''}` }));
+            }
+        } catch (err) {
+            const known = err instanceof UserError;
+            if (!known) console.error('Card button failed:', err);
+            const msg = { content: known ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Please try again.', flags: EPHEMERAL };
+            return (interaction.deferred || interaction.replied ? interaction.followUp(msg) : respond(interaction, msg)).catch(() => {});
+        }
+        return;
+    }
+
     // ---- /character unclaim confirmation (admins only) ----
     if (interaction.isButton() && id.startsWith('charunclaim:')) {
         const [, charId, answer] = id.split(':');

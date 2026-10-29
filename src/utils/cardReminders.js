@@ -11,17 +11,21 @@ async function runCardReminders(client, g, now = new Date()) {
     const { date, hour } = localNow(g.tz, now);
     if (hour < 12) return;
     const { rows } = await pool.query(
-        `SELECT * FROM card_drafts WHERE guild_id = $1 AND show_date = $2::date AND reminded_on IS DISTINCT FROM $2::date`, [g.guild_id, date]);
+        `SELECT * FROM card_shows WHERE guild_id = $1 AND show_date = $2::date AND reminded_on IS DISTINCT FROM $2::date`, [g.guild_id, date]);
     if (!rows.length) return;
     const ch = await adminChannel(client, g);
     const guild = client.guilds?.cache?.get(g.guild_id);
-    for (const draft of rows) {
-        const claimed = await pool.query(`UPDATE card_drafts SET reminded_on = $2::date WHERE id = $1 AND reminded_on IS DISTINCT FROM $2::date`, [draft.id, date]);
+    for (const show of rows) {
+        const claimed = await pool.query(`UPDATE card_shows SET reminded_on = $3::date WHERE guild_id = $1 AND brand = $2 AND reminded_on IS DISTINCT FROM $3::date`, [show.guild_id, show.brand, date]);
         if (!claimed.rowCount || !ch) continue;
         try {
-            const slots = await svc.getDraftMatches(draft.id);
-            const payload = { content: `📅 **Tonight's card: ${svc.cardLabel ? svc.cardLabel(draft) : `${svc.brandLabel(draft.brand)} ${svc.divisionLabel(draft.division)}`}${draft.name ? ` — ${draft.name}` : ''}** (${slots.length} match${slots.length === 1 ? '' : 'es'}). Log results with \`/match\` as they happen.\n${await svc.describeCard(draft)}`.slice(0, 1900), allowedMentions: NO_MENTIONS };
-            if (guild && slots.length) payload.files = [new AttachmentBuilder(await renderShowCard(await svc.buildShowData(guild, draft)), { name: 'tonights-card.png' })];
+            const drafts = await svc.filledDrafts(show.guild_id, show.brand);
+            const total = drafts.reduce((n, d) => n + d.n, 0);
+            const payload = { content: `📅 **Tonight's card: ${svc.brandLabel(show.brand)}${show.name ? ` — ${show.name}` : ''}** (${total} match${total === 1 ? '' : 'es'}). Log results with \`/match\` as they happen.\n${await svc.describeShow(show.guild_id, show.brand)}`.slice(0, 1900), allowedMentions: NO_MENTIONS };
+            if (guild && drafts.length) {
+                payload.files = [];
+                for (const d of drafts.slice(0, 4)) payload.files.push(new AttachmentBuilder(await renderShowCard(await svc.buildShowData(guild, d)), { name: `tonights-card-${d.division}.png` }));
+            }
             await ch.send(payload);
         } catch (err) { console.error('Card reminder failed:', err.message); }
     }

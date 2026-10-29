@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.13.0 — One show card per brand
+- **One card per brand.** RAW and SmackDown each have a single show card instead of one per division. You never choose a division when adding a match: it comes from the wrestlers (a match can't mix divisions). Numbering restarts in each division and a division holds up to 15 matches (60 per show).
+- **`/card post`** posts the card as one message per division, in the order Men's, Women's, Custom, Custom Women's (divisions with no matches are skipped). Under each picture it lists who is in each match and **pings the owners**, e.g. `@Ann (Ace) vs @Bo (Bolt)`, 🏆 title matches marked. Optional `division` posts just one; tale of the tape pictures are now opt-in with `tapes:true`.
+- **`/card view`** shows the whole card with buttons: **Preview** (the real pictures, only you see them, nobody is pinged), **Post here**, and a dropdown to pick a match, then **Up / Down / Edit / Remove**. Edit swaps a wrestler from a dropdown of free, healthy wrestlers in that division (with Previous/Next pages past 25) and sets the title and stipulation from dropdowns.
+- **`/card edit`** (new): swap one wrestler (`swap_out` / `swap_in`) and change the title or stipulation without removing the match. `-` clears a title or stipulation.
+- **`/card auto`** books every division at once (`matches` is per division, default 3). Divisions that can't be booked (for example too few signed up) are skipped and listed.
+- `/card remove`, `move`, `tape` and the optional `division` of `clear`/`recap`/`post` take the division plus the number.
+- The show name and date belong to the whole card. `/card schedule` takes just the brand; the staff reminder and the newsletter list one entry per show.
+- The automatic recap waits until every match on the whole card is logged, then posts one results picture per division and one written recap. `/card vote` covers all divisions.
+- Your existing per-division cards are kept and show up as one card per brand when you install. Database change: migration 014.
+
 ## 2.12.0 — /character unclaim
 - **`/character unclaim`** (admin) takes a character off its player. The character stays in the roster with no owner (shown as "Unclaimed"), keeping its name, picture, story and history. Give it to someone later with `/character transfer`.
 - The old owner **keeps their wins and losses**; the new owner starts at 0-0 with the character.

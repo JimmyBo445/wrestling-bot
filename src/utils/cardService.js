@@ -7,6 +7,9 @@ const { requireTitle, getCurrentReign } = require('./titleLogic');
 const { findTeamForCharacters, getTeamMembers } = require('./teamUtils');
 const { getDisplayNames } = require('./discordHelpers');
 
+const DIVISION_ORDER = Object.keys(DIVISION_THEME); // Men's, Women's, Custom, Custom Women's
+const divIndex = (d) => { const i = DIVISION_ORDER.indexOf(d); return i < 0 ? 99 : i; };
+
 const brandLabel = (b) => CARD_BRANDS[b]?.name || b;
 const divisionLabel = (d) => DIVISION_THEME[d]?.label || d;
 const cardLabel = (draft) => `${brandLabel(draft.brand)} ${divisionLabel(draft.division)}`;
@@ -24,21 +27,64 @@ async function getDraft(guildId, brand, division, client = pool, lock = false) {
 
 async function requireDraft(guildId, brand, division, client = pool, lock = false) {
     const d = await getDraft(guildId, brand, division, client, lock);
-    if (!d) throw new UserError(`There's no ${brandLabel(brand)} ${divisionLabel(division)} card yet. Start one with \`/card new\` or \`/card auto\`.`);
+    if (!d) throw new UserError(`There are no ${divisionLabel(division)} matches on the ${brandLabel(brand)} card yet. Add one with \`/card add\`, or start with \`/card auto\`.`);
     return d;
 }
 
-/** Starts a fresh, empty card for this brand + division (replacing any card already there). */
-async function startDraft(guildId, brand, division, createdBy, name = null, client = pool) {
+// ---- the show (one per brand) ----
+
+async function getShow(guildId, brand, client = pool) {
+    const { rows } = await client.query(`SELECT * FROM card_shows WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+    return rows[0] || null;
+}
+
+/** The brand's draft rows (one per division that has a card), in Men's, Women's, Custom, Custom Women's order. */
+async function brandDrafts(guildId, brand, client = pool) {
+    const { rows } = await client.query(
+        `SELECT cd.*, (SELECT COUNT(*)::int FROM card_draft_matches WHERE draft_id = cd.id) AS n
+         FROM card_drafts cd WHERE cd.guild_id = $1 AND cd.brand = $2`, [guildId, brand]);
+    return rows.sort((a, b) => divIndex(a.division) - divIndex(b.division));
+}
+
+/** Drafts that actually have matches. */
+async function filledDrafts(guildId, brand, division = null, client = pool) {
+    return (await brandDrafts(guildId, brand, client)).filter((d) => d.n > 0 && (!division || d.division === division));
+}
+
+/** Starts a fresh, empty show card for the brand. Replaces whatever was there (all divisions). */
+async function startShow(guildId, brand, createdBy, name = null, client = pool) {
+    await client.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+    const { rows } = await client.query(
+        `INSERT INTO card_shows (guild_id, brand, name, created_by) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (guild_id, brand) DO UPDATE SET name = EXCLUDED.name, created_by = EXCLUDED.created_by, show_date = NULL, reminded_on = NULL, updated_at = now()
+         RETURNING *`, [guildId, brand, name, createdBy]);
+    return rows[0];
+}
+
+/** Gets (or quietly creates) the draft for one division of the show. */
+async function ensureDraft(guildId, brand, division, createdBy, client = pool) {
+    const show = await getShow(guildId, brand, client);
+    if (!show) await client.query(`INSERT INTO card_shows (guild_id, brand, created_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [guildId, brand, createdBy]);
     const { rows } = await client.query(
         `INSERT INTO card_drafts (guild_id, brand, division, name, created_by) VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (guild_id, brand, division)
-         DO UPDATE SET name = EXCLUDED.name, created_by = EXCLUDED.created_by, created_at = now(), updated_at = now(), recap_posted = false
-         RETURNING *`,
-        [guildId, brand, division, name, createdBy]
-    );
-    await client.query(`DELETE FROM card_draft_matches WHERE draft_id = $1`, [rows[0].id]);
+         ON CONFLICT (guild_id, brand, division) DO UPDATE SET updated_at = now()
+         RETURNING *`, [guildId, brand, division, show?.name || null, createdBy]);
     return rows[0];
+}
+
+/** Sets the show name everywhere it is shown (the show row and every division draft). */
+async function setShowName(guildId, brand, name, client = pool) {
+    await client.query(`UPDATE card_shows SET name = $3, updated_at = now() WHERE guild_id = $1 AND brand = $2`, [guildId, brand, name]);
+    await client.query(`UPDATE card_drafts SET name = $3 WHERE guild_id = $1 AND brand = $2`, [guildId, brand, name]);
+}
+
+/** Starts an empty draft (kept for tests and older callers): clears that division's matches. */
+async function startDraft(guildId, brand, division, createdBy, name = null, client = pool) {
+    const d = await ensureDraft(guildId, brand, division, createdBy, client);
+    await client.query(`DELETE FROM card_draft_matches WHERE draft_id = $1`, [d.id]);
+    await client.query(`UPDATE card_drafts SET name = COALESCE($2, name), recap_posted = false WHERE id = $1`, [d.id, name]);
+    if (name) await setShowName(guildId, brand, name, client);
+    return { ...d, name: name || d.name };
 }
 
 async function getDraftMatches(draftId, client = pool) {
@@ -101,11 +147,8 @@ async function linkMatchToCard(guildId, matchId, matchType, characterIds) {
 
 // ------------------------------------------------------------------ manual booking
 
-/**
- * Checks and adds one match. Returns { number, warnings:[string] }.
- * Only plans a match: nothing is logged and no stats change until the match is logged with /match.
- */
-async function addMatchToCard(guildId, brand, division, { matchType, characterIds, titleId = null, stipulation = null }) {
+/** Shared checks for a match's wrestlers and title. Returns { chars, title, warnings, division }. */
+async function checkMatch(guildId, matchType, characterIds, titleId) {
     const config = MATCH_CONFIG[matchType];
     if (!config) throw new UserError('Unknown match type.');
     const need = config.slots.length;
@@ -116,20 +159,20 @@ async function addMatchToCard(guildId, brand, division, { matchType, characterId
         throw new UserError(`A **${config.label}** needs exactly **${need}** wrestlers, but you picked ${characterIds.length}.${hint}`);
     }
     if (new Set(ids(characterIds)).size !== need) throw new UserError('The same wrestler can\'t be in a match twice.');
-    if (stipulation && stipulation.length > 40) throw new UserError('Keep the stipulation under 40 characters (for example "No DQ" or "Steel Cage").');
 
     const chars = [];
     for (const v of characterIds) chars.push(await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true }));
+    const division = chars[0].division;
     const wrong = chars.filter((c) => c.division !== division);
     if (wrong.length) {
-        throw new UserError(`This is the **${divisionLabel(division)}** card, but ${wrong.map((c) => `**${c.name}**`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} in a different division.`);
+        throw new UserError(`A match can't mix divisions: **${chars[0].name}** is ${divisionLabel(division)}, but ${wrong.map((c) => `**${c.name}** (${divisionLabel(c.division)})`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} not. Pick wrestlers from the same division.`);
     }
 
     const warnings = [...await injuryWarnings(chars)];
     let title = null;
     if (titleId) {
         title = await requireTitle(guildId, titleId);
-        if (title.division !== division) throw new UserError(`The **${title.name}** is a ${divisionLabel(title.division)} title, so it can't go on the ${divisionLabel(division)} card.`);
+        if (title.division !== division) throw new UserError(`The **${title.name}** is a ${divisionLabel(title.division)} title, so it can't go in a ${divisionLabel(division)} match.`);
         if (title.is_tag_title && !isTeamMatch(matchType)) throw new UserError(`The **${title.name}** is a tag title. Use a tag match type (2v2, 3v3, 6-man or 8-man).`);
         if (!title.is_tag_title && isTeamMatch(matchType)) throw new UserError(`The **${title.name}** is a singles title, so it needs a singles, triple threat, fatal 4-way or 5-way match.`);
         const reign = await getCurrentReign(title.id);
@@ -146,22 +189,75 @@ async function addMatchToCard(guildId, brand, division, { matchType, characterId
             }
         }
     }
+    return { chars, title, warnings, division };
+}
 
+function checkStip(stipulation) {
+    if (stipulation && stipulation.length > 40) throw new UserError('Keep the stipulation under 40 characters (for example "No DQ" or "Steel Cage").');
+}
+
+/**
+ * Checks and adds one match to the brand's show card. The division comes from the wrestlers.
+ * Returns { number, division, warnings:[string] } where number is the match's number within its division.
+ * Only plans a match: nothing is logged and no stats change until the match is logged with /match.
+ */
+async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId = null, stipulation = null, createdBy = 'system' }) {
+    checkStip(stipulation);
+    const { chars, title, warnings, division } = await checkMatch(guildId, matchType, characterIds, titleId);
     return withTransaction(async (client) => {
-        const draft = await requireDraft(guildId, brand, division, client, true);
+        const draft = await ensureDraft(guildId, brand, division, createdBy, client);
+        await client.query(`SELECT id FROM card_drafts WHERE id = $1 FOR UPDATE`, [draft.id]);
         const matches = await getDraftMatches(draft.id, client);
         if (matches.length >= MAX_CARD_MATCHES) {
-            throw new UserError(`The ${cardLabel(draft)} card already has ${MAX_CARD_MATCHES} matches, which is the max. Remove one with \`/card remove\` first.`);
+            throw new UserError(`The ${divisionLabel(division)} part of the ${brandLabel(brand)} card already has ${MAX_CARD_MATCHES} matches, which is the max. Remove one with \`/card remove\` first.`);
         }
-        const onCard = new Map();
-        for (const m of matches) for (const id of m.character_ids) onCard.set(id, true);
+        const onCard = new Set();
+        for (const m of matches) for (const id of m.character_ids) onCard.add(id);
         const dupes = chars.filter((c) => onCard.has(String(c.id)));
         if (dupes.length) {
             throw new UserError(`${dupes.map((c) => `**${c.name}**`).join(', ')} ${dupes.length > 1 ? 'are' : 'is'} already booked on this card. A wrestler can only be in one match per card.`);
         }
         matches.push({ match_type: matchType, character_ids: ids(chars.map((c) => c.id)), title_id: title?.id || null, stipulation: stipulation?.trim() || null });
         await saveMatches(client, draft.id, matches);
-        return { number: matches.length, warnings };
+        await client.query(`UPDATE card_drafts SET recap_posted = false WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+        return { number: matches.length, division, warnings };
+    });
+}
+
+/**
+ * Changes one match in place. Pass only what changes:
+ *  swapOut + swapIn   replace one wrestler (by character id) with another
+ *  titleId            a title id to set, or null to clear it
+ *  stipulation        text to set, or null to clear it
+ * Returns { number, division, warnings }.
+ */
+async function editMatchOnCard(guildId, brand, division, number, { swapOut, swapIn, titleId, stipulation } = {}) {
+    if (stipulation !== undefined) checkStip(stipulation);
+    return withTransaction(async (client) => {
+        const draft = await requireDraft(guildId, brand, division, client, true);
+        const matches = await getDraftMatches(draft.id, client);
+        if (number < 1 || number > matches.length) throw new UserError(matches.length ? `Pick a ${divisionLabel(division)} match number from 1 to ${matches.length}.` : `There are no ${divisionLabel(division)} matches on that card yet.`);
+        const m = matches[number - 1];
+        if (m.match_id) throw new UserError('That match is already logged, so it can\'t be changed on the card.');
+        let characterIds = [...m.character_ids];
+        if (swapIn !== undefined && swapIn !== null) {
+            const inChar = await getCharacterById(swapIn);
+            if (!inChar || inChar.guild_id !== guildId) throw new UserError('I could not find that wrestler. Pick one from the dropdown list that appears as you type.');
+            if (swapOut === undefined || swapOut === null) throw new UserError('Say which wrestler to replace with `swap_out`.');
+            const at = characterIds.indexOf(String(swapOut));
+            if (at < 0) throw new UserError('The wrestler to replace isn\'t in that match.');
+            characterIds[at] = String(inChar.id);
+            for (let i = 0; i < matches.length; i++) {
+                if (i === number - 1) continue;
+                if (matches[i].character_ids.includes(String(inChar.id))) throw new UserError(`**${inChar.name}** is already booked in another match on this card.`);
+            }
+        }
+        const newTitleId = titleId === undefined ? m.title_id : titleId;
+        const { title, warnings } = await checkMatch(guildId, m.match_type, characterIds, newTitleId);
+        if (division !== (await getCharacterById(characterIds[0])).division) throw new UserError('That wrestler is in a different division.');
+        matches[number - 1] = { ...m, character_ids: ids(characterIds), title_id: title?.id || null, stipulation: stipulation === undefined ? m.stipulation : (stipulation ? stipulation.trim() : null) };
+        await saveMatches(client, draft.id, matches);
+        return { number, division, warnings };
     });
 }
 
@@ -169,7 +265,7 @@ async function removeMatchFromCard(guildId, brand, division, number) {
     return withTransaction(async (client) => {
         const draft = await requireDraft(guildId, brand, division, client, true);
         const matches = await getDraftMatches(draft.id, client);
-        if (number < 1 || number > matches.length) throw new UserError(matches.length ? `Pick a match number from 1 to ${matches.length}.` : 'That card has no matches yet.');
+        if (number < 1 || number > matches.length) throw new UserError(matches.length ? `Pick a ${divisionLabel(division)} match number from 1 to ${matches.length}.` : 'That card has no matches yet.');
         matches.splice(number - 1, 1);
         await saveMatches(client, draft.id, matches);
         return matches.length;
@@ -181,7 +277,7 @@ async function moveMatchOnCard(guildId, brand, division, from, to) {
         const draft = await requireDraft(guildId, brand, division, client, true);
         const matches = await getDraftMatches(draft.id, client);
         if (!matches.length) throw new UserError('That card has no matches yet.');
-        if (from < 1 || from > matches.length || to < 1 || to > matches.length) throw new UserError(`Match numbers go from 1 to ${matches.length}.`);
+        if (from < 1 || from > matches.length || to < 1 || to > matches.length) throw new UserError(`${divisionLabel(division)} match numbers go from 1 to ${matches.length}.`);
         const [m] = matches.splice(from - 1, 1);
         matches.splice(to - 1, 0, m);
         await saveMatches(client, draft.id, matches);
@@ -189,9 +285,16 @@ async function moveMatchOnCard(guildId, brand, division, from, to) {
     });
 }
 
-async function clearCard(guildId, brand, division) {
-    const { rowCount } = await pool.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2 AND division = $3`, [guildId, brand, division]);
-    if (!rowCount) throw new UserError(`There's no ${brandLabel(brand)} ${divisionLabel(division)} card to clear.`);
+/** Deletes one division's part of the card, or the whole show card when no division is given. */
+async function clearCard(guildId, brand, division = null) {
+    if (division) {
+        const { rowCount } = await pool.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2 AND division = $3`, [guildId, brand, division]);
+        if (!rowCount) throw new UserError(`There are no ${divisionLabel(division)} matches on the ${brandLabel(brand)} card.`);
+        return;
+    }
+    const { rowCount } = await pool.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+    const shows = await pool.query(`DELETE FROM card_shows WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+    if (!rowCount && !shows.rowCount) throw new UserError(`There's no ${brandLabel(brand)} card to clear.`);
 }
 
 // ------------------------------------------------------------------ rendering data
@@ -517,18 +620,102 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     return result;
 }
 
-/** Generates a card and saves it as the draft for this brand + division. */
-async function autoCard(guildId, brand, division, createdBy, count, name = null, { signupIds = null, priority = null } = {}) {
-    const plan = await planCard(guildId, division, count, { signupIds, priority });
-    if (!plan.length) throw new UserError('I couldn\'t find enough free wrestlers to book any matches.');
+/**
+ * Books every division at once for the brand's show card, replacing what was there.
+ * Divisions that can't be booked (fewer than 2 wrestlers, or too few signed up) are skipped and reported.
+ * Returns { drafts, results:[{division, planned, wanted}], skipped:[{division, reason}], signupMode, signedCount }.
+ */
+async function autoShow(guildId, brand, createdBy, perDivision, name = null, { signupIds = null, priority = null } = {}) {
+    const { rows: counts } = await pool.query(
+        `SELECT c.division, COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND c.status = 'approved' AND NOT u.is_placeholder GROUP BY c.division`, [guildId]);
+    const have = new Map(counts.map((r) => [r.division, r.n]));
+    const plans = [], skipped = [];
+    let signedCount = 0, signupMode = null;
+    for (const division of DIVISION_ORDER) {
+        if ((have.get(division) || 0) < 2) continue; // nothing to book here, and nothing worth reporting
+        try {
+            const plan = await planCard(guildId, division, perDivision, { signupIds, priority });
+            if (plan.length) plans.push({ division, plan });
+            if (plan.signupMode) { signupMode = 'used'; signedCount += plan.signedCount; }
+        } catch (err) {
+            if (!(err instanceof UserError)) throw err;
+            skipped.push({ division, reason: err.message });
+        }
+    }
+    if (!plans.length) {
+        throw new UserError(skipped.length ? skipped.map((s) => `**${divisionLabel(s.division)}:** ${s.reason}`).join('\n') : 'I couldn\'t find enough free wrestlers to book any matches.');
+    }
     return withTransaction(async (client) => {
-        const draft = await startDraft(guildId, brand, division, createdBy, name, client);
-        await saveMatches(client, draft.id, plan);
-        return { draft, planned: plan.length, signupMode: plan.signupMode, signedCount: plan.signedCount };
+        await startShow(guildId, brand, createdBy, name, client);
+        const drafts = [];
+        for (const { division, plan } of plans) {
+            const d = await ensureDraft(guildId, brand, division, createdBy, client);
+            await saveMatches(client, d.id, plan);
+            drafts.push(d);
+        }
+        return { drafts, results: plans.map((p) => ({ division: p.division, planned: p.plan.length, wanted: perDivision })), skipped, signupMode, signedCount };
     });
 }
 
+/** Plain-text running order of the whole show, grouped by division. */
+async function describeShow(guildId, brand) {
+    const drafts = await filledDrafts(guildId, brand);
+    if (!drafts.length) return '_No matches yet._';
+    const parts = [];
+    for (const d of drafts) parts.push(`**${divisionLabel(d.division)}**\n${await describeCard(d)}`);
+    return parts.join('\n\n');
+}
+
+/**
+ * The "who is in which match" message that goes under a division's picture.
+ * Returns { text, userIds } (text may be several messages long: split with chunkLines).
+ */
+async function pingLines(draft) {
+    const slots = await getDraftMatches(draft.id);
+    const allIds = [...new Set(slots.flatMap((m) => m.character_ids))];
+    const { rows: chars } = allIds.length
+        ? await pool.query(`SELECT c.id, c.name, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [allIds])
+        : { rows: [] };
+    const byId = new Map(chars.map((c) => [String(c.id), c]));
+    const titleIds = [...new Set(slots.map((m) => m.title_id).filter(Boolean))];
+    const { rows: titles } = titleIds.length ? await pool.query(`SELECT id, name FROM titles WHERE id = ANY($1::bigint[])`, [titleIds]) : { rows: [] };
+    const tn = new Map(titles.map((t) => [String(t.id), t.name]));
+    const userIds = new Set();
+    const who = (id) => {
+        const c = byId.get(String(id));
+        if (!c) return 'TBD';
+        if (c.is_placeholder) return c.name;
+        userIds.add(c.discord_id);
+        return `<@${c.discord_id}> (${c.name})`;
+    };
+    const lines = slots.map((m) => {
+        const config = MATCH_CONFIG[m.match_type];
+        let text;
+        if (config?.winnerMode === 'team') {
+            const half = m.character_ids.length / 2;
+            text = `${m.character_ids.slice(0, half).map(who).join(' & ')} vs ${m.character_ids.slice(half).map(who).join(' & ')}`;
+        } else if (m.character_ids.length === 2) text = `${who(m.character_ids[0])} vs ${who(m.character_ids[1])}`;
+        else text = m.character_ids.map(who).join(', ');
+        return `**${m.position}.** ${text}${m.title_id ? `, 🏆 ${tn.get(String(m.title_id)) || 'Title match'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
+    });
+    return { lines, userIds: [...userIds] };
+}
+
+/** Packs lines into messages of at most `max` characters. */
+function chunkLines(header, lines, max = 1900) {
+    const out = [];
+    let cur = header;
+    for (const line of lines) {
+        if (cur.length + line.length + 1 > max) { out.push(cur); cur = ''; }
+        cur += (cur ? '\n' : '') + line;
+    }
+    if (cur) out.push(cur);
+    return out;
+}
+
 module.exports = {
-    brandLabel, divisionLabel, cardLabel, getDraft, requireDraft, startDraft, getDraftMatches,
-    tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard, autoCard
+    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, getDraft, requireDraft, startDraft, getDraftMatches,
+    getShow, brandDrafts, filledDrafts, startShow, ensureDraft, setShowName, editMatchOnCard, autoShow, describeShow, pingLines, chunkLines,
+    tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard
 };
