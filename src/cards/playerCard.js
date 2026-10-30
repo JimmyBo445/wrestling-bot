@@ -26,6 +26,13 @@ async function renderPlayerCard(data) {
     ctx.fillStyle = C.sub; ctx.font = font(17, 'medium');
     ctx.fillText(`PLAYER RECORD  •  ${s.total} MATCH${s.total === 1 ? '' : 'ES'}`, 184, 130);
 
+    const tt = data.titles;
+    if (tt && tt.reigns) {
+        ctx.fillStyle = C.gold; ctx.font = font(16, 'bold');
+        const cur = tt.current.length ? `  •  CHAMPION: ${tt.current.map((c) => c.title).join(', ')}` : '';
+        fitText(ctx, `${tt.reigns} TITLE REIGN${tt.reigns === 1 ? '' : 'S'}  •  ${tt.days} DAYS AS CHAMPION${cur}`, 184, 156, W - 184 - 40, 16, 'bold', 11);
+    }
+
     // overall boxes
     const st = streakText(s.streaks);
     const bw = 220, gap = 14, by = 190;

@@ -240,10 +240,11 @@ async function buildRankingsData(guild, division) {
 /** A player's card: overall + per-division records and their wrestlers. */
 async function buildPlayerData(guild, user, ownerId) {
     const u = await userSummary(guild.id, ownerId);
+    const titles = await require('./playerTitles').playerTitleStats(guild.id, ownerId);
     const avatarUrl = typeof user.displayAvatarURL === 'function' ? user.displayAvatarURL({ extension: 'png', size: 256 }) : null;
     return {
         serverName: guild.name || null, name: user.displayName || user.username, avatarUrl,
-        summary: u, byDivision: u.byDivision,
+        summary: u, byDivision: u.byDivision, titles,
         wrestlers: u.chars.map((c) => ({ name: c.name, division: c.division, status: c.status, current: c.current, wins: c.wins, losses: c.losses, draws: c.draws }))
     };
 }

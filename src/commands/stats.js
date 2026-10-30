@@ -26,6 +26,7 @@ const data = new SlashCommandBuilder()
         .addBooleanOption((o) => o.setName('text').setDescription('Show plain text instead of the player card picture').setRequired(false)))
     .addSubcommand((s) => s.setName('head-to-head').setDescription('Record between two wrestlers')
         .addStringOption((o) => charOpt(o, 'character1', 'First wrestler')).addStringOption((o) => charOpt(o, 'character2', 'Second wrestler')).addStringOption(periodOpt))
+    .addSubcommand((s) => s.setName('champions').setDescription('Players ranked by title reigns (credit stays with whoever owned the wrestler)'))
     .addSubcommand((s) => s.setName('versus').setDescription('Record between two players (all of their wrestlers)')
         .addUserOption((o) => o.setName('player1').setDescription('First player').setRequired(true))
         .addUserOption((o) => o.setName('player2').setDescription('Second player').setRequired(true)).addStringOption(periodOpt))
@@ -94,6 +95,13 @@ module.exports = {
             return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
 
+        if (sub === 'champions') {
+            const top = await require('../utils/playerTitles').topChampions(guildId);
+            if (!top.length) return respond(interaction, { content: 'No title reigns on record yet.', flags: 64 });
+            const lines = top.map((r, i) => `**${i + 1}.** <@${r.discord_id}> — **${r.reigns}** reign${r.reigns === 1 ? '' : 's'} · ${r.days} days · ${r.defenses} defense${r.defenses === 1 ? '' : 's'}${r.current ? ` · 👑 holds ${r.current}` : ''}`);
+            return respond(interaction, { embeds: [new EmbedBuilder().setTitle('Most Decorated Players').setColor(0xE8BF4A).setDescription(lines.join('\n').slice(0, 4000)).setFooter({ text: 'Credit goes to whoever owned the wrestler at the time' })], allowedMentions: NO_MENTIONS });
+        }
+
         if (sub === 'timeline') {
             const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
             await interaction.deferReply();
@@ -117,7 +125,8 @@ module.exports = {
             const target = interaction.options.getUser('user') || interaction.user;
             const ownerId = await ensureUser(guildId, target.id);
             const u = await userSummary(guildId, ownerId);
-            if (!u.chars.length) throw new UserError(`<@${target.id}> has no approved characters yet.`);
+            const tstat = await require('../utils/playerTitles').playerTitleStats(guildId, ownerId);
+            if (!u.chars.length && !tstat.reigns) throw new UserError(`<@${target.id}> has no approved characters yet.`);
             if (!interaction.options.getBoolean('text')) {
                 await interaction.deferReply();
                 const buffer = await renderPlayerCard(await buildPlayerData(interaction.guild, target, ownerId));
@@ -131,6 +140,7 @@ module.exports = {
                     { name: 'Streak', value: streakStr(u.streaks), inline: true },
                     { name: 'Best Win Streak', value: String(u.streaks.longestWin), inline: true },
                     { name: 'Last 5', value: form(u.form), inline: true },
+                    ...(tstat.reigns ? [{ name: 'Championships', value: `**${tstat.reigns}** reign${tstat.reigns === 1 ? '' : 's'} · ${tstat.days} days · ${tstat.defenses} defense${tstat.defenses === 1 ? '' : 's'}${tstat.current.length ? `\nCurrent: ${tstat.current.map((c) => `${c.title} (${c.holder})`).join(', ')}` : ''}`.slice(0, 1000) }] : []),
                     { name: 'By division', value: (divLines.join('\n') || '—').slice(0, 1000) },
                     { name: 'Wrestlers', value: u.chars.map((c) => `**${c.name}**${c.status === 'retired' ? ' _(retired)_' : ''}${c.current ? '' : ' _(former)_'}: ${c.wins}-${c.losses}${c.streaks.current ? ` (${c.streaks.direction === 'win' ? 'W' : 'L'}${c.streaks.current})` : ''}`).join('\n') }
                 );

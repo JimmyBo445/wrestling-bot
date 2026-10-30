@@ -18,7 +18,7 @@ const BLURB = {
     standings: 'Leaderboards, division rankings and season standings',
     booking: 'Find opponents, request matches, run show signups',
     directory: 'Roster pages, Hall of Fame and the injury report',
-    stats: 'Records, streaks, head-to-head, history',
+    stats: 'Records, streaks, head-to-head, history, most decorated players',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
     championship: 'Look at titles: champions, belt cards, a button panel, history, defenses',

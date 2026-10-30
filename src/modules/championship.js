@@ -175,7 +175,9 @@ async function historyEmbed(title) {
             FROM title_reigns tr LEFT JOIN characters c ON c.id = tr.character_id LEFT JOIN teams tm ON tm.id = tr.team_id
             WHERE tr.title_id = $1) x ORDER BY won_date DESC, id DESC LIMIT 20`, [title.id]);
     if (!rows.length) return null;
-    const lines = rows.map((r) => `**#${r.n} ${reignHolderName(r)}**${r.is_backfilled ? ' _(historical)_' : ''}\n${fmtDate(r.won_date)} → ${fmtDate(r.lost_date)} · ${daysBetween(r.won_date, r.lost_date)} days · ${r.defenses} defense${r.defenses === 1 ? '' : 's'}${r.notes ? `\n_${r.notes}_` : ''}`);
+    const { rows: own } = await pool.query(`SELECT ro.reign_id, u.discord_id FROM reign_owners ro JOIN users u ON u.id = ro.user_id WHERE ro.reign_id = ANY($1::bigint[])`, [rows.map((r) => r.id)]);
+    const played = (id) => { const m = own.filter((o) => String(o.reign_id) === String(id)).map((o) => `<@${o.discord_id}>`); return m.length ? ` · played by ${m.join(' & ')}` : ''; };
+    const lines = rows.map((r) => `**#${r.n} ${reignHolderName(r)}**${played(r.id)}${r.is_backfilled ? ' _(historical)_' : ''}\n${fmtDate(r.won_date)} → ${fmtDate(r.lost_date)} · ${daysBetween(r.won_date, r.lost_date)} days · ${r.defenses} defense${r.defenses === 1 ? '' : 's'}${r.notes ? `\n_${r.notes}_` : ''}`);
     return new EmbedBuilder().setTitle(`${title.name} — Reign History`).setColor(0xE8BF4A).setDescription(lines.join('\n\n').slice(0, 4000)).setFooter({ text: rows.length === 20 ? 'Showing the 20 most recent reigns' : `${rows.length} reign(s)` });
 }
 

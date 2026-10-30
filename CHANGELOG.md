@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.16.0 — Players get credit for title reigns
+- Every title reign now remembers the **player** who owned the wrestler at the time, not just the character. If the character is transferred later, the old owner keeps the credit and the new owner earns their own from then on. Tag reigns credit both players. Unclaimed wrestlers earn no player credit.
+- **`/stats user`** (picture and text) shows the player's title reigns, days as champion, defenses and the belts they hold now.
+- **`/stats champions`** (new): players ranked by title reigns.
+- **`/championship history`** shows "played by @player" on each reign.
+- Existing reigns are credited to whoever owns the wrestler today (the best the bot can know). Fix any with `/reign edit`. Database change: migration 016.
+
 ## 2.15.0 — Record results from the show card
 - In `/card view`, pick a match and press **🎬 Record result**, then press the winner (one button per wrestler, or per team), **Draw** or **No contest**. The match is logged just like `/match log`: records, titles, streaks and the card slot are updated.
 - The **result picture is posted in your match results channel** (or where you pressed the button if none is set). When it was the last match on the card, the usual wrap-up recap follows.
