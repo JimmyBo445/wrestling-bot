@@ -175,6 +175,29 @@ async function handleButtonInteraction(interaction) {
                 await svc.removeMatchFromCard(guildId, draft.brand, draft.division, pos);
                 return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `🗑 Removed ${svc.divisionLabel(draft.division)} match ${pos}.` }));
             }
+            if (act === 'rc') return await show(await cardUi.recordPanel(guildId, draftId, pos));
+            if (act === 'rw') {
+                const code = c;
+                const slot = (await svc.getDraftMatches(draftId))[pos - 1];
+                if (!slot) throw new UserError('That match is gone. Run `/card view` again.');
+                if (slot.match_id) return await show(await cardUi.matchPanel(guildId, draftId, pos, { notice: 'That match is already recorded.' }));
+                const { MATCH_CONFIG } = require('../utils/constants');
+                const cfg = MATCH_CONFIG[slot.match_type];
+                const decisive = !['d', 'n'].includes(code);
+                const result = await require('../utils/matchService').logMatch({
+                    guildId, matchType: slot.match_type, slotCharacterIds: slot.character_ids.map(String),
+                    winnerIndex: decisive && cfg.winnerMode === 'single' ? Number(code) - 1 : null,
+                    winningTeam: decisive && cfg.winnerMode === 'team' ? Number(code) : null,
+                    resultType: decisive ? 'decisive' : code === 'd' ? 'draw' : 'no_contest',
+                    titleValue: slot.title_id ? String(slot.title_id) : null, stipulation: slot.stipulation,
+                    overrideCooldown: true, actor: interaction.user.id
+                });
+                const { presentMatch, postToResultsChannel } = require('../utils/matchPresenter');
+                const { payload } = await presentMatch(interaction, result);
+                const channel = await postToResultsChannel(interaction, payload);
+                await require('../utils/showRecap').maybeAutoRecap(interaction, result);
+                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `✅ Recorded ${svc.divisionLabel(draft.division)} match ${pos} (#${result.matchId}). The result picture was posted in <#${channel.id}>. Undo it with \`/match undo ${result.matchId}\`.` }));
+            }
             if (act === 'ed') return await show(await cardUi.editPanel(guildId, draftId, pos));
             if (act === 'sl') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(interaction.values[0]) }));
             if (act === 'wp') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(c), page: Number(d) }));

@@ -77,7 +77,36 @@ async function matchPanel(guildId, draftId, position, { notice = null } = {}) {
         btn(`cardui:ed:${draft.id}:${position}`, '✏️ Edit', ButtonStyle.Primary, logged),
         btn(`cardui:rm:${draft.id}:${position}`, '🗑 Remove', ButtonStyle.Danger, logged),
         btn(`cardui:bk:${draft.brand}`, '↩ Back'))];
+    rows.push(new ActionRowBuilder().addComponents(btn(`cardui:rc:${draft.id}:${position}`, logged ? '✅ Recorded' : '🎬 Record result', logged ? ButtonStyle.Secondary : ButtonStyle.Success, logged)));
     return { content, components: rows, files: [], embeds: [], allowedMentions: { parse: [] } };
+}
+
+/** Who won? One button per wrestler (or per team), plus Draw and No contest. */
+async function recordPanel(guildId, draftId, position) {
+    const draft = await getDraftById(guildId, draftId);
+    const slots = await svc.getDraftMatches(draft.id);
+    const slot = slots[position - 1];
+    if (!slot) return viewMessage(guildId, draft.brand, { notice: 'That match is gone.' });
+    if (slot.match_id) return matchPanel(guildId, draftId, position, { notice: 'That match is already recorded.' });
+    if (slot.character_ids.some((c) => !c)) throw new UserError('This match still has a TBD wrestler. Edit it first.');
+    const cfg = MATCH_CONFIG[slot.match_type];
+    const allIds = slot.character_ids;
+    const { rows } = await pool.query(`SELECT id, name FROM characters WHERE id = ANY($1::bigint[])`, [allIds]);
+    const nm = new Map(rows.map((c) => [String(c.id), c.name]));
+    const n = (id) => nm.get(String(id)) || 'TBD';
+    const id = (code) => `cardui:rw:${draft.id}:${position}:${code}`;
+    const buttons = [];
+    if (cfg.winnerMode === 'team') {
+        const half = allIds.length / 2;
+        buttons.push(btn(id(1), `🏆 ${allIds.slice(0, half).map(n).join(' & ')}`.slice(0, 80), ButtonStyle.Primary), btn(id(2), `🏆 ${allIds.slice(half).map(n).join(' & ')}`.slice(0, 80), ButtonStyle.Primary));
+    } else {
+        allIds.forEach((c, i) => buttons.push(btn(id(i + 1), `🏆 ${n(c)}`.slice(0, 80), ButtonStyle.Primary)));
+    }
+    const rows2 = [new ActionRowBuilder().addComponents(buttons.slice(0, 5)),
+        new ActionRowBuilder().addComponents(btn(id('d'), 'Draw'), btn(id('n'), 'No contest'), btn(`cardui:mp:${draft.id}:${position}`, '↩ Cancel'))];
+    const [name] = await slotNames([slot]);
+    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}**\n${cfg.label}: ${name}${slot.stipulation ? ` _(${slot.stipulation})_` : ''}${slot.title_id ? ' 🏆 title match' : ''}\n\n**Who won?** The result picture goes to the match results channel. Add a finish, score or notes afterwards with \`/match edit\`.`;
+    return { content, components: rows2, files: [], embeds: [], allowedMentions: { parse: [] } };
 }
 
 function removeConfirm(draftId, position, brand) {
@@ -149,4 +178,5 @@ async function editPanel(guildId, draftId, position, { slot = null, page = 0, no
 
 function isTag(matchType) { return MATCH_CONFIG[matchType]?.winnerMode === 'team'; }
 
-module.exports = { viewMessage, matchPanel, editPanel, removeConfirm, getDraftById };
+module.exports = {
+    recordPanel, viewMessage, matchPanel, editPanel, removeConfirm, getDraftById };

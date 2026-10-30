@@ -91,4 +91,15 @@ async function mirrorToMatchesChannel(interaction, payload) {
     }
 }
 
-module.exports = { presentMatch, mirrorToMatchesChannel, textSummary };
+/** Always posts a result in the matches channel (or, with none set, where the button was pressed). Returns the channel or null. */
+async function postToResultsChannel(interaction, payload) {
+    const settings = await getGuildSettings(interaction.guildId);
+    let channel = null;
+    if (settings.matches_channel_id) channel = await interaction.guild.channels.fetch(settings.matches_channel_id).catch(() => null);
+    if (!channel?.isTextBased()) channel = interaction.channel;
+    const files = (payload.files || []).map((f) => new AttachmentBuilder(f.attachment, { name: f.name }));
+    await channel.send({ ...payload, files });
+    return channel;
+}
+
+module.exports = { presentMatch, mirrorToMatchesChannel, postToResultsChannel, textSummary };

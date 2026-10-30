@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.15.0 — Record results from the show card
+- In `/card view`, pick a match and press **🎬 Record result**, then press the winner (one button per wrestler, or per team), **Draw** or **No contest**. The match is logged just like `/match log`: records, titles, streaks and the card slot are updated.
+- The **result picture is posted in your match results channel** (or where you pressed the button if none is set). When it was the last match on the card, the usual wrap-up recap follows.
+- Cooldowns are skipped for booked card matches. Add a finish, score or notes afterwards with `/match edit`. Undo with `/match undo`. Admins only. No database change.
+
 ## 2.14.0 — Championship revamp and belt pictures
 - **Three commands instead of one big menu.** `/championship` is now just for looking (list, belt, panel, lineage, defenses, history, grand-slam, rematches, contender-list, contender-challenge). Admins run belts with **`/title`** and fix the record with **`/reign`**.
 - **`/title match`**: pick the title, the challenger and who won. The bot fills in the current champion (for a vacant title, also fill in `opponent`). Works for singles and for 2v2 tag titles (pick a team). Stipulation, finish, score and notes are optional. The old two `log-...-title-match` commands are gone.

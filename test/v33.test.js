@@ -175,6 +175,41 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
         const p = lastPayload(c);
         assert.match(p.content || text(c), /challenging/);
     });
+    await t('card panel: Record button logs a booked match and posts the picture in the results channel', async () => {
+        const { sent } = require('./mock');
+        await f.pool.query(`update guilds set matches_channel_id = 'matches1' where guild_id = $1`, [G]);
+        let i = await run('card', 'add', { brand: 'smackdown', match_type: 'singles', wrestler1: C.W10, wrestler2: C.W11 }, ADM);
+        assert.ok(!isErr(i), text(i));
+        i = await run('card', 'add', { brand: 'smackdown', match_type: 'tag2v2', wrestler1: C.W12, wrestler2: C.W13, wrestler3: C.W14, wrestler4: C.W15 }, ADM);
+        const [d] = await q(`select id from card_drafts where guild_id=$1 and brand='smackdown' and division='mens'`, [G]);
+        let c = await click(`cardui:pick:smackdown`, { values: [`${d.id}:1`] });
+        const ids = (x) => (lastPayload(x).components || []).flatMap((r) => r.components.map((b) => b.data.custom_id));
+        assert.ok(ids(c).includes(`cardui:rc:${d.id}:1`));
+        c = await click(`cardui:rc:${d.id}:1`);
+        assert.match(text(c), /Who won/); assert.ok(ids(c).includes(`cardui:rw:${d.id}:1:2`) && ids(c).includes(`cardui:rw:${d.id}:1:d`));
+        const before = sent.length;
+        c = await click(`cardui:rw:${d.id}:1:2`);
+        assert.ok(!isErr(c), text(c)); assert.match(text(c), /Recorded/);
+        const posted = sent.slice(before).filter((m) => m.channelId === 'matches1' && (m.payload.embeds || []).length);
+        assert.strictEqual(posted.length, 1, JSON.stringify(sent.slice(before).map((m) => m.channelId)));
+        const [m] = await q(`select m.id, mp.is_winner, mp.character_id from matches m join match_participants mp on mp.match_id=m.id where m.guild_id=$1 order by m.id desc limit 2`, [G]);
+        assert.ok(m);
+        const [slot] = await q(`select match_id from card_draft_matches where draft_id=$1 and position=1`, [d.id]);
+        assert.ok(slot.match_id, 'slot linked to the logged match');
+        const win = await q(`select character_id from match_participants where match_id=$1 and is_winner`, [slot.match_id]);
+        assert.deepStrictEqual(win.map((x) => String(x.character_id)), [C.W11]);
+        // can't record twice
+        c = await click(`cardui:rw:${d.id}:1:1`);
+        assert.match(text(c), /already recorded/);
+        // team match: winning team 1, and draw
+        c = await click(`cardui:rw:${d.id}:2:1`);
+        assert.ok(!isErr(c), text(c));
+        const [t2] = await q(`select match_id from card_draft_matches where draft_id=$1 and position=2`, [d.id]);
+        assert.deepStrictEqual((await q(`select character_id from match_participants where match_id=$1 and is_winner order by 1`, [t2.match_id])).map((x) => String(x.character_id)).sort(), [C.W12, C.W13].sort());
+        // players can't use it
+        c = await click(`cardui:rw:${d.id}:1:1`, { admin: false, user: 'u9' });
+        assert.match(text(c), /Only admins/);
+    });
     await t('help knows /title and /reign; commands load', async () => {
         const i = await run('help', null, {}, ADM);
         assert.match(text(i), /\/title/); assert.match(text(i), /\/reign/);
