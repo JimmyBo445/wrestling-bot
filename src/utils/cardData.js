@@ -154,7 +154,15 @@ async function buildBeltData(guild, title) {
         `SELECT COALESCE(tm.name, c.name, tr.reign_char_name) AS name, (tr.lost_date - tr.won_date)::int AS days
          FROM title_reigns tr LEFT JOIN characters c ON c.id = tr.character_id LEFT JOIN teams tm ON tm.id = tr.team_id
          WHERE tr.title_id = $1 AND tr.lost_date IS NOT NULL ORDER BY tr.lost_date DESC, tr.id DESC LIMIT 3`, [title.id]);
-    return { serverName: guild.name || null, title, champion, contender: cont[0]?.name || null, totalReigns: cnt[0].n, previous: prev.map((r) => ({ name: r.name || 'Unknown', days: r.days })) };
+    const { rows: art } = await pool.query(`SELECT data FROM title_images WHERE title_id = $1`, [title.id]);
+    const { rows: rem } = await pool.query(
+        `SELECT holder_name, expires_on FROM rematch_rights WHERE title_id = $1 AND status = 'active' ORDER BY expires_on LIMIT 1`, [title.id]);
+    return {
+        serverName: guild.name || null, title, champion, contender: cont[0]?.name || null, totalReigns: cnt[0].n,
+        previous: prev.map((r) => ({ name: r.name || 'Unknown', days: r.days })),
+        beltArt: art[0]?.data || null,
+        rematch: rem[0] ? { name: rem[0].holder_name, until: new Date(rem[0].expires_on).toISOString().slice(0, 10) } : null
+    };
 }
 
 /** One side of a tale of the tape: a single wrestler or a registered team. */

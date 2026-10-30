@@ -79,8 +79,8 @@ When it works you'll see a line like `main -> main`. That means the upload succe
 2. Click **Deployments**. A new deployment starts by itself. Wait until it says **Active**/**Success**.
 3. Click that deployment → **View logs**. You should see lines like:
    - `Logged in as <your bot name>`
-   - `Applying migration 010_booking_depth.sql` (if new) and `Applying migration 011_signups.sql` `Applying migration 012_contracts_reports.sql` `Applying migration 013_unclaimed.sql` and `Applying migration 014_show_cards.sql`
-   - `Registering 15 slash commands`
+   - `Applying migration 010_booking_depth.sql` (if new) and `Applying migration 011_signups.sql` `Applying migration 012_contracts_reports.sql` `Applying migration 013_unclaimed.sql` `Applying migration 014_show_cards.sql` and `Applying migration 015_title_art.sql`
+   - `Registering 17 slash commands`
    - `Slash commands registered.`
 
    If you see `Database not ready ... Retrying`, just wait a minute. It retries on its own.

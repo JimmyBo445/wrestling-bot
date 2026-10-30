@@ -139,6 +139,9 @@ async function handleButtonInteraction(interaction) {
         }
     }
 
+    // ---- title panel buttons and dropdowns (viewers: history/defenses/lineage; admins: the rest) ----
+    if (id.startsWith('chmp:')) return require('../modules/titlePanel').handleComponent(interaction);
+
     // ---- show card buttons and dropdowns (admins only) ----
     if (id.startsWith('cardui:')) {
         if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can edit the card.', flags: EPHEMERAL });

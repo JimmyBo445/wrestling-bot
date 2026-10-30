@@ -3,12 +3,12 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'standings', 'championship', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
+const ORDER = ['character', 'team', 'stats', 'standings', 'championship', 'title', 'reign', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
 // Old command names that were merged into combined commands (so `/help command:injury` can point people to the new home).
 const MOVED = {
     leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season-standings | season-recap', roster: '/directory roster',
     halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
-    contender: '/championship contender-challenge | contender-award | contender-revoke | contender-list',
+    contender: '/championship contender-challenge | contender-list (admins: /title contender-award | contender-revoke)',
     matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-add | signup-remove',
     newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report'
 };
@@ -21,7 +21,9 @@ const BLURB = {
     stats: 'Records, streaks, head-to-head, history',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
-    championship: 'Titles, belts, reign history',
+    championship: 'Look at titles: champions, belt cards, a button panel, history, defenses',
+    title: 'Admins: log a title match (title, challenger, winner), contenders, vacate, belt pictures',
+    reign: 'Admins: add old reigns with dates and defenses, edit or remove them',
     contender: '#1 contender challenges and awards',
     matchmaking: 'Find fresh opponents or request a match',
     signup: 'Show signups: players click to say who is available',

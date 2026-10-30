@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.14.0 — Championship revamp and belt pictures
+- **Three commands instead of one big menu.** `/championship` is now just for looking (list, belt, panel, lineage, defenses, history, grand-slam, rematches, contender-list, contender-challenge). Admins run belts with **`/title`** and fix the record with **`/reign`**.
+- **`/title match`**: pick the title, the challenger and who won. The bot fills in the current champion (for a vacant title, also fill in `opponent`). Works for singles and for 2v2 tag titles (pick a team). Stipulation, finish, score and notes are optional. The old two `log-...-title-match` commands are gone.
+- **`/title`** also has `belt-image`, `vacate`, `interim`, `unify`, `watch`, `waive-rematch`, `contender-award` and `contender-revoke`.
+- **`/title belt-image title picture`** uploads your own belt art for a title (`remove:true` goes back to the drawn belt). The champion's round picture(s) and name are placed on the belt, with owner and stats under it.
+- **Contender and rematch** now show on the belt card (a #1 contender chip, and a rematch owed with its deadline).
+- **`/championship panel`**: the belt card with buttons. Everyone gets History, Defenses and Lineage. Admins also get Log match (pick the challenger from a dropdown, paged past 25, then who won), Set contender, Clear contender and Vacate (asks to confirm).
+- **`/reign`**: `add` (an old reign with dates, a defenses count and notes), `edit`, `remove`, `add-defense` and `remove-defense` (a defense you type in by hand, with opponent, optional date and notes). Hand-entered defenses show in `/championship defenses` and add to the count.
+- Database change: migration 015 (`title_images`, `reign_defenses`). The bot now has 17 commands.
+
 ## 2.13.0 — One show card per brand
 - **One card per brand.** RAW and SmackDown each have a single show card instead of one per division. You never choose a division when adding a match: it comes from the wrestlers (a match can't mix divisions). Numbering restarts in each division and a division holds up to 15 matches (60 per show).
 - **`/card post`** posts the card as one message per division, in the order Men's, Women's, Custom, Custom Women's (divisions with no matches are skipped). Under each picture it lists who is in each match and **pings the owners**, e.g. `@Ann (Ace) vs @Bo (Bolt)`, 🏆 title matches marked. Optional `division` posts just one; tale of the tape pictures are now opt-in with `tapes:true`.

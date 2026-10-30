@@ -8,6 +8,8 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands')).fi
     const c = require(path.join(__dirname, '..', 'src', 'commands', f));
     if (c.data) commands.set(c.data.name, c);
 }
+// the old two-name title-match subs still exist inside the module; tests reach them through this hidden command
+commands.set('championship-legacy', require('../src/modules/championship'));
 const client = { commands, user: { id: 'bot1' } };
 client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async () => ({ edit: async () => {} }) } }) };
 client.guilds = { cache: new Map() };
@@ -71,6 +73,14 @@ function remap(commandName, sub, opts) {
         contender: () => ['championship', `contender-${sub}`, null], matchmaking: () => ['booking', sub, null],
         signup: () => ['booking', `signup-${sub}`, null], newsletter: () => ['admin', sub, 'newsletter'], report: () => ['admin', 'report', null]
     };
+    if (commandName === 'championship') {
+        if (['log-singles-title-match', 'log-tag-title-match'].includes(sub)) return ['championship-legacy', sub, opts];
+        if (['vacate', 'interim', 'unify', 'watch', 'waive-rematch'].includes(sub)) return ['title', sub, opts];
+        if (sub === 'contender-award' || sub === 'contender-revoke') return ['title', sub, opts];
+        const r = { 'backfill-reign': 'add', 'edit-reign': 'edit', 'remove-reign': 'remove' }[sub];
+        if (r) return ['reign', r, opts];
+    }
+    if (commandName === 'contender' && ['award', 'revoke'].includes(sub)) return ['title', `contender-${sub}`, opts];
     if (!m[commandName]) return [commandName, sub, opts];
     const [c, s, g] = m[commandName]();
     return [c, s, g ? { ...opts, group: g } : opts];

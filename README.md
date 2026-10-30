@@ -6,15 +6,16 @@ servers at once. Everything is saved permanently in Postgres.
 
 ## What it does
 
-**Combined commands:** `/standings` (leaderboard, rankings, season), `/directory` (roster, Hall of Fame, injuries), `/booking` (matchmaking and signups), `/championship contender-*`, `/admin newsletter` and `/admin report`. The older separate names were removed in 2.11.
+**Combined commands:** `/standings` (leaderboard, rankings, season), `/directory` (roster, Hall of Fame, injuries), `/booking` (matchmaking and signups), `/championship` (look), `/title` and `/reign` (admins), `/admin newsletter` and `/admin report`. The older separate names were removed in 2.11.
 
 | Area | Commands |
 |---|---|
 | **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` `unclaim` `swap-division` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
 | **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
-| **Championships** | `/championship list` `belt` `lineage` `defenses` `history` `log-singles-title-match` `log-tag-title-match` `vacate` `interim` `unify` `backfill-reign` `edit-reign` `remove-reign` `watch` `grand-slam` `rematches` `waive-rematch` |
-| **#1 contenders** | `/championship contender-challenge` `contender-award` `contender-revoke` `contender-list` |
+| **Championships (everyone)** | `/championship list` `belt` `panel` `lineage` `defenses` `history` `grand-slam` `rematches` `contender-list` `contender-challenge` |
+| **Run belts (admin)** | `/title match` `belt-image` `vacate` `interim` `unify` `watch` `waive-rematch` `contender-award` `contender-revoke` |
+| **Fix the record (admin)** | `/reign add` `edit` `remove` `add-defense` `remove-defense` |
 | **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
 | **Boards** | `/standings leaderboard` (category + time period dropdowns), `/standings rankings`, `/standings season-standings` `season-recap` |
 | **Booking** | `/booking suggest` `request` (players), `/booking signup-open` `signup-list` `signup-close` `signup-done` `signup-add` `signup-remove` (admins) |
@@ -40,7 +41,7 @@ servers at once. Everything is saved permanently in Postgres.
 - **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. `/card auto` books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here and Edit/Move/Remove buttons; `/card post` sends one picture per division with the wrestlers pinged underneath. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
-- **Title match**: add the `title` option to any log command (or use the two `/championship log-...` commands). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
+- **Title match**: add the `title` option to any log command (or use `/title match`). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
 - **#1 contender match**: add `contender_for`. The winner becomes #1 contender. A contender's shot is used up when they take part in a title match for that belt.
 - **Registered teams**: tag titles belong to registered teams. When the exact wrestlers of a team are booked on one side of a tag match, the match counts for the team. Removing a member or disbanding a team that holds a belt vacates it.
 - **Cooldown**: only regular singles matches (not title, contender or tag). Default 24 hours between the same two players; change with `/admin set-cooldown`, or override one booking with `override_cooldown: true`.
