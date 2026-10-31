@@ -1,4 +1,4 @@
-# Wrestling Bot 2.18.0
+# Wrestling Bot 2.19.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -41,6 +41,7 @@ servers at once. Everything is saved permanently in Postgres.
 - **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. `/card auto` books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here and Edit/Move/Remove buttons; `/card post` sends one picture per division with the wrestlers pinged underneath. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
+- **Who plays who**: `/whois character:` shows the player behind a wrestler and all of that player's wrestlers (division, record, belts, team). `/whois player:@someone` lists one player's wrestlers. `/directory list` is the whole roster as a text list (wrestlers A to Z per division, or `sort: Grouped by player`); `/directory roster` still flips through the profile pictures.
 - **Championship history channel**: `/admin history channel:#history` posts every title's full lineage there ("3x @player", reign, defenses, dates) and keeps it up to date by itself after every title change. `auto:off` makes it wait until you run `/admin history`. Old history can be loaded from a spreadsheet with `/admin import what:Title history`.
 - **Title match**: add the `title` option to any log command (or use `/title match`). The bot checks the division, that the champion is in the match, and updates the reign (new champion, defense, or vacant title won). Draws/no contests leave the belt where it is.
 - **#1 contender match**: add `contender_for`. The winner becomes #1 contender. A contender's shot is used up when they take part in a title match for that belt.

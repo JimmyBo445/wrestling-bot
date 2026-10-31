@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.19.0 — /whois and a text roster
+- **`/whois character:`** (anyone can use it): who plays that wrestler, and a list of all that player's wrestlers with division, record (with this player), current belts 🏆 and team. Retired wrestlers are listed last. An unclaimed wrestler says nobody plays them right now.
+- **`/whois player:@someone`**: the same list for a player.
+- **`/directory list`**: the whole roster as text, no pictures. Each division A to Z with the player behind every wrestler, 🏆 for current champions and their team. Options: `division` (just one), `sort: Grouped by player` (one line per player with all their wrestlers) and `include_retired`. Big rosters are split over several messages. Nobody is pinged.
+- `/directory roster` (the profile pictures) is unchanged.
+- The bot now has 18 commands. No database change.
+
 ## 2.18.0 — Old reigns can be linked to the character who held the belt
 - The title history file for **`/admin import what:Title history`** has a new optional **`character`** column: the wrestler who held the belt (for a tag title, the wrestlers joined with `&`, e.g. `Liv Morgan & Kai Storm`).
 - A linked reign counts on that **character's** profile (title reigns, defenses, current belts), and the **player** in `members` keeps the credit, even if the character belongs to someone else now.

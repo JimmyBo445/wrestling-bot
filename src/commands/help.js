@@ -17,7 +17,8 @@ const BLURB = {
     team: 'Registered tag teams',
     standings: 'Leaderboards, division rankings and season standings',
     booking: 'Find opponents, request matches, run show signups',
-    directory: 'Roster pages, Hall of Fame and the injury report',
+    directory: 'Roster pages and a text roster list, Hall of Fame and the injury report',
+    whois: 'Who plays a wrestler, and all of that player\'s wrestlers',
     stats: 'Records, streaks, head-to-head, history, most decorated players',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
@@ -116,7 +117,7 @@ module.exports = {
         const embed = new EmbedBuilder().setTitle('Wrestling Bot: Help').setColor(0xC0392B)
             .setDescription([
                 '**Players:** `/character submit` to add a wrestler (an admin approves it), then `/character profile` for their card. ' +
-                'Check records with `/stats`, ladders with `/standings rankings`, and ask for matches with `/booking request`.',
+                'Check records with `/stats`, ladders with `/standings rankings`, ask for matches with `/booking request`, and see who plays who with `/whois`.',
                 admin ? '**Admins:** book shows with `/card auto` or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
                 '',
                 'Use **`/help command:<name>`** for the full list of one command, for example `/help command:match`.'
