@@ -409,7 +409,7 @@ const fakeClient = { channels: { fetch: async (id) => fakeChannel(id) }, guilds:
         assert.strictEqual(parseCsv('name\tdivision\towner\nA\tmens\t1')[0].division, 'mens');
         assert.throws(() => parseCsv('name,division'), /header row/);
         const tpl = await run('admin', 'import-template', {}, ADM);
-        assert.strictEqual(tpl.responses[0].p.files.length, 2);
+        assert.strictEqual(tpl.responses[0].p.files.length, 3);
     });
     await t('import characters: preview saves nothing, apply creates approved characters, problems are reported', async () => {
         const importer = require('../src/utils/importer');

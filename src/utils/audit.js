@@ -10,6 +10,8 @@ async function logAudit(guildId, actorId, action, details = {}, client = pool) {
     } catch (err) {
         console.error('Audit log write failed:', err.message);
     }
+    // keep the championship history channel up to date (does nothing unless one is set)
+    try { require('./historyChannel').onAudit(guildId, action); } catch (_) { /* never block an action */ }
 }
 
 module.exports = { logAudit };

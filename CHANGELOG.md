@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.17.0 — Championship history channel and title history import
+- **`/admin history channel:#your-channel`** posts the full history of every title in that channel, in the same style as a hand-written history post: `3x @player`, `1st Reign - 2 Defenses`, `4/1/23-5/23/23`, with team names and their members for tag titles. Holders are grouped by player (or by team name), in order of their first reign.
+- **It keeps itself up to date.** A few seconds after any title change (a title match, `/title vacate`, `/reign add/edit/remove`, a defense, an import), the bot edits its own messages. Several changes in a row become one update. Nobody is pinged.
+- **`/admin history auto:off`** stops the automatic updates; then it only changes when you run **`/admin history`** (run it with nothing filled in to update right away). `auto:on` turns them back on. `/admin settings` shows the channel and the mode.
+- **`/admin import what:Title history`** loads old reigns from a CSV: `title, holder, won, lost` plus optional `members` (the Discord IDs that get player credit), `defenses` and `notes`. Dates like `4/1/23` or `2023-04-01`; leave `lost` empty for the current champion. It shows a preview first and only saves with `apply:true`.
+- The import never changes or removes anything already in the bot. A line that overlaps a reign already there is skipped and listed, and importing the same file twice adds nothing the second time.
+- `/admin import-template` now also gives an example title history file.
+- Database change: migration 017 (a history channel setting and a small table of the bot's history messages). Nothing existing changes.
+
 ## 2.16.0 — Players get credit for title reigns
 - Every title reign now remembers the **player** who owned the wrestler at the time, not just the character. If the character is transferred later, the old owner keeps the credit and the new owner earns their own from then on. Tag reigns credit both players. Unclaimed wrestlers earn no player credit.
 - **`/stats user`** (picture and text) shows the player's title reigns, days as champion, defenses and the belts they hold now.

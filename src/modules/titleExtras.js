@@ -185,6 +185,7 @@ module.exports = {
                 return r;
             });
             if (!rowCount) throw new UserError('I couldn\'t find that defense. Pick it from the dropdown after choosing the reign.');
+            await logAudit(guildId, interaction.user.id, 'defense_removed', { title: title.name, reign: reign.id });
             return respond(interaction, { content: 'Removed that defense.' });
         }
     }

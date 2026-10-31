@@ -19,6 +19,7 @@ for (const file of fs.readdirSync(commandsPath).filter((f) => f.endsWith('.js') 
 client.once(Events.ClientReady, async (c) => {
     console.log(`Logged in as ${c.user.tag}. Serving ${c.guilds.cache.size} server(s).`);
     require('./utils/scheduler').start(c);
+    require('./utils/historyChannel').setClient(c);
     if (process.env.AUTO_DEPLOY_COMMANDS !== 'false') {
         try {
             await registerCommands({

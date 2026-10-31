@@ -8,6 +8,8 @@ const { UserError } = require('../utils/errors');
 const { buildMonthlyEmbed, prevMonthKey } = require('../utils/monthly');
 const { sendBackup } = require('../utils/backup');
 const importer = require('../utils/importer');
+const titleImport = require('../utils/titleImport');
+const history = require('../utils/historyChannel');
 const { AttachmentBuilder } = require('discord.js');
 
 const data = new SlashCommandBuilder()
@@ -48,9 +50,13 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('set-timezone').setDescription('Your time zone, so show dates and reminders line up (e.g. America/New_York)')
         .addStringOption((o) => o.setName('zone').setDescription('Time zone name like America/New_York, Europe/London, or UTC').setRequired(true).setMaxLength(40)))
     .addSubcommand((s) => s.setName('import').setDescription('Bring in characters or past results from a spreadsheet file (CSV). Shows a preview first.')
-        .addStringOption((o) => o.setName('what').setDescription('What the file contains').setRequired(true).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }))
+        .addStringOption((o) => o.setName('what').setDescription('What the file contains').setRequired(true).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }, { name: 'Title history (old reigns)', value: 'titles' }))
         .addAttachmentOption((o) => o.setName('file').setDescription('A .csv file (save your spreadsheet as CSV)').setRequired(true))
         .addBooleanOption((o) => o.setName('apply').setDescription('Leave empty to only preview. Set to true to really import.').setRequired(false)))
+    .addSubcommand((s) => s.setName('history').setDescription('Championship history channel the bot keeps up to date. Run with nothing to update it now.')
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (the bot posts its own messages there)').setRequired(false).addChannelTypes(ChannelType.GuildText))
+        .addStringOption((o) => o.setName('auto').setDescription('Update it by itself after every title change').setRequired(false)
+            .addChoices({ name: 'On', value: 'on' }, { name: 'Off (only when I run /admin history)', value: 'off' })))
     .addSubcommand((s) => s.setName('import-template').setDescription('Get example CSV files showing the columns to use for /admin import'))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('audit').setDescription('Recent admin actions')
@@ -139,9 +145,37 @@ module.exports = {
             await logAudit(guildId, interaction.user.id, 'setting_timezone', { zone });
             return respond(interaction, { content: `Time zone set to **${zone}**. Show dates and reminders now follow it.` });
         }
+        if (sub === 'history') {
+            const channel = interaction.options.getChannel('channel');
+            const auto = interaction.options.getString('auto');
+            const before = await getGuildSettings(guildId);
+            if (channel) {
+                if (channel.id !== before.history_channel_id) await history.forgetPosts(guildId);
+                await pool.query(`UPDATE guilds SET history_channel_id = $1 WHERE guild_id = $2`, [channel.id, guildId]);
+            }
+            if (auto) await pool.query(`UPDATE guilds SET history_auto = $1 WHERE guild_id = $2`, [auto === 'on', guildId]);
+            const s = await getGuildSettings(guildId);
+            if (channel || auto) await logAudit(guildId, interaction.user.id, 'setting_history_channel', { channel: s.history_channel_id, auto: s.history_auto });
+            if (!s.history_channel_id) {
+                return respond(interaction, { content: 'No history channel yet. Pick one: `/admin history channel:#your-channel`. The bot posts every title\'s history there and keeps it up to date.', flags: EPHEMERAL });
+            }
+            const how = s.history_auto === false
+                ? 'Automatic updates are **off**: run `/admin history` whenever you want it updated.'
+                : 'It updates by itself a few seconds after any title change. Run `/admin history` to update it right away.';
+            if (auto && !channel) return respond(interaction, { content: `Championship history channel: <#${s.history_channel_id}>. ${how}` });
+            await interaction.deferReply({ flags: EPHEMERAL });
+            try {
+                const r = await history.refreshHistory(interaction.client, guildId);
+                const bits = [r.posted && `${r.posted} posted`, r.edited && `${r.edited} updated`, r.removed && `${r.removed} removed`].filter(Boolean).join(', ');
+                const extra = channel ? '\nTip: you can delete the old hand-written history posts there. If you delete one of the bot\'s own messages, it reposts the history.' : '';
+                return respond(interaction, { content: `✅ Championship history in <#${s.history_channel_id}> is up to date${bits ? ` (${bits})` : ''}. ${how}${extra}` });
+            } catch (err) {
+                throw new UserError(`${err.message} Make sure I can see that channel and send messages in it.`);
+            }
+        }
         if (sub === 'import-template') {
-            const files = Object.entries(importer.TEMPLATES).map(([k, v]) => new AttachmentBuilder(Buffer.from(v), { name: `import-${k}.csv` }));
-            return respond(interaction, { content: '📄 Two example files. Open them in Excel or Google Sheets, replace the rows with yours, save as **CSV**, then attach to `/admin import`.\n**Characters:** `name, division, owner` (Discord ID or exact username) + optional `alignment, bio, finisher`.\n**Results:** `winner, loser` (character names) + optional `date` (YYYY-MM-DD), `stipulation, notes`, `result` (win or draw). Title history is better added with `/championship backfill-reign`.', files, flags: 64 });
+            const files = Object.entries({ ...importer.TEMPLATES, titles: titleImport.TEMPLATE }).map(([k, v]) => new AttachmentBuilder(Buffer.from(v), { name: `import-${k}.csv` }));
+            return respond(interaction, { content: '📄 Three example files. Open them in Excel or Google Sheets, replace the rows with yours, save as **CSV**, then attach to `/admin import`.\n**Characters:** `name, division, owner` (Discord ID or exact username) + optional `alignment, bio, finisher`.\n**Results:** `winner, loser` (character names) + optional `date` (YYYY-MM-DD), `stipulation, notes`, `result` (win or draw). **Titles:** `title, holder, won, lost` + optional `members` (Discord IDs that get credit), `defenses, notes`. Dates like 4/1/23 or 2023-04-01; leave `lost` empty for the current champion.', files, flags: 64 });
         }
         if (sub === 'import') {
             const what = interaction.options.getString('what');
@@ -153,14 +187,20 @@ module.exports = {
             const rows = importer.parseCsv(await importer.downloadCsv(att));
             const res = what === 'characters'
                 ? await importer.importCharacters(interaction.guild, rows, { apply, actor: interaction.user.id })
-                : await importer.importResults(guildId, rows, { apply, actor: interaction.user.id });
-            const noun = what === 'characters' ? 'character' : 'result';
+                : what === 'titles'
+                    ? await titleImport.importTitles(guildId, rows, { apply, actor: interaction.user.id })
+                    : await importer.importResults(guildId, rows, { apply, actor: interaction.user.id });
+            const noun = what === 'characters' ? 'character' : what === 'titles' ? 'reign' : 'result';
             const head = apply
                 ? `✅ Imported **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'}.`
                 : `👀 Preview: **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'} are ready to import${res.problems.length ? ` and **${res.problems.length}** line(s) have problems` : ''}. Nothing was saved yet. Run the same command with \`apply: true\` to import.`;
-            const sample = res.ok.slice(0, 5).map((r) => (what === 'characters' ? `• ${r.name} (${r.division}) → <@${r.discordId}>` : `• ${r.a.name} def. ${r.b.name}${r.draw ? ' (draw)' : ''} on ${r.date}`)).join('\n');
+            const sample = res.ok.slice(0, 5).map((r) => (what === 'characters' ? `• ${r.name} (${r.division}) → <@${r.discordId}>`
+                : what === 'titles' ? `• ${r.title.name}: ${r.holder}${r.members.length ? ` (${r.members.map((id) => `<@${id}>`).join(' & ')})` : ''}, ${r.won} → ${r.lost || 'now'}, ${r.defenses} def.`
+                    : `• ${r.a.name} def. ${r.b.name}${r.draw ? ' (draw)' : ''} on ${r.date}`)).join('\n');
+            const skip = res.skipped?.length ? `\nℹ️ ${res.skipped.length} reign(s) were already in the bot and were left alone.` : '';
             const probs = res.problems.slice(0, 12).map((p) => `⚠️ ${p}`).join('\n');
-            return respond(interaction, { content: [head, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
+            const after = what === 'titles' && apply && res.ok.length ? '\nCheck it with `/championship history`. If you set a history channel (`/admin history`), it updates in a few seconds.' : '';
+            return respond(interaction, { content: [head + after, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, skip, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
         }
         if (sub === 'milestones') {
             const on = interaction.options.getString('action') === 'on';
@@ -197,7 +237,8 @@ module.exports = {
                 { name: 'Title deadlines', value: `${s.defense_days ? `Warn after ${s.defense_days}d without a defense` : 'No defense warnings'} · ${s.vacate_days ? `auto-vacate after ${s.vacate_days}d of champion inactivity` : 'no auto-vacate'}` },
                 { name: 'Rematch clause', value: s.rematch_enabled ? `On (${s.rematch_days} days)` : 'Off' },
                 { name: 'Time zone', value: s.tz || 'UTC' },
-                { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin backup`)' }
+                { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin backup`)' },
+                { name: 'Championship history channel', value: s.history_channel_id ? `<#${s.history_channel_id}> (${s.history_auto === false ? 'manual updates' : 'updates by itself'})` : 'Off (use `/admin history`)' }
             );
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
         }
