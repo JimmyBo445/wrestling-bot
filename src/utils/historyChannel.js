@@ -25,7 +25,9 @@ const joinNames = (list) => (list.length <= 2 ? list.join(' and ') : `${list.sli
 async function renderHistory(guildId) {
     const { rows: reigns } = await pool.query(
         `SELECT t.id AS title_id, t.name AS title, t.is_tag_title, tr.id, tr.won_date, tr.lost_date, tr.defenses, tr.notes,
-                tr.is_backfilled, tr.is_interim, tr.team_id, COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS holder
+                tr.is_backfilled, tr.is_interim, tr.team_id, COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS holder,
+                c.name AS character_name,
+                (SELECT string_agg(mc.name, ' & ' ORDER BY m.id) FROM title_reign_members m JOIN characters mc ON mc.id = m.character_id WHERE m.reign_id = tr.id) AS member_chars
          FROM titles t
          JOIN title_reigns tr ON tr.title_id = t.id
          LEFT JOIN characters c ON c.id = tr.character_id
@@ -62,8 +64,12 @@ async function renderHistory(guildId) {
             g.reigns.forEach((r, i) => {
                 const d = Number(r.defenses) || 0;
                 const note = r.notes && r.notes.length <= 40 ? ` (${r.notes})` : '';
-                lines.push(`*${ord(i + 1)} Reign - ${d} Defense${d === 1 ? '' : 's'}*${r.is_interim ? ' (Interim)' : ''}${note}`);
-                if (r.isTeam && r.ids.length) lines.push(`( ${joinNames(r.ids.map((id) => `<@${id}>`))} )`);
+                // who held it in the game: the character for a singles reign (only when the label is the player)
+                const who = !r.isTeam && r.character_name && r.ids.length ? ` · ${r.character_name}` : '';
+                lines.push(`*${ord(i + 1)} Reign - ${d} Defense${d === 1 ? '' : 's'}*${who}${r.is_interim ? ' (Interim)' : ''}${note}`);
+                if (r.isTeam && (r.ids.length || r.member_chars)) {
+                    lines.push(`( ${r.ids.length ? joinNames(r.ids.map((id) => `<@${id}>`)) : r.member_chars} )${r.ids.length && r.member_chars ? ` · ${r.member_chars}` : ''}`);
+                }
                 lines.push(`${shortDate(r.won_date)}-${shortDate(r.lost_date)}`);
             });
             return lines.join('\n');

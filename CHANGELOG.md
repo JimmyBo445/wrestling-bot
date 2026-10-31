@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.18.0 — Old reigns can be linked to the character who held the belt
+- The title history file for **`/admin import what:Title history`** has a new optional **`character`** column: the wrestler who held the belt (for a tag title, the wrestlers joined with `&`, e.g. `Liv Morgan & Kai Storm`).
+- A linked reign counts on that **character's** profile (title reigns, defenses, current belts), and the **player** in `members` keeps the credit, even if the character belongs to someone else now.
+- **Fill characters in over time.** Import the same file again after typing in more characters: reigns already in the bot that have no character yet get it linked. Nothing else about them changes, and reigns that already have a character are left alone.
+- A character the bot doesn't know (or a name two wrestlers share) is listed in the preview; that reign is still added, just without a character.
+- The history channel still groups reigns by player and now names the character on each reign, e.g. `*1st Reign - 1 Defense* · Ace Blackout`. Tag reigns show the players and then the characters.
+- `/reign edit character:` also links a character to one reign at a time.
+- No database change.
+
 ## 2.17.0 — Championship history channel and title history import
 - **`/admin history channel:#your-channel`** posts the full history of every title in that channel, in the same style as a hand-written history post: `3x @player`, `1st Reign - 2 Defenses`, `4/1/23-5/23/23`, with team names and their members for tag titles. Holders are grouped by player (or by team name), in order of their first reign.
 - **It keeps itself up to date.** A few seconds after any title change (a title match, `/title vacate`, `/reign add/edit/remove`, a defense, an import), the bot edits its own messages. Several changes in a row become one update. Nobody is pinged.

@@ -191,16 +191,22 @@ module.exports = {
                     ? await titleImport.importTitles(guildId, rows, { apply, actor: interaction.user.id })
                     : await importer.importResults(guildId, rows, { apply, actor: interaction.user.id });
             const noun = what === 'characters' ? 'character' : what === 'titles' ? 'reign' : 'result';
-            const head = apply
+            const onlyLinks = what === 'titles' && !res.ok.length && res.filled?.length;
+            const head = onlyLinks
+                ? (apply ? '✅ No new reigns to add.' : '👀 Preview: no new reigns to add. Nothing was saved yet. Run the same command with `apply: true` to link the characters.')
+                : apply
                 ? `✅ Imported **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'}.`
                 : `👀 Preview: **${res.ok.length}** ${noun}${res.ok.length === 1 ? '' : 's'} are ready to import${res.problems.length ? ` and **${res.problems.length}** line(s) have problems` : ''}. Nothing was saved yet. Run the same command with \`apply: true\` to import.`;
             const sample = res.ok.slice(0, 5).map((r) => (what === 'characters' ? `• ${r.name} (${r.division}) → <@${r.discordId}>`
                 : what === 'titles' ? `• ${r.title.name}: ${r.holder}${r.members.length ? ` (${r.members.map((id) => `<@${id}>`).join(' & ')})` : ''}, ${r.won} → ${r.lost || 'now'}, ${r.defenses} def.`
                     : `• ${r.a.name} def. ${r.b.name}${r.draw ? ' (draw)' : ''} on ${r.date}`)).join('\n');
             const skip = res.skipped?.length ? `\nℹ️ ${res.skipped.length} reign(s) were already in the bot and were left alone.` : '';
+            const filled = res.filled?.length
+                ? `\n🔗 ${apply ? 'Linked' : 'Will link'} the character on **${res.filled.length}** reign(s) already in the bot: ${res.filled.slice(0, 5).map((x) => `${x.characters.map((c) => c.name).join(' & ')} (${x.title.name}, ${x.won})`).join(', ')}${res.filled.length > 5 ? ', …' : ''}.`
+                : '';
             const probs = res.problems.slice(0, 12).map((p) => `⚠️ ${p}`).join('\n');
             const after = what === 'titles' && apply && res.ok.length ? '\nCheck it with `/championship history`. If you set a history channel (`/admin history`), it updates in a few seconds.' : '';
-            return respond(interaction, { content: [head + after, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, skip, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
+            return respond(interaction, { content: [head + after, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, filled, skip, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
         }
         if (sub === 'milestones') {
             const on = interaction.options.getString('action') === 'on';
