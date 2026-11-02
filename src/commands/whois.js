@@ -25,6 +25,6 @@ module.exports = {
         const player = interaction.options.getUser('player');
         if (!charVal && !player) throw new UserError('Pick a `character` (who plays them?) or a `player` (which wrestlers do they have?).');
         const { whoisPayload } = require('../modules/menus');
-        return respond(interaction, await whoisPayload(interaction, charVal ? { characterId: charVal } : { ownerId: player.id }));
+        return respond(interaction, await whoisPayload(interaction, { ...(charVal ? { characterId: charVal } : { ownerId: player.id }), actions: false }));
     }
 };

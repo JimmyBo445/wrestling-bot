@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.1.0 — Button panels for everything
+Everyone can open and look at every panel. **Edit buttons only show up for admins and the staff role** (and, for a wrestler, their own player). Every button runs the normal command underneath, so all the usual checks still apply. **No command was removed or changed**; `/card` is untouched.
+
+**Home menu (`/fnlw`)**: new buttons for 📈 Standings, 📊 Stats, 🎖 Legacy, 👥 Teams & Factions, 🔥 Feuds, 🏟 Tournaments and 📝 Contracts. `/fnlw go:` jumps straight to one of them.
+
+- **📊 Stats**: pick any wrestler (by division, with pages), then tap Overview, Recent, Opponents, Badges, Timeline, Titles, Legacy, Card, Head-to-head or Tale of the tape. The 📊 Stats button under `/whois` opens this too.
+- **📈 Standings**: Leaderboards (category and period menus), Rankings, Power (per division), Season (this year and the two before, plus the recap picture), Rivalries and Most decorated players.
+- **🎖 Legacy**: the honor roll by accolade and year, look up any wrestler, and **🗳 Votes**: open votes can be voted on right from the panel. Staff: **🎖 Give accolade** (pick the wrestler, the accolade, then the year, a note and whether to announce it).
+- **👥 Teams & Factions**: lists and cards for everyone. Staff: ➕ Add member, ➖ Remove member, ✏️ Rename (teams), 💔 Disband (asks first).
+- **🏟 Tournaments**: entrants or the bracket for everyone. Staff: ➕ Add / ➖ Remove wrestlers, ▶️ Start (asks first), **🏁 Decide a match** (tap who advances), 📣 Post the bracket in the channel, ✖ Cancel.
+- **Under every match result** (from `/match log` or your card): **⭐ Rate this match** for everyone (1–5 stars, one rating per person, only the average is shown, also in 📰 Results) and **🛠 Staff** (admins and staff only): edit notes / stipulation / score, or **↩️ Undo** (asks first, and marks the result post as undone). The staff rating from `/match rate` still decides "best match" for Wrestler of the Month.
+- **📝 Contracts**: your wrestlers' deals, Under contract, Free agents, Earnings. Players: **🙋 Ask for a new deal** (posted for staff to approve). Staff: **📨 Offer a contract** (posted for the player to accept) and ✂️ Release.
+- **🙋 My Wrestlers**: **✏️ Edit details** (name, alignment, bio, finisher, theme), **📖 Story & moves**, **🖼 Picture** (a link; uploading a file is still `/character picture`), 📝 Contract. Only the wrestler's player and staff see or can use these, and never on a public `/whois` post.
+- **🔥 Feuds**: every feud with its timeline. Staff: 🔥 Start a feud, 📖 Add a moment, 🌡 Set heat, 🏁 End.
+- **📋 Roster → 🏛 Hall of Fame and 🤕 Injuries**: the list and graphics for everyone. Staff: 🏛 Induct (the graphic is posted in the channel), 🤕 Add an injury, 💪 Mark healthy.
+- **🛠 Staff Tools → 📺 Channels**: pick where the bot posts from a channel menu instead of typing it, or turn a post off.
+
+- Database change: migration 021 (fan ratings). Still 19 commands.
+
 ## 3.0.0 — Award votes, PLEs, one match log, power rankings, error alerts
 **Award votes** (`/legacy`)
 - **`/legacy vote-open`** (admins and staff) for Face of FNLW MVP or any year-end award. Choose who can add nominees (`nominees_by`: admins and staff, or everyone) and who can vote (`voters`: everyone, or admins and staff). It posts in the Legacy channel (or `channel:`).

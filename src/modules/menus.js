@@ -7,65 +7,16 @@
 //   ui:w:...                  /whois: c = pick wrestler, o = who plays, p = profile card, s = stats, t = title history
 //   ui:belt                   pick a title → belt card with History / Defenses / Lineage
 //   ui:help                   /help category dropdown
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { ButtonStyle, StringSelectMenuBuilder, EmbedBuilder } = require('discord.js');
 const { pool } = require('../db/pool');
-const { isAdmin, respond, EPHEMERAL, NO_MENTIONS, getDisplayNames, DIVISION_LABELS } = require('../utils/discordHelpers');
+const { isAdmin, respond, EPHEMERAL, getDisplayNames, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { rosterRows, currentTitles, activeTeams, shortTitle } = require('../utils/rosterInfo');
 
-const NOPING = NO_MENTIONS;
-const btn = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
-const row = (...c) => new ActionRowBuilder().addComponents(...c);
+const { NOPING, btn, row, clip, homeRow, onPrivateMessage, show, privately, command } = require('../utils/panelKit');
 const daysSince = (d) => Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 864e5));
-const clip = (s, n) => (String(s).length > n ? `${String(s).slice(0, n - 1)}…` : String(s));
-
-/** True when the message the button sits on is private (only the clicker sees it), so it can be updated in place. */
-function onPrivateMessage(interaction) {
-    const f = interaction.message?.flags;
-    if (!f) return false;
-    if (typeof f.has === 'function') return f.has(MessageFlags.Ephemeral);
-    return Boolean(Number(f) & 64);
-}
-
-/** Shows a result: replaces a private panel in place, or answers privately under a public message (so nobody else's view changes). */
-async function show(interaction, payload) {
-    if (onPrivateMessage(interaction)) return interaction.update({ content: null, embeds: [], files: [], attachments: [], components: [], ...payload });
-    return respond(interaction, { ...payload, flags: EPHEMERAL, allowedMentions: NOPING });
-}
-
-/**
- * Runs an existing slash command from a button, privately (so a click never posts in the channel).
- * values = the options the command would have had.
- */
-function privately(interaction, sub, values = {}) {
-    const get = (n) => (values[n] === undefined || values[n] === null ? null : values[n]);
-    const options = {
-        getSubcommand: () => sub, getSubcommandGroup: () => null,
-        getString: (n) => (get(n) === null ? null : String(get(n))), getInteger: (n) => (get(n) === null ? null : Number(get(n))),
-        getBoolean: (n) => (get(n) === null ? null : Boolean(get(n))), getUser: (n) => get(n), getChannel: (n) => get(n), getRole: (n) => get(n),
-        getAttachment: () => null, getFocused: () => ''
-    };
-    const priv = (p = {}) => ({ ...p, flags: (Number(p.flags) || 0) | EPHEMERAL });
-    return new Proxy(interaction, {
-        get(t, p) {
-            if (p === 'options') return options;
-            if (p === 'reply') return (x) => t.reply(priv(x));
-            if (p === 'deferReply') return (x) => t.deferReply(priv(x));
-            if (p === 'followUp') return (x) => t.followUp(priv(x));
-            const v = Reflect.get(t, p, t);
-            return typeof v === 'function' ? v.bind(t) : v;
-        }
-    });
-}
-const command = (interaction, name) => {
-    const c = interaction.client.commands.get(name);
-    if (!c) throw new UserError(`The /${name} command isn't available right now.`);
-    return c;
-};
 
 // ------------------------------------------------------------------ home menu (/fnlw)
-
-const homeRow = () => row(btn('ui:h:home', '🏠 Home'));
 
 function homePayload(interaction, serverName) {
     const admin = isAdmin(interaction);
@@ -73,17 +24,17 @@ function homePayload(interaction, serverName) {
         .setDescription([
             'Tap a button. Everything here is private: only you see it.',
             '',
-            '🏆 **Champions**: who holds every belt',
-            '📅 **Next Show**: the RAW and SmackDown cards',
-            '📰 **Results**: the latest matches',
-            '📋 **Roster**: every wrestler and who plays them',
-            '🙋 **My Wrestlers**: your wrestlers, records and belts',
+            '🏆 **Champions** · 📅 **Next Show** · 📰 **Results** · 📈 **Standings**',
+            '📋 **Roster** (plus Hall of Fame and injuries) · 🙋 **My Wrestlers** (edit yours here)',
+            '📊 **Stats** for any wrestler · 🎖 **Legacy** honor roll and award votes',
+            '👥 **Teams & Factions** · 🔥 **Feuds** · 🏟 **Tournaments** · 📝 **Contracts**',
             '❓ **Help**: how to use the bot',
-            admin ? '🛠 **Staff Tools**: approvals, cards, titles, settings' : null
+            admin ? '🛠 **Staff Tools**: approvals, cards, titles, channels. Staff also get edit buttons inside every section.' : null
         ].filter((x) => x !== null).join('\n'));
     const rows = [
-        row(btn('ui:h:champs', '🏆 Champions', ButtonStyle.Primary), btn('ui:h:show', '📅 Next Show', ButtonStyle.Primary), btn('ui:h:results', '📰 Results', ButtonStyle.Primary)),
-        row(btn('ui:h:roster', '📋 Roster'), btn('ui:h:mine', '🙋 My Wrestlers'), btn('ui:h:help', '❓ Help'))
+        row(btn('ui:h:champs', '🏆 Champions', ButtonStyle.Primary), btn('ui:h:show', '📅 Next Show', ButtonStyle.Primary), btn('ui:h:results', '📰 Results', ButtonStyle.Primary), btn('ui:h:stand', '📈 Standings', ButtonStyle.Primary)),
+        row(btn('ui:h:roster', '📋 Roster'), btn('ui:h:mine', '🙋 My Wrestlers'), btn('ui:h:stats', '📊 Stats'), btn('ui:h:legacy', '🎖 Legacy')),
+        row(btn('ui:h:teams', '👥 Teams & Factions'), btn('ui:h:feuds', '🔥 Feuds'), btn('ui:h:tourn', '🏟 Tournaments'), btn('ui:h:contract', '📝 Contracts'), btn('ui:h:help', '❓ Help'))
     ];
     if (admin) rows.push(row(btn('ui:h:staff', '🛠 Staff Tools', ButtonStyle.Success)));
     return { embeds: [embed], components: rows, allowedMentions: NOPING };
@@ -146,11 +97,14 @@ async function resultsPayload(guildId) {
     const rows = await recentMatches(guildId, { limit: 10 });
     const embed = new EmbedBuilder().setColor(0x3498DB).setTitle('📰 Latest Results');
     if (!rows.length) return { embeds: [embed.setDescription('No matches logged yet.')] };
+    const fans = await require('../utils/fanRatings').averages(rows.map((r) => r.id));
+    embed.setFooter({ text: '⭐ = fan rating · rate a match with the ⭐ button under its result' });
     embed.setDescription(rows.map((r) => {
         const when = `<t:${Math.floor(new Date(r.created_at).getTime() / 1000)}:R>`;
         const tag = r.title_name ? ` 🏆 ${r.title_name}` : r.contender_title_name ? ` 🎯 ${r.contender_title_name}` : '';
         const res = r.result_type === 'decisive' ? `**${r.winners}** def. ${r.others}` : `${[r.winners, r.others].filter(Boolean).join(', ')} (${r.result_type === 'draw' ? 'draw' : 'no contest'})`;
-        return `${matchLabel(r.match_type)}${tag}: ${res} ${when}`;
+        const f = fans.get(String(r.id));
+        return `${matchLabel(r.match_type)}${tag}: ${res} ${when}${f ? ` · ⭐ ${f.avg}` : ''}`;
     }).join('\n').slice(0, 4000));
     return { embeds: [embed] };
 }
@@ -172,7 +126,7 @@ async function staffPayload(interaction) {
         embeds: [embed],
         components: [row(
             btn('ui:h:pending', `📥 Approvals (${p[0].n})`, ButtonStyle.Primary, p[0].n === 0),
-            btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'))]
+            btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'), btn('ui:ch:h', '📺 Channels'))]
     };
 }
 
@@ -184,13 +138,15 @@ async function handleHome(interaction, section, arg) {
     if (section === 'pending') return command(interaction, 'admin').execute(privately(interaction, 'pending'));
     if (section === 'card') return command(interaction, 'card').execute(privately(interaction, 'view', { brand: arg }));
     if (section === 'watch') return command(interaction, 'title').execute(privately(interaction, 'watch'));
+    // 3.1 sections live in hub.js
+    if (require('./hub').SECTIONS.includes(section)) return require('./hub').openSection(interaction, section);
 
     let payload;
     if (section === 'home') payload = homePayload(interaction, interaction.guild?.name);
     else if (section === 'champs') payload = await championsPayload(guildId);
     else if (section === 'show') payload = await nextShowPayload(guildId);
     else if (section === 'results') payload = await resultsPayload(guildId);
-    else if (section === 'roster') payload = await rosterListPayload(guildId, { division: 'all', sort: 'wrestler', page: 0 });
+    else if (section === 'roster') payload = await rosterListPayload(guildId, { division: 'all', sort: 'wrestler', page: 0, extras: true });
     else if (section === 'mine') payload = await whoisPayload(interaction, { ownerId: interaction.user.id, mine: true });
     else if (section === 'help') payload = helpPayload(interaction, 'start');
     else if (section === 'staff') payload = await staffPayload(interaction);
@@ -201,23 +157,26 @@ async function handleHome(interaction, section, arg) {
 
 // ------------------------------------------------------------------ text roster with buttons
 
-async function rosterListPayload(guildId, { division = 'all', sort = 'wrestler', page = 0, includeRetired = false } = {}) {
+async function rosterListPayload(guildId, { division = 'all', sort = 'wrestler', page = 0, includeRetired = false, extras = false } = {}) {
     const { buildRosterList, toMessages } = require('./rosterList');
     const pages = toMessages(await buildRosterList(guildId, { division: division === 'all' ? null : division, sort, includeRetired }));
     const p = Math.min(Math.max(0, page), pages.length - 1);
-    const id = (d, s, n) => `ui:l:${d}:${s}:${n}`;
+    // extras = opened from the home menu: also offer the Hall of Fame and the injury report (ids end in :x)
+    const id = (d, s, n) => `ui:l:${d}:${s}:${n}${extras ? ':x' : ''}`;
     const divRow = row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => btn(id(d, sort, 0), l, d === division ? ButtonStyle.Primary : ButtonStyle.Secondary)));
     const nav = [btn(id(division, sort === 'player' ? 'wrestler' : 'player', 0), sort === 'player' ? '🔤 A to Z' : '👥 By player')];
     if (pages.length > 1) {
         nav.push(btn(id(division, sort, p - 1), '◀', ButtonStyle.Secondary, p === 0), btn(`ui:x:${p}`, `${p + 1} / ${pages.length}`, ButtonStyle.Secondary, true), btn(id(division, sort, p + 1), '▶', ButtonStyle.Secondary, p >= pages.length - 1));
     }
-    return { embeds: pages[p], components: [divRow, row(...nav)], allowedMentions: NOPING };
+    const components = [divRow, row(...nav)];
+    if (extras) components.push(row(btn('ui:hi:h', '🏛 Hall of Fame'), btn('ui:hi:i', '🤕 Injuries')));
+    return { embeds: pages[p], components, allowedMentions: NOPING };
 }
 
 // ------------------------------------------------------------------ /whois
 
 /** The /whois card: who plays a wrestler (or a player's list), with buttons to dig in. */
-async function whoisPayload(interaction, { ownerId = null, characterId = null, mine = false } = {}) {
+async function whoisPayload(interaction, { ownerId = null, characterId = null, mine = false, actions = true } = {}) {
     const { requireCharacter } = require('../utils/characterUtils');
     const { characterSummary } = require('../utils/statsQueries');
     const guildId = interaction.guildId;
@@ -260,6 +219,10 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             .addOptions(chars.slice(0, 25).map((c) => ({ label: clip(c.name, 100), value: String(c.id), description: clip(`${DIVISION_LABELS[c.division]}${c.status === 'retired' ? ' · retired' : ''}`, 100), default: String(c.id) === String(picked?.id) })))));
         const focus = picked || chars[0];
         components.push(row(btn(`ui:w:p:${focus.id}`, `🖼 ${clip(focus.name, 30)}'s card`), btn(`ui:w:s:${focus.id}`, '📊 Stats'), btn(`ui:w:t:${focus.id}`, '🏆 Title history')));
+        // 3.1: the owner (or staff) can edit right here. Nobody else ever sees these buttons.
+        if (actions && (String(ownerId) === String(interaction.user.id) || isAdmin(interaction))) {
+            components.push(row(btn(`ui:mw:e:${focus.id}`, '✏️ Edit details'), btn(`ui:mw:s:${focus.id}`, '📖 Story & moves'), btn(`ui:mw:p:${focus.id}`, '🖼 Picture'), btn(`ui:k:v:${focus.id}`, '📝 Contract')));
+        }
     }
     return { embeds: [embed], components, allowedMentions: NOPING };
 }
@@ -293,12 +256,14 @@ const HELP = {
     start: { label: 'Getting started', emoji: '👋', text: [
         '**New here?** Submit a wrestler with `/character submit`. An admin approves it.',
         '**Your card:** `/character profile` shows your wrestler\'s card.',
-        '**Everything in one place:** `/fnlw` opens the home menu with buttons.',
+        '**Everything in one place:** `/fnlw` opens the home menu with buttons. `/fnlw go:` jumps to one section.',
+        '**Your wrestlers:** `/fnlw` → 🙋 My Wrestlers has ✏️ Edit, 📖 Story, 🖼 Picture and 📝 Contract buttons.',
         '**Who plays who:** `/whois` a wrestler, or `/directory list` for the whole roster.'] },
     players: { label: 'Wrestlers & stats', emoji: '🤼', text: [
         '`/character submit` · `edit` · `picture` · `story` for your wrestlers',
         '`/character profile` the wrestler\'s card · `/stats user` your player card',
         '`/stats character` detailed stats · `/stats head-to-head` two wrestlers',
+        '`/fnlw go:Stats` every stat for a wrestler with buttons · `/fnlw go:Standings` leaderboards, rankings, power, season, rivalries',
         '`/standings power` power rankings · `/standings rankings` division ladders · `/standings leaderboard` top lists',
         '`/legacy nominate` nominate someone when an award vote is open to everyone',
         '`/booking request` ask for a match · `/booking suggest` fresh opponents',
@@ -314,7 +279,8 @@ const HELP = {
         '`/fnlw` → **Next Show** for the RAW and SmackDown cards',
         '`/fnlw` → **Results** for the latest matches',
         '`/booking` signups: tap the button on a signup post to say you\'re available',
-        '`/tournament bracket` · `/feud list` · `/directory injury-list`'] },
+        '`/tournament bracket` · `/feud list` · `/directory injury-list`',
+        '**Rate matches:** tap ⭐ under any result. Only the average is shown.'] },
     staff: { label: 'Staff tools', emoji: '🛠', staff: true, text: [
         '**Shows:** `/card auto` · `/card view` (edit, record results) · `/card post` · `/card schedule`',
         '**Results:** `/match log` (pick the type, wrestlers, winner) · `/match undo` · `/match edit` · `/match ple event:WrestleMania` tags today\'s matches as a PLE',
@@ -322,8 +288,9 @@ const HELP = {
         '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
+        '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
         '**Approvals:** `/admin pending`',
-        '**Settings:** `/admin channels` · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
+        '**Settings:** `/admin channels` (or 🛠 Staff Tools → 📺 Channels) · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
 };
 
 function helpPayload(interaction, cat = 'start') {
@@ -348,8 +315,10 @@ async function handle(interaction) {
     if (kind === 'h') return handleHome(interaction, parts[2], parts[3]);
 
     if (kind === 'l') {
-        const [, , division, sort, page] = parts;
-        return show(interaction, await rosterListPayload(interaction.guildId, { division, sort, page: Number(page) || 0 }));
+        const [, , division, sort, page, x] = parts;
+        const payload = await rosterListPayload(interaction.guildId, { division, sort, page: Number(page) || 0, extras: x === 'x' });
+        if (x === 'x') payload.components.push(homeRow());
+        return show(interaction, payload);
     }
 
     if (kind === 'belt') {
@@ -376,7 +345,7 @@ async function handle(interaction) {
             return show(interaction, await whoisPayload(interaction, { characterId }));
         }
         if (act === 'p') return command(interaction, 'character').execute(privately(interaction, 'profile', { character: parts[3] }));
-        if (act === 's') return command(interaction, 'stats').execute(privately(interaction, 'character', { character: parts[3] }));
+        if (act === 's') return require('./hub').statsPanel(interaction, parts[3], 'ov');
         if (act === 't') {
             const payload = await titleHistoryPayload(interaction.guildId, parts[3]);
             return respond(interaction, { ...payload, flags: EPHEMERAL, allowedMentions: NOPING });
@@ -398,6 +367,8 @@ async function handle(interaction) {
         // /stats user dropdown → that wrestler's profile card
         return command(interaction, 'character').execute(privately(interaction, 'profile', { character: interaction.values[0] }));
     }
+    const hub = require('./hub');
+    if (hub.KINDS.includes(kind)) return hub.handle(interaction, parts);
     throw new UserError('That button is from an older version of the bot. Run the command again.');
 }
 

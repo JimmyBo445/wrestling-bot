@@ -71,6 +71,7 @@ async function presentMatch(interaction, result) {
         content: notices.join('\n') || undefined,
         embeds: [embed],
         files: file ? [file] : [],
+        components: matchButtons(result.matchId),
         allowedMentions: NO_MENTIONS
     };
     return { payload, notices };
@@ -102,4 +103,12 @@ async function postToResultsChannel(interaction, payload) {
     return channel;
 }
 
-module.exports = { presentMatch, mirrorToMatchesChannel, postToResultsChannel, textSummary };
+/** 3.1: under every result: anyone can rate it; the Staff button opens Edit / Undo for admins and staff only. */
+function matchButtons(matchId) {
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    return [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`ui:m:r:${matchId}`).setLabel('⭐ Rate this match').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`ui:m:s:${matchId}`).setLabel('🛠 Staff').setStyle(ButtonStyle.Secondary))];
+}
+
+module.exports = { matchButtons, presentMatch, mirrorToMatchesChannel, postToResultsChannel, textSummary };

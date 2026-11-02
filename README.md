@@ -1,10 +1,12 @@
-# Wrestling Bot 3.0.0
+# Wrestling Bot 3.1.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
 servers at once. Everything is saved permanently in Postgres.
 
 ## What it does
+
+**Buttons (3.1):** `/fnlw` opens a home menu with a panel for every area (stats, standings, legacy, teams, tournaments, feuds, contracts, Hall of Fame, injuries, channels). Everyone can look; edit buttons only appear for admins and the staff role (and a wrestler's own player). Every result has ⭐ fan ratings and a 🛠 Staff button.
 
 **Combined commands:** `/standings` (leaderboard, rankings, season), `/directory` (roster, Hall of Fame, injuries), `/booking` (matchmaking and signups), `/championship` (look), `/title` and `/reign` (admins), `/admin newsletter` and `/admin report`. The older separate names were removed in 2.11.
 

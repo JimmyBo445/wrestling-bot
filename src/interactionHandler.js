@@ -49,7 +49,7 @@ async function handleInteraction(client, interaction) {
             const command = client.commands.get(interaction.commandName);
             if (!command?.autocomplete) return;
             await command.autocomplete(interaction);
-        } else if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        } else if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isAnySelectMenu?.() || interaction.isModalSubmit?.()) {
             await handleButtonInteraction(interaction);
         }
     } catch (err) {

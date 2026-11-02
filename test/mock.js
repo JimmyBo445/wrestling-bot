@@ -18,8 +18,10 @@ let getChannelLazy = (id) => ({ id, isTextBased: () => true, send: async () => (
 const sent = []; // messages posted to channels by the bot
 const channelMock = (id) => ({
     id, isTextBased: () => true,
-    send: async (payload) => { const m = { id: `msg${sent.length + 1}`, channelId: id, payload }; sent.push(m); return m; }
+    send: async (payload) => { const m = { id: `msg${sent.length + 1}`, channelId: id, payload }; sent.push(m); return m; },
+    messages: { fetch: async (mid) => ({ id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); } }) }
 });
+const edited = []; // messages the bot edited (by id)
 const channels = new Map();
 const getChannel = (id) => { if (!channels.has(id)) channels.set(id, channelMock(id)); return channels.get(id); };
 getChannelLazy = getChannel;
@@ -30,7 +32,7 @@ const guild = (id = 'g1') => ({
     channels: { fetch: async (cid) => getChannel(cid) }
 });
 
-function makeInteraction({ kind = 'command', commandName, sub = null, group = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null, member = null }) {
+function makeInteraction({ kind = 'command', commandName, sub = null, group = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null, member = null, fields = {} }) {
     const responses = [];
     const i = {
         client, kind, commandName, customId, values, guildId, channelId: 'chan1', channel: getChannel('chan1'), guild: guild(guildId),
@@ -42,6 +44,9 @@ function makeInteraction({ kind = 'command', commandName, sub = null, group = nu
         inGuild: () => true, isRepliable: () => true,
         isChatInputCommand: () => kind === 'command', isAutocomplete: () => kind === 'autocomplete',
         isButton: () => kind === 'button', isStringSelectMenu: () => kind === 'select',
+        isAnySelectMenu: () => kind === 'select' || kind === 'channel', isChannelSelectMenu: () => kind === 'channel', isModalSubmit: () => kind === 'modal',
+        fields: { getTextInputValue: (k) => (fields[k] === undefined ? '' : String(fields[k])) },
+        showModal: async (m) => { i.replied = true; responses.push({ type: 'modal', p: m }); },
         options: {
             getSubcommand: () => sub,
             getSubcommandGroup: () => group,
@@ -101,8 +106,10 @@ async function auto(commandName, sub, name, value, options = {}, opts = {}) {
     await handleInteraction(client, i);
     return i.responses.find((r) => r.type === 'autocomplete')?.choices || null;
 }
-async function click(customId, { values, kind, message, admin = true, user = 'admin1' } = {}) {
-    const i = makeInteraction({ kind: kind || (values ? 'select' : 'button'), customId, values, message, admin, user });
+async function click(customId, { values, kind, message, admin = true, user = 'admin1', fields, private: priv = false } = {}) {
+    // private: the button sits on a private panel (so the bot updates it in place)
+    const msg = message || (priv ? { id: 'panel1', flags: 64, embeds: [], components: [] } : undefined);
+    const i = makeInteraction({ kind: kind || (fields ? 'modal' : values ? 'select' : 'button'), customId, values, message: msg, admin, user, fields });
     await handleInteraction(client, i);
     return i;
 }
@@ -112,4 +119,17 @@ const lastPayload = (i) => i.responses[i.responses.length - 1]?.p;
 const text = (i) => i.responses.map((r) => [r.p?.content, ...(r.p?.embeds || []).map((e) => `${e.data?.title || ''} ${e.data?.description || ''} ${(e.data?.fields || []).map((f) => `${f.name}:${f.value}`).join(' ')} ${e.data?.footer?.text || ''}`)].filter(Boolean).join(' | ')).join('\n');
 const hasFile = (i) => i.responses.some((r) => (r.p?.files || []).length > 0);
 
-module.exports = { run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client };
+/** Every button / menu id in the bot's last answer (to check what someone can see). */
+const ids = (i) => {
+    const p = lastPayload(i) || {};
+    return (p.components || []).flatMap((r) => (r.components || []).map((c) => c.data?.custom_id)).filter(Boolean);
+};
+/** The pop-up form the bot opened, if any: { id, inputs: [ids] }. */
+const modalOf = (i) => {
+    const m = i.responses.find((r) => r.type === 'modal')?.p;
+    if (!m) return null;
+    const j = m.toJSON();
+    return { id: j.custom_id, title: j.title, inputs: j.components.map((r) => r.components[0].custom_id), json: j };
+};
+
+module.exports = { edited, run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client, ids, modalOf };
