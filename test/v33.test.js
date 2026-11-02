@@ -210,11 +210,11 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
         c = await click(`cardui:rw:${d.id}:1:1`, { admin: false, user: 'u9' });
         assert.match(text(c), /Only admins/);
     });
-    await t('help knows /title and /reign; commands load', async () => {
+    await t('help knows /title (which holds the reign tools since 2.20); commands load', async () => {
         const i = await run('help', null, {}, ADM);
-        assert.match(text(i), /\/title/); assert.match(text(i), /\/reign/);
+        assert.match(text(i), /\/title/); assert.match(text(i), /reign-add/);
         const names = require('../src/registerCommands').loadCommandData().map((c) => c.name);
-        assert.ok(names.includes('title') && names.includes('reign'));
+        assert.ok(names.includes('title') && !names.includes('reign'));
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);

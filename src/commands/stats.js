@@ -130,7 +130,11 @@ module.exports = {
             if (!interaction.options.getBoolean('text')) {
                 await interaction.deferReply();
                 const buffer = await renderPlayerCard(await buildPlayerData(interaction.guild, target, ownerId));
-                return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'player.png' })] });
+                const { StringSelectMenuBuilder, ActionRowBuilder } = require('discord.js');
+                const mine = u.chars.filter((c) => c.current && c.status !== 'denied' && c.status !== 'pending').slice(0, 25);
+                const components = mine.length ? [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ui:sp').setPlaceholder('Open a wrestler\'s card')
+                    .addOptions(mine.map((c) => ({ label: String(c.name).slice(0, 100), value: String(c.id), description: (DIVISION_LABELS[c.division] || c.division || '').slice(0, 100) }))))] : [];
+                return interaction.editReply({ files: [new AttachmentBuilder(buffer, { name: 'player.png' })], components });
             }
             const divLines = Object.entries(u.byDivision).map(([d, v]) => `${DIVISION_LABELS[d] || d}: **${rec(v)}**${v.winPct && v.wins + v.losses ? ` (${v.winPct.toFixed(0)}%)` : ''}`);
             const embed = new EmbedBuilder().setTitle(`${target.displayName || target.username} — Overall`).setColor(0xC0392B)

@@ -294,7 +294,7 @@ module.exports = {
                 `INSERT INTO card_shows (guild_id, brand, show_date, created_by) VALUES ($1, $2, $3, $4)
                  ON CONFLICT (guild_id, brand) DO UPDATE SET show_date = EXCLUDED.show_date, reminded_on = NULL, updated_at = now()`, [guildId, brand, date, interaction.user.id]);
             const s = await require('../utils/ensureGuild').getGuildSettings(guildId);
-            return respond(interaction, { content: `📅 The **${BL}** card is set for **${date}**.${s.admin_channel_id ? ` I'll post "tonight's card" in <#${s.admin_channel_id}> from noon that day.` : ' Set a staff channel with `/admin set-admin-channel` and I\'ll remind you on the day.'}` });
+            return respond(interaction, { content: `📅 The **${BL}** card is set for **${date}**.${s.admin_channel_id ? ` I'll post "tonight's card" in <#${s.admin_channel_id}> from noon that day.` : ' Set a staff channel with `/admin channels staff:` and I\'ll remind you on the day.'}` });
         }
 
         if (sub === 'upcoming') {

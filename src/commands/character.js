@@ -130,9 +130,11 @@ async function checkImage(url) {
 
 /** The "Story" button under a profile (only when there is something on the second page). */
 function storyButtons(character) {
-    if (!character.lore && !character.signatures && !character.catchphrase) return [];
     const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-    return [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`prof:story:${character.id}`).setLabel('Story & moves').setStyle(ButtonStyle.Secondary))];
+    const b = (id, label) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(ButtonStyle.Secondary);
+    const buttons = [b(`ui:w:s:${character.id}`, '📊 Stats'), b(`ui:w:o:${character.id}`, '🙋 Who plays them'), b(`ui:w:t:${character.id}`, '🏆 Title history')];
+    if (character.lore || character.signatures || character.catchphrase) buttons.push(b(`prof:story:${character.id}`, 'Story & moves'));
+    return [new ActionRowBuilder().addComponents(...buttons)];
 }
 
 module.exports = {

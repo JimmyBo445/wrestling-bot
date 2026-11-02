@@ -30,12 +30,13 @@ const guild = (id = 'g1') => ({
     channels: { fetch: async (cid) => getChannel(cid) }
 });
 
-function makeInteraction({ kind = 'command', commandName, sub = null, group = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null }) {
+function makeInteraction({ kind = 'command', commandName, sub = null, group = null, options = {}, user = 'admin1', admin = true, customId, values, guildId = 'g1', focused = null, message = null, member = null }) {
     const responses = [];
     const i = {
         client, kind, commandName, customId, values, guildId, channelId: 'chan1', channel: getChannel('chan1'), guild: guild(guildId),
         user: { id: user, username: `user${user}`, displayName: `Name${user}`, bot: false },
         memberPermissions: { has: () => admin },
+        member: member || { roles: [] },
         message: message || { embeds: [], components: [] },
         deferred: false, replied: false, ephemeral: false, responses,
         inGuild: () => true, isRepliable: () => true,
@@ -50,6 +51,7 @@ function makeInteraction({ kind = 'command', commandName, sub = null, group = nu
             getAttachment: (n) => options[n] || null,
             getUser: (n) => (options[n] ? { id: options[n], username: `user${options[n]}`, displayName: `Name${options[n]}`, bot: false } : null),
             getChannel: (n) => (options[n] ? { id: options[n] } : null),
+            getRole: (n) => (options[n] ? { id: options[n] } : null),
             getFocused: (full) => (full ? { name: focused.name, value: focused.value } : focused.value)
         },
         reply: async (p) => { i.replied = true; if (p.flags & 64) i.ephemeral = true; responses.push({ type: 'reply', p }); },
@@ -77,10 +79,12 @@ function remap(commandName, sub, opts) {
         if (['log-singles-title-match', 'log-tag-title-match'].includes(sub)) return ['championship-legacy', sub, opts];
         if (['vacate', 'interim', 'unify', 'watch', 'waive-rematch'].includes(sub)) return ['title', sub, opts];
         if (sub === 'contender-award' || sub === 'contender-revoke') return ['title', sub, opts];
-        const r = { 'backfill-reign': 'add', 'edit-reign': 'edit', 'remove-reign': 'remove' }[sub];
-        if (r) return ['reign', r, opts];
+        const r = { 'backfill-reign': 'reign-add', 'edit-reign': 'reign-edit', 'remove-reign': 'reign-remove' }[sub];
+        if (r) return ['title', r, opts];
     }
     if (commandName === 'contender' && ['award', 'revoke'].includes(sub)) return ['title', `contender-${sub}`, opts];
+    // 2.20: /reign moved into /title
+    if (commandName === 'reign') return ['title', ['add', 'edit', 'remove'].includes(sub) ? `reign-${sub}` : sub, opts];
     if (!m[commandName]) return [commandName, sub, opts];
     const [c, s, g] = m[commandName]();
     return [c, s, g ? { ...opts, group: g } : opts];

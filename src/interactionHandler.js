@@ -1,5 +1,5 @@
 const { UserError } = require('./utils/errors');
-const { EPHEMERAL } = require('./utils/discordHelpers');
+const { EPHEMERAL, memberIsStaff } = require('./utils/discordHelpers');
 const { ensureGuild } = require('./utils/ensureGuild');
 const { handleButtonInteraction } = require('./handlers/buttonHandler');
 
@@ -33,6 +33,8 @@ async function handleInteraction(client, interaction) {
             return;
         }
         await ensureGuild(interaction.guildId);
+        // staff role members get the same bot powers as admins (checked on every interaction)
+        try { if (!interaction.isAutocomplete() && await memberIsStaff(interaction)) interaction.isStaff = true; } catch (_) { /* no staff role */ }
 
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);

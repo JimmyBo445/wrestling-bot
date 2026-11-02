@@ -1,5 +1,5 @@
 // New championship tools: a simple title-match form, belt pictures, and hand-entered defenses.
-// This file only defines the pieces; they are exposed through /title and /reign.
+// This file only defines the pieces; they are exposed through /title.
 const { SlashCommandBuilder } = require('discord.js');
 const { pool, withTransaction } = require('../db/pool');
 const { autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
@@ -75,11 +75,11 @@ async function logTitleMatch(interaction) {
         let first, second;
         if (reign?.team_id) {
             const ids = await reignTeamMembers(reign);
-            if (ids.length !== 2) throw new UserError(`The champions of the **${title.name}** don't have exactly 2 members on record. Fix them with \`/reign edit\`.`);
+            if (ids.length !== 2) throw new UserError(`The champions of the **${title.name}** don't have exactly 2 members on record. Fix them with \`/title reign-edit\`.`);
             first = ids;
             second = (await teamPair(guildId, challenger)).ids;
         } else if (reign) {
-            throw new UserError(`The **${title.name}** champions aren't a registered team. Fix the reign with \`/reign edit\` first.`);
+            throw new UserError(`The **${title.name}** champions aren't a registered team. Fix the reign with \`/title reign-edit\` first.`);
         } else {
             if (!opponent) throw new UserError(`The **${title.name}** is vacant, so fill in \`opponent\` too (the second team).`);
             first = (await teamPair(guildId, challenger)).ids;
@@ -89,7 +89,7 @@ async function logTitleMatch(interaction) {
     }
     let p1, p2;
     if (reign) {
-        if (!reign.character_id) throw new UserError(`The champion of the **${title.name}** (${reignHolderName(reign)}) isn't a wrestler in the bot. Fix the reign with \`/reign edit\` first.`);
+        if (!reign.character_id) throw new UserError(`The champion of the **${title.name}** (${reignHolderName(reign)}) isn't a wrestler in the bot. Fix the reign with \`/title reign-edit\` first.`);
         p1 = String(reign.character_id); p2 = challenger;
     } else {
         if (!opponent) throw new UserError(`The **${title.name}** is vacant, so fill in \`opponent\` too (the second wrestler).`);

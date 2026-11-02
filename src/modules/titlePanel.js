@@ -87,7 +87,7 @@ async function handleComponent(interaction) {
     const guildId = interaction.guildId;
     try {
         if (!['hist', 'def', 'lin'].includes(act) && !isAdmin(interaction)) {
-            return await respond(interaction, { content: 'Only admins/mods (Manage Server) can use that button.', flags: EPHEMERAL });
+            return await respond(interaction, { content: 'Only admins and staff can use that button.', flags: EPHEMERAL });
         }
         if (act === 'x') { await interaction.deferUpdate(); return await interaction.editReply({ content: 'Cancelled.', components: [] }); }
         const title = await requireTitle(guildId, act === 'pg' ? a : tid);

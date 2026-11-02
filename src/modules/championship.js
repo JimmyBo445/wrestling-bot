@@ -58,13 +58,16 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('score').setDescription('Falls or score, like 3-2').setRequired(false).setMaxLength(20)))
     .addSubcommand((s) => s.setName('vacate').setDescription('[Admin] Vacate a title (the reign is ended)')
         .addStringOption((o) => titleOpt(o)))
-    .addSubcommand((s) => s.setName('backfill-reign').setDescription('[Admin] Add a reign from before the bot (pick a character, a team, or type a name)')
+    .addSubcommand((s) => s.setName('backfill-reign').setDescription('[Admin] Add a reign from before the bot: a character (+ partners for tag titles), a team, or a name')
         .addStringOption((o) => titleOpt(o))
         .addStringOption((o) => o.setName('won_date').setDescription('Date won, YYYY-MM-DD').setRequired(true))
         .addStringOption((o) => o.setName('lost_date').setDescription('Date lost, YYYY-MM-DD (leave empty if still champion)').setRequired(false))
         .addStringOption((o) => o.setName('character').setDescription('Champion, if they are a character in the bot').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('team').setDescription('Champion team, for tag titles').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('champion_name').setDescription('Champion name as text (when not in the bot)').setRequired(false).setMaxLength(60))
+        .addStringOption((o) => o.setName('partner').setDescription('Tag titles: the champion\'s partner (pick `character` first)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('partner2').setDescription('Tag titles: a third member, for 3-person teams').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('team_name').setDescription('Tag titles: the team name to show, e.g. Black Air Force Energy').setRequired(false).setMaxLength(60))
         .addIntegerOption((o) => o.setName('defenses').setDescription('Successful defenses').setRequired(false).setMinValue(0).setMaxValue(999))
         .addStringOption((o) => o.setName('notes').setDescription('Optional note').setRequired(false).setMaxLength(200)))
     .addSubcommand((s) => s.setName('edit-reign').setDescription('[Admin] Fix any reign: dates, defenses or notes (also reigns the bot logged)')
@@ -77,6 +80,9 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('character').setDescription('Change the champion to this wrestler').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('team').setDescription('Change the champion to this team (tag titles)').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('champion_name').setDescription('Change the champion to a plain-text name').setRequired(false).setMaxLength(60))
+        .addStringOption((o) => o.setName('partner').setDescription('Tag titles: the champion\'s partner (pick `character` first)').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('partner2').setDescription('Tag titles: a third member, for 3-person teams').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('team_name').setDescription('Tag titles: the team name to show, e.g. Black Air Force Energy').setRequired(false).setMaxLength(60))
         .addBooleanOption((o) => o.setName('interim').setDescription('Mark or unmark this as an interim reign').setRequired(false)))
     .addSubcommand((s) => s.setName('watch').setDescription('[Admin] Days since each title was defended and since each champion last wrestled'))
     .addSubcommand((s) => s.setName('grand-slam').setDescription('Who has held every title in a division (and who is close)')
@@ -162,7 +168,7 @@ async function defensesEmbed(title, want = null) {
         ...defs.map((d) => ({ at: new Date(d.created_at).getTime(), text: `vs ${d.opponents || 'unknown'} · <t:${Math.floor(new Date(d.created_at).getTime() / 1000)}:D> · match #${d.id}` }))
     ].sort((a, b) => a.at - b.at).map((x, i) => `**${i + 1}.** ${x.text}`);
     const older = reign.defenses - defs.length - manual.length;
-    if (older > 0) lines.push(`_+ ${older} defense${older === 1 ? '' : 's'} counted without details (add them with \`/reign add-defense\`)_`);
+    if (older > 0) lines.push(`_+ ${older} defense${older === 1 ? '' : 's'} counted without details (add them with \`/title add-defense\`)_`);
     return new EmbedBuilder().setTitle(`${holder}: ${title.name}`).setColor(0xE8BF4A)
         .setDescription(`Reign #${reign.n} · ${fmtDate(reign.won_date)} → ${fmtDate(reign.lost_date)} · ${daysBetween(reign.won_date, reign.lost_date)} days · **${reign.defenses}** defense${reign.defenses === 1 ? '' : 's'}\n\n${lines.length ? lines.join('\n') : 'No title defenses yet.'}`.slice(0, 4000));
 }
@@ -187,11 +193,27 @@ async function resolveHolder(guildId, title, interaction) {
     const teamVal = interaction.options.getString('team');
     const nameVal = interaction.options.getString('champion_name');
     if ([charVal, teamVal, nameVal].filter(Boolean).length !== 1) {
-        throw new UserError('Fill in exactly ONE of: `character` (a wrestler in the bot), `team` (a registered team) or `champion_name` (plain text).');
+        throw new UserError('Fill in exactly ONE of: `character` (a wrestler in the bot; for tag titles add `partner`), `team` (a registered team) or `champion_name` (plain text).');
     }
     let character = null, team = null, members = [];
+    const partnerVals = ['partner', 'partner2'].map((k) => interaction.options.getString(k)).filter(Boolean);
+    const teamLabel = interaction.options.getString('team_name')?.trim() || null;
+    if ((partnerVals.length || teamLabel) && !title.is_tag_title) throw new UserError('`partner`, `partner2` and `team_name` are only for tag titles.');
+    if (partnerVals.length && !charVal) throw new UserError('Pick the first wrestler in `character`, then their partner(s).');
+    if (charVal && title.is_tag_title) {
+        // a tag reign held by wrestlers who aren't a registered team: character + partner (+ partner2)
+        if (!partnerVals.length) throw new UserError('That is a tag title. Pick `character` **and** `partner` (and `partner2` for a 3-person team), or pick a registered `team`.');
+        const ids = [charVal, ...partnerVals];
+        for (const v of ids) {
+            const c = await requireCharacter(guildId, v, { statuses: ['approved', 'retired'] });
+            if (c.division !== title.division) throw new UserError(`**${c.name}** is in a different division than the **${title.name}**.`);
+            if (members.some((m) => String(m.id) === String(c.id))) throw new UserError(`**${c.name}** is listed twice.`);
+            members.push(c);
+        }
+        const label = teamLabel || members.map((m) => m.name).join(' & ');
+        return { character: null, team: null, members, nameVal: label.slice(0, 80) };
+    }
     if (charVal) {
-        if (title.is_tag_title) throw new UserError('That is a tag title. Pick a `team` or type a `champion_name`.');
         character = await requireCharacter(guildId, charVal, { statuses: ['approved', 'retired'] });
         if (character.division !== title.division) throw new UserError(`**${character.name}** is in a different division than the **${title.name}**.`);
     } else if (teamVal) {
@@ -238,6 +260,9 @@ module.exports = {
         }
         if (focused.name === 'reign') return interaction.respond(await reignAutocomplete(interaction, focused.value));
         if (focused.name === 'team') return interaction.respond(await autocompleteTeams(interaction, focused.value));
+        if (['character', 'partner', 'partner2'].includes(focused.name) && ['backfill-reign', 'edit-reign'].includes(interaction.options.getSubcommand())) {
+            return interaction.respond(await autocompleteCharacters(interaction, focused.value, { statuses: ['approved', 'retired'] }));
+        }
         return interaction.respond(await autocompleteCharacters(interaction, focused.value));
     },
 
@@ -277,7 +302,10 @@ module.exports = {
                 const list = rows.filter((r) => r.division === div);
                 if (list.length) embed.addFields({ name: `${DIVISION_THEME[div].label} Division`, value: list.map(fmt).join('\n\n').slice(0, 1024) });
             }
-            return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
+            const { StringSelectMenuBuilder, ActionRowBuilder: Row } = require('discord.js');
+            const pick = rows.length ? [new Row().addComponents(new StringSelectMenuBuilder().setCustomId('ui:belt').setPlaceholder('Open a title: belt, history, defenses, lineage')
+                .addOptions(rows.slice(0, 25).map((r) => ({ label: r.name.slice(0, 100), value: String(r.id), description: (r.reign_id ? reignHolderName({ team_name: r.team_name, character_name: r.champ_name, reign_char_name: r.reign_char_name }) : 'Vacant').slice(0, 100) }))))] : [];
+            return respond(interaction, { embeds: [embed], components: pick, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'belt') {
@@ -365,7 +393,7 @@ module.exports = {
                 return `**${s.title_name}**${s.is_interim ? ' _(interim)_' : ''}: ${s.holder}${s.injured ? ' 🤕' : ''}\nlast defense **${s.daysSinceDefense}d** ago${warnD} · champion last wrestled **${s.daysSinceActive}d** ago${warnA}`;
             });
             const embed = new EmbedBuilder().setTitle('Title Watch').setColor(0xE8BF4A).setDescription(lines.join('\n\n').slice(0, 4000))
-                .setFooter({ text: `Warn after ${settings.defense_days || '—'}d without a defense · auto-vacate after ${settings.vacate_days || '—'}d inactive (/admin deadlines)` });
+                .setFooter({ text: `Warn after ${settings.defense_days || '—'}d without a defense · auto-vacate after ${settings.vacate_days || '—'}d inactive (/admin rules)` });
             return respond(interaction, { embeds: [embed], flags: 64, allowedMentions: NO_MENTIONS });
         }
 
@@ -471,7 +499,9 @@ module.exports = {
             const defenses = interaction.options.getInteger('defenses');
             const notesRaw = interaction.options.getString('notes');
             const interim = interaction.options.getBoolean('interim');
-            const changeHolder = ['character', 'team', 'champion_name'].some((k) => interaction.options.getString(k));
+            const changeHolder = ['character', 'team', 'champion_name', 'partner', 'partner2'].some((k) => interaction.options.getString(k));
+            const labelOnly = !changeHolder && interaction.options.getString('team_name')?.trim();
+            if (labelOnly && !title.is_tag_title) throw new UserError('`team_name` is only for tag titles.');
             const holder = changeHolder ? await resolveHolder(guildId, title, interaction) : null;
             await withTransaction(async (client) => {
                 await assertNoOverlap(client, title.id, won, lost, reign.id);
@@ -485,6 +515,7 @@ module.exports = {
                     await client.query(`DELETE FROM title_reign_members WHERE reign_id = $1`, [reign.id]);
                     for (const m of holder.members) await client.query(`INSERT INTO title_reign_members (reign_id, character_id) VALUES ($1,$2)`, [reign.id, m.id]);
                 }
+                if (labelOnly) await client.query(`UPDATE title_reigns SET reign_char_name = $2 WHERE id = $1`, [reign.id, labelOnly.slice(0, 80)]);
                 await setVacancy(client, title.id);
             });
             await logAudit(guildId, interaction.user.id, 'reign_edited', { title: title.name, reignId });

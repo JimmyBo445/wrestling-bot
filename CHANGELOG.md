@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.20.0 — Home menu, buttons, staff role, simpler commands
+**For everyone**
+- **`/fnlw`**: a private home menu with buttons. 🏆 Champions (pick a title from the dropdown for its belt card, history, defenses and lineage), 📅 Next Show (the RAW and SmackDown cards, now visible to members), 📰 Results (the last 10 matches, now visible to members), 📋 Roster, 🙋 My Wrestlers and ❓ Help. Every section has a 🏠 Home button.
+- **`/whois`** now has a dropdown of that player's wrestlers and buttons for the profile card, stats and title history.
+- **`/directory list`** has buttons to switch division (All, Men's, Women's, Custom, Custom Women's), switch between A to Z and By player, and ◀ ▶ to page through a big roster.
+- **`/character profile`** has 📊 Stats, 🙋 Who plays them and 🏆 Title history buttons.
+- **`/stats user`** has a dropdown to open any of that player's wrestler cards.
+- **`/championship list`** has a dropdown to open any title's belt card.
+- **`/help`** has a topic dropdown: Getting started, Wrestlers & stats, Titles, Shows & results (and Staff tools for admins and staff).
+- Clicking a button under a public message answers privately, so one person's clicks never change what everyone else sees.
+
+**For admins and staff**
+- **Staff role:** `/admin staff-role role:@Staff`. Members with that role can use every admin tool (booking, logging matches, titles, approvals) without the Manage Server permission. So they can *see* the admin commands, also add the role to them in Server Settings → Integrations → this bot.
+- **`/admin channels`** sets every "post it here" channel in one command (approvals, staff reminders, match results copy, Wrestler of the Month, newsletter) and shows them all. `turn_off` stops one. Replaces `set-pending-channel`, `set-admin-channel`, `set-matches-channel`, `set-monthly-channel` and `set-newsletter-channel`.
+- **`/admin rules`** sets the league rules in one command (singles cooldown, win-streak prompt, milestones, defense warning, auto-vacate, rematch clause, time zone) and shows them all. Replaces `set-cooldown`, `set-streak-threshold`, `milestones`, `deadlines`, `rematches` and `set-timezone`. `/admin` went from 25 parts to 13.
+- **`/reign` moved into `/title`:** `/title reign-add`, `reign-edit`, `reign-remove`, `add-defense`, `remove-defense`. Now `/championship` is for looking at titles and `/title` is for changing them.
+- **Tag title reigns with partners:** `/title reign-add` and `reign-edit` take `character` + `partner` (+ `partner2` for 3-person teams) and an optional `team_name`, for teams that aren't registered in the bot. Every wrestler is linked (it counts on each of their profiles) and every player gets credit. Editing an old reign keeps the player credit it already had. `team_name` alone renames a tag reign.
+- **🛠 Staff Tools** in `/fnlw`: how many requests are waiting, with buttons for approvals, the RAW and SmackDown card editors and the title watch, plus a cheat sheet of staff commands.
+- Database change: migration 018 (one setting for the staff role). The bot now has 18 commands.
+
 ## 2.19.0 — /whois and a text roster
 - **`/whois character:`** (anyone can use it): who plays that wrestler, and a list of all that player's wrestlers with division, record (with this player), current belts 🏆 and team. Retired wrestlers are listed last. An unclaimed wrestler says nobody plays them right now.
 - **`/whois player:@someone`**: the same list for a player.

@@ -92,6 +92,12 @@ module.exports = {
     toMessages,
 
     async execute(interaction) {
+        // the usual view comes with buttons to switch division and sort; "include retired" keeps the plain list
+        if (!interaction.options.getBoolean('include_retired')) {
+            const { rosterListPayload } = require('./menus');
+            return respond(interaction, await rosterListPayload(interaction.guildId, {
+                division: interaction.options.getString('division') || 'all', sort: interaction.options.getString('sort') || 'wrestler', page: 0 }));
+        }
         const embeds = await buildRosterList(interaction.guildId, {
             division: interaction.options.getString('division'),
             sort: interaction.options.getString('sort') || 'wrestler',

@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } = 
 const { pool } = require('../db/pool');
 const { getGuildSettings } = require('../utils/ensureGuild');
 const { buildPendingMessage } = require('../handlers/pendingQueue');
-const { respond, EPHEMERAL, NO_MENTIONS } = require('../utils/discordHelpers');
+const { respond, EPHEMERAL, NO_MENTIONS, forgetStaffRole } = require('../utils/discordHelpers');
 const { logAudit } = require('../utils/audit');
 const { UserError } = require('../utils/errors');
 const { buildMonthlyEmbed, prevMonthKey } = require('../utils/monthly');
@@ -18,37 +18,33 @@ const data = new SlashCommandBuilder()
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((s) => s.setName('pending').setDescription('Review waiting requests (characters, challenges, match requests, streak prompts)'))
-    .addSubcommand((s) => s.setName('set-pending-channel').setDescription('Where new approval requests and win-streak prompts are posted')
-        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(true).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
-    .addSubcommand((s) => s.setName('set-matches-channel').setDescription('Also post every match result in this channel (leave empty to turn off)')
-        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
-    .addSubcommand((s) => s.setName('set-cooldown').setDescription('How long before the same regular singles matchup can be booked again')
-        .addIntegerOption((o) => o.setName('hours').setDescription('Hours (0 turns the cooldown off)').setRequired(true).setMinValue(0).setMaxValue(720))
-        .addStringOption((o) => o.setName('scope').setDescription('Same two players (default) or the same two characters').setRequired(false)
-            .addChoices({ name: 'Same two players', value: 'user' }, { name: 'Same two characters', value: 'character' })))
-    .addSubcommand((s) => s.setName('set-streak-threshold').setDescription('How many wins in a row triggers the "pick a title shot" prompt')
-        .addIntegerOption((o) => o.setName('wins').setDescription('Win streak length (0 turns prompts off)').setRequired(true).setMinValue(0).setMaxValue(50)))
-    .addSubcommand((s) => s.setName('set-monthly-channel').setDescription('Where the monthly "Wrestler of the Month" post goes (leave empty to turn off)')
-        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand((s) => s.setName('channels').setDescription('Where the bot posts things. Fill in the ones to change; run empty to see them all.')
+        .addChannelOption((o) => o.setName('pending').setDescription('Approval requests and win-streak prompts').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addChannelOption((o) => o.setName('staff').setDescription('Staff reminders: tonight\'s card, rematches, title warnings').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addChannelOption((o) => o.setName('matches').setDescription('Copy every match result here').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addChannelOption((o) => o.setName('monthly').setDescription('Wrestler of the Month post').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addChannelOption((o) => o.setName('newsletter').setDescription('Weekly newsletter').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addStringOption((o) => o.setName('turn_off').setDescription('Stop posting one of these').setRequired(false)
+            .addChoices({ name: 'Match results copy', value: 'matches' }, { name: 'Wrestler of the Month', value: 'monthly' }, { name: 'Staff reminders', value: 'staff' }, { name: 'Newsletter', value: 'newsletter' })))
+    .addSubcommand((s) => s.setName('rules').setDescription('Cooldowns, streak prompts, title deadlines, rematches, time zone. Run empty to see them.')
+        .addIntegerOption((o) => o.setName('cooldown_hours').setDescription('Hours before the same singles matchup can be booked again (0 = off)').setRequired(false).setMinValue(0).setMaxValue(720))
+        .addStringOption((o) => o.setName('cooldown_by').setDescription('Cooldown counts the same two players or the same two characters').setRequired(false)
+            .addChoices({ name: 'Same two players', value: 'user' }, { name: 'Same two characters', value: 'character' }))
+        .addIntegerOption((o) => o.setName('streak_wins').setDescription('Wins in a row that trigger the "pick a title shot" prompt (0 = off)').setRequired(false).setMinValue(0).setMaxValue(50))
+        .addStringOption((o) => o.setName('milestones').setDescription('Auto shout-outs for streaks, career wins and title reigns').setRequired(false).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
+        .addIntegerOption((o) => o.setName('defense_days').setDescription('Warn staff if a title goes this many days without a defense (0 = off)').setRequired(false).setMinValue(0).setMaxValue(365))
+        .addIntegerOption((o) => o.setName('vacate_days').setDescription('Auto-vacate if the champion hasn\'t wrestled in this many days (0 = off)').setRequired(false).setMinValue(0).setMaxValue(730))
+        .addStringOption((o) => o.setName('rematches').setDescription('A champion who loses the belt is owed a rematch').setRequired(false).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
+        .addIntegerOption((o) => o.setName('rematch_days').setDescription('How many days the rematch is good for').setRequired(false).setMinValue(1).setMaxValue(365))
+        .addStringOption((o) => o.setName('timezone').setDescription('Your time zone, e.g. America/Chicago').setRequired(false).setMaxLength(60)))
+    .addSubcommand((s) => s.setName('staff-role').setDescription('Members with this role can use the bot\'s admin tools (no Manage Server needed)')
+        .addRoleOption((o) => o.setName('role').setDescription('The staff role').setRequired(false))
+        .addBooleanOption((o) => o.setName('remove').setDescription('Turn the staff role off').setRequired(false)))
     .addSubcommand((s) => s.setName('monthly-awards').setDescription('Post Wrestler of the Month now (default: last month)')
         .addStringOption((o) => o.setName('month').setDescription('Month as YYYY-MM, e.g. 2026-09').setRequired(false).setMaxLength(7)))
     .addSubcommand((s) => s.setName('backup').setDescription('Weekly backup spreadsheets sent to you by DM')
         .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(true)
             .addChoices({ name: 'Turn on (weekly, to me)', value: 'on' }, { name: 'Turn off', value: 'off' }, { name: 'Send one now', value: 'now' })))
-    .addSubcommand((s) => s.setName('milestones').setDescription('Auto shout-outs for win streaks, career wins and title reigns')
-        .addStringOption((o) => o.setName('action').setDescription('On or off').setRequired(true).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })))
-    .addSubcommand((s) => s.setName('set-admin-channel').setDescription('Staff channel for reminders: tonight\'s card, rematches, title warnings (empty = off)')
-        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
-    .addSubcommand((s) => s.setName('set-newsletter-channel').setDescription('Where the weekly newsletter is posted (leave empty to turn off)')
-        .addChannelOption((o) => o.setName('channel').setDescription('Channel').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
-    .addSubcommand((s) => s.setName('deadlines').setDescription('Warn when a champion has not defended, and optionally vacate belts of inactive champions')
-        .addIntegerOption((o) => o.setName('defense_days').setDescription('Warn staff if a title has not been defended in this many days (0 = off)').setRequired(false).setMinValue(0).setMaxValue(365))
-        .addIntegerOption((o) => o.setName('vacate_days').setDescription('Auto-vacate if the champion has not wrestled at all in this many days (0 = off)').setRequired(false).setMinValue(0).setMaxValue(730)))
-    .addSubcommand((s) => s.setName('rematches').setDescription('Rematch clause: a champion who loses the belt is owed a rematch')
-        .addStringOption((o) => o.setName('action').setDescription('On or off').setRequired(true).addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
-        .addIntegerOption((o) => o.setName('days').setDescription('How many days the rematch is good for (default 30)').setRequired(false).setMinValue(1).setMaxValue(365)))
-    .addSubcommand((s) => s.setName('set-timezone').setDescription('Your time zone, so show dates and reminders line up (e.g. America/New_York)')
-        .addStringOption((o) => o.setName('zone').setDescription('Time zone name like America/New_York, Europe/London, or UTC').setRequired(true).setMaxLength(40)))
     .addSubcommand((s) => s.setName('import').setDescription('Bring in characters or past results from a spreadsheet file (CSV). Shows a preview first.')
         .addStringOption((o) => o.setName('what').setDescription('What the file contains').setRequired(true).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }, { name: 'Title history (old reigns)', value: 'titles' }))
         .addAttachmentOption((o) => o.setName('file').setDescription('A .csv file (save your spreadsheet as CSV)').setRequired(true))
@@ -86,6 +82,80 @@ module.exports = {
             await pool.query(`UPDATE guilds SET monthly_channel_id = $1 WHERE guild_id = $2`, [channel?.id || null, guildId]);
             await logAudit(guildId, interaction.user.id, 'setting_monthly_channel', { channel: channel?.id || null });
             return respond(interaction, { content: channel ? `Wrestler of the Month will be posted in <#${channel.id}> at the start of each month (it covers the month before).` : 'The automatic monthly post is **off**.' });
+        }
+        if (sub === 'channels') {
+            const map = { pending: 'pending_channel_id', staff: 'admin_channel_id', matches: 'matches_channel_id', monthly: 'monthly_channel_id', newsletter: 'newsletter_channel_id' };
+            const changed = [];
+            for (const [opt, col] of Object.entries(map)) {
+                const ch = interaction.options.getChannel(opt);
+                if (ch) { await pool.query(`UPDATE guilds SET ${col} = $1 WHERE guild_id = $2`, [ch.id, guildId]); changed.push(opt); }
+            }
+            const off = interaction.options.getString('turn_off');
+            if (off) { await pool.query(`UPDATE guilds SET ${map[off]} = NULL WHERE guild_id = $1`, [guildId]); changed.push(`${off} off`); }
+            if (changed.length) await logAudit(guildId, interaction.user.id, 'setting_channels', { changed: changed.join(', ') });
+            const st = await getGuildSettings(guildId);
+            const ch = (id, offText) => (id ? `<#${id}>` : offText);
+            const embed = new EmbedBuilder().setTitle(changed.length ? '✅ Channels saved' : 'Bot channels').setColor(0x5865F2).setDescription([
+                `**Approvals & streak prompts:** ${ch(st.pending_channel_id, 'not set')}`,
+                `**Staff reminders:** ${ch(st.admin_channel_id, 'off')}`,
+                `**Match results copy:** ${ch(st.matches_channel_id, 'off (results show where the command is used)')}`,
+                `**Wrestler of the Month:** ${ch(st.monthly_channel_id, 'off')}`,
+                `**Newsletter:** ${ch(st.newsletter_channel_id, 'off')}`,
+                `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin history\`)_`
+            ].join('\n'));
+            return respond(interaction, { embeds: [embed], flags: changed.length ? undefined : EPHEMERAL });
+        }
+        if (sub === 'rules') {
+            const o = interaction.options;
+            const vals = {
+                hours: o.getInteger('cooldown_hours'), scope: o.getString('cooldown_by'), wins: o.getInteger('streak_wins'),
+                mile: o.getString('milestones'), d: o.getInteger('defense_days'), v: o.getInteger('vacate_days'),
+                rem: o.getString('rematches'), rdays: o.getInteger('rematch_days'), zone: o.getString('timezone')?.trim() || null
+            };
+            if (vals.zone) {
+                try { new Intl.DateTimeFormat('en-CA', { timeZone: vals.zone }).format(new Date()); }
+                catch (_) { throw new UserError('I don\'t know that time zone. Use a name like `America/Chicago`, `America/New_York`, `Europe/London` or `UTC`.'); }
+            }
+            const changed = Object.values(vals).some((x) => x !== null && x !== undefined);
+            if (changed) {
+                await pool.query(
+                    `UPDATE guilds SET singles_cooldown_hours = COALESCE($2, singles_cooldown_hours), cooldown_scope = COALESCE($3, cooldown_scope),
+                        streak_threshold = COALESCE($4, streak_threshold), milestones_enabled = COALESCE($5, milestones_enabled),
+                        defense_days = COALESCE($6, defense_days), vacate_days = COALESCE($7, vacate_days),
+                        rematch_enabled = COALESCE($8, rematch_enabled), rematch_days = COALESCE($9, rematch_days), tz = COALESCE($10, tz)
+                     WHERE guild_id = $1`,
+                    [guildId, vals.hours, vals.scope, vals.wins, vals.mile === null ? null : vals.mile === 'on', vals.d, vals.v,
+                        vals.rem === null ? null : vals.rem === 'on', vals.rdays, vals.zone]);
+                await logAudit(guildId, interaction.user.id, 'setting_rules', Object.fromEntries(Object.entries(vals).filter(([, x]) => x !== null)));
+            }
+            const st = await getGuildSettings(guildId);
+            const embed = new EmbedBuilder().setTitle(changed ? '✅ Rules saved' : 'League rules').setColor(0x5865F2).setDescription([
+                `**Singles cooldown:** ${st.singles_cooldown_hours ? `${st.singles_cooldown_hours}h (${st.cooldown_scope === 'character' ? 'same two characters' : 'same two players'})` : 'off'}`,
+                `**Win-streak title prompt:** ${st.streak_threshold ? `every ${st.streak_threshold} wins in a row` : 'off'}`,
+                `**Milestone shout-outs:** ${st.milestones_enabled === false ? 'off' : 'on'}`,
+                `**Defense warning:** ${st.defense_days ? `after ${st.defense_days} days without a defense` : 'off'}`,
+                `**Auto-vacate:** ${st.vacate_days ? `after ${st.vacate_days} days of champion inactivity` : 'off'}`,
+                `**Rematch clause:** ${st.rematch_enabled ? `on (${st.rematch_days} days)` : 'off'}`,
+                `**Time zone:** ${st.tz || 'UTC'}`
+            ].join('\n'));
+            const tip = (st.defense_days || st.vacate_days) && !st.admin_channel_id ? 'Tip: set a staff channel with `/admin channels staff:` so title warnings have somewhere to go.' : null;
+            return respond(interaction, { content: tip || undefined, embeds: [embed], flags: changed ? undefined : EPHEMERAL });
+        }
+        if (sub === 'staff-role') {
+            const role = interaction.options.getRole('role');
+            const remove = interaction.options.getBoolean('remove') === true;
+            if (role || remove) {
+                await pool.query(`UPDATE guilds SET staff_role_id = $1 WHERE guild_id = $2`, [remove ? null : role.id, guildId]);
+                forgetStaffRole(guildId);
+                await logAudit(guildId, interaction.user.id, 'setting_staff_role', { role: remove ? null : role.id });
+            }
+            const st = await getGuildSettings(guildId);
+            if (!st.staff_role_id) return respond(interaction, { content: remove ? 'The staff role is **off**. Only members with Manage Server can use the admin tools.' : 'No staff role yet. Pick one: `/admin staff-role role:@Staff`.', flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+            return respond(interaction, {
+                content: `${role ? '✅ ' : ''}Members with <@&${st.staff_role_id}> can use the bot's admin tools (booking, logging matches, titles, approvals).\n`
+                    + '**One more step so they can see the admin commands:** Server Settings → **Integrations** → this bot → open each admin command (`/admin`, `/card`, `/match`, `/title`) → **Add Roles or Members** → pick the staff role.',
+                flags: EPHEMERAL, allowedMentions: NO_MENTIONS
+            });
         }
         if (sub === 'monthly-awards') {
             const raw = interaction.options.getString('month')?.trim();
@@ -127,7 +197,7 @@ module.exports = {
             const s = await getGuildSettings(guildId);
             const bits = [s.defense_days ? `warn staff when a title has gone **${s.defense_days} days** without a defense` : 'no defense warnings',
                 s.vacate_days ? `auto-vacate a belt when the champion has not wrestled in **${s.vacate_days} days**` : 'no auto-vacate'];
-            return respond(interaction, { content: `Title deadlines: ${bits.join('; ')}.${(s.defense_days || s.vacate_days) && !s.admin_channel_id ? '\nTip: set a staff channel with `/admin set-admin-channel` so the warnings have somewhere to go.' : ''}` });
+            return respond(interaction, { content: `Title deadlines: ${bits.join('; ')}.${(s.defense_days || s.vacate_days) && !s.admin_channel_id ? '\nTip: set a staff channel with `/admin channels staff:` so the warnings have somewhere to go.' : ''}` });
         }
         if (sub === 'rematches') {
             const on = interaction.options.getString('action') === 'on';
@@ -232,14 +302,14 @@ module.exports = {
         if (sub === 'settings') {
             const s = await getGuildSettings(guildId);
             const embed = new EmbedBuilder().setTitle('Bot Settings').setColor(0x95A5A6).addFields(
-                { name: 'Approval / prompts channel', value: s.pending_channel_id ? `<#${s.pending_channel_id}>` : 'Not set (use `/admin set-pending-channel`)' },
+                { name: 'Approval / prompts channel', value: s.pending_channel_id ? `<#${s.pending_channel_id}>` : 'Not set (use `/admin channels pending:`)' },
                 { name: 'Match results copied to', value: s.matches_channel_id ? `<#${s.matches_channel_id}>` : 'Off (results appear where the command is used)' },
                 { name: 'Singles cooldown', value: s.singles_cooldown_hours ? `${s.singles_cooldown_hours}h (${s.cooldown_scope === 'character' ? 'same two characters' : 'same two players'})` : 'Off' },
                 { name: 'Win-streak prompt', value: s.streak_threshold ? `Every ${s.streak_threshold} wins in a row` : 'Off' },
-                { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin set-monthly-channel`)' },
+                { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin channels monthly:`)' },
                 { name: 'Milestone shout-outs', value: s.milestones_enabled === false ? 'Off' : 'On' },
-                { name: 'Staff reminders channel', value: s.admin_channel_id ? `<#${s.admin_channel_id}>` : 'Off (use `/admin set-admin-channel`)' },
-                { name: 'Weekly newsletter', value: s.newsletter_channel_id ? `<#${s.newsletter_channel_id}>` : 'Off (use `/admin set-newsletter-channel`)' },
+                { name: 'Staff reminders channel', value: s.admin_channel_id ? `<#${s.admin_channel_id}>` : 'Off (use `/admin channels staff:`)' },
+                { name: 'Weekly newsletter', value: s.newsletter_channel_id ? `<#${s.newsletter_channel_id}>` : 'Off (use `/admin channels newsletter:`)' },
                 { name: 'Title deadlines', value: `${s.defense_days ? `Warn after ${s.defense_days}d without a defense` : 'No defense warnings'} · ${s.vacate_days ? `auto-vacate after ${s.vacate_days}d of champion inactivity` : 'no auto-vacate'}` },
                 { name: 'Rematch clause', value: s.rematch_enabled ? `On (${s.rematch_days} days)` : 'Off' },
                 { name: 'Time zone', value: s.tz || 'UTC' },

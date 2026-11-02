@@ -118,7 +118,7 @@ async function handleButtonInteraction(interaction) {
         if (!k) return respond(interaction, { content: 'That contract no longer exists.', flags: EPHEMERAL });
         const ownerAction = ['accept', 'decline'].includes(action);
         const allowed = ownerAction ? (interaction.user.id === k.owner_discord_id || isAdmin(interaction)) : isAdmin(interaction);
-        if (!allowed) return respond(interaction, { content: ownerAction ? `Only ${k.char_name}'s owner (or an admin) can answer this offer.` : 'Only admins/mods (Manage Server) can answer a contract request.', flags: EPHEMERAL });
+        if (!allowed) return respond(interaction, { content: ownerAction ? `Only ${k.char_name}'s owner (or an admin) can answer this offer.` : 'Only admins and staff can answer a contract request.', flags: EPHEMERAL });
         if (!['offered', 'requested'].includes(k.status)) return respond(interaction, { content: 'That one was already answered.', flags: EPHEMERAL });
         await interaction.deferUpdate();
         try {
@@ -140,11 +140,12 @@ async function handleButtonInteraction(interaction) {
     }
 
     // ---- title panel buttons and dropdowns (viewers: history/defenses/lineage; admins: the rest) ----
+    if (id.startsWith('ui:')) return require('../modules/menus').handle(interaction);
     if (id.startsWith('chmp:')) return require('../modules/titlePanel').handleComponent(interaction);
 
     // ---- show card buttons and dropdowns (admins only) ----
     if (id.startsWith('cardui:')) {
-        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can edit the card.', flags: EPHEMERAL });
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins and staff can edit the card.', flags: EPHEMERAL });
         const [, act, a, b, c, d] = id.split(':');
         const cardUi = require('../utils/cardUi');
         const svc = require('../utils/cardService');
@@ -226,7 +227,7 @@ async function handleButtonInteraction(interaction) {
     // ---- /character unclaim confirmation (admins only) ----
     if (interaction.isButton() && id.startsWith('charunclaim:')) {
         const [, charId, answer] = id.split(':');
-        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can answer this.', flags: EPHEMERAL });
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins and staff can answer this.', flags: EPHEMERAL });
         await interaction.deferUpdate();
         if (answer === 'no') return interaction.editReply({ content: 'Cancelled. Nothing changed.', embeds: [], components: [] });
         try {
@@ -248,7 +249,7 @@ async function handleButtonInteraction(interaction) {
     // ---- /character swap-division confirmation (admins only) ----
     if (interaction.isButton() && id.startsWith('divswap:')) {
         const [, charId, to, answer] = id.split(':');
-        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins/mods (Manage Server) can answer this.', flags: EPHEMERAL });
+        if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins and staff can answer this.', flags: EPHEMERAL });
         await interaction.deferUpdate();
         if (answer === 'no') return interaction.editReply({ content: 'Cancelled. Nothing changed.', embeds: [], components: [] });
         try {
@@ -356,7 +357,7 @@ async function handleButtonInteraction(interaction) {
     // ---- admin-only actions ----
     if (id.startsWith('pending_') || id.startsWith('streak_')) {
         if (!isAdmin(interaction)) {
-            return respond(interaction, { content: 'Only admins/mods (Manage Server) can do that.', flags: EPHEMERAL });
+            return respond(interaction, { content: 'Only admins and staff can do that.', flags: EPHEMERAL });
         }
         if (id.startsWith('pending_')) return handlePending(interaction);
         return handleStreak(interaction);

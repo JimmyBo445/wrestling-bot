@@ -1,5 +1,5 @@
 // /championship = what everyone can look at: list, belt card, panel, history, defenses, lineage, contenders.
-// Admins run belts with /title and fix the record with /reign.
+// Admins run belts with /title and fix the record with /title reign-add / reign-edit.
 const { partsOf, makeUmbrella } = require('../utils/umbrella');
 const champ = require('../modules/championship');
 

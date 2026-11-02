@@ -4,12 +4,37 @@ const { UserError } = require('./errors');
 const EPHEMERAL = MessageFlags?.Ephemeral ?? 64;
 const NO_MENTIONS = { parse: [] };
 
+/** Admins (Manage Server) and anyone with the server's staff role (set with /admin staff-role). */
 function isAdmin(interaction) {
-    return Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild));
+    return Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild) || interaction.isStaff === true);
 }
 
 function requireAdmin(interaction, what = 'do that') {
-    if (!isAdmin(interaction)) throw new UserError(`Only admins/mods (Manage Server permission) can ${what}.`);
+    if (!isAdmin(interaction)) throw new UserError(`Only admins and staff can ${what}.`);
+}
+
+// ---- Staff role: which role counts as staff, per server (cached for a minute) ----
+const staffCache = new Map(); // guildId -> { roleId, at }
+async function staffRoleId(guildId) {
+    const hit = staffCache.get(guildId);
+    if (hit && Date.now() - hit.at < 60000) return hit.roleId;
+    const { pool } = require('../db/pool');
+    const { rows } = await pool.query(`SELECT staff_role_id FROM guilds WHERE guild_id = $1`, [guildId]);
+    const roleId = rows[0]?.staff_role_id || null;
+    staffCache.set(guildId, { roleId, at: Date.now() });
+    return roleId;
+}
+const forgetStaffRole = (guildId) => staffCache.delete(guildId);
+
+/** True if the member who sent this interaction has the staff role. */
+async function memberIsStaff(interaction) {
+    const roleId = await staffRoleId(interaction.guildId);
+    if (!roleId) return false;
+    const roles = interaction.member?.roles;
+    if (!roles) return false;
+    if (Array.isArray(roles)) return roles.includes(roleId); // raw API member
+    if (roles.cache) return roles.cache.has(roleId);
+    return false;
 }
 
 /**
@@ -80,6 +105,6 @@ async function getDisplayName(guild, discordId) {
 const DIVISION_LABELS = { mens: "Men's", womens: "Women's", custom: 'Custom', custom_womens: "Custom Women's" };
 
 module.exports = {
-    EPHEMERAL, NO_MENTIONS, isAdmin, requireAdmin, respond, reply,
+    EPHEMERAL, NO_MENTIONS, isAdmin, requireAdmin, respond, reply, memberIsStaff, forgetStaffRole,
     getDisplayNames, getDisplayName, DIVISION_LABELS
 };

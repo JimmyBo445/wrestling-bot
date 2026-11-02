@@ -94,8 +94,11 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
             assert.ok(m.length <= 10);
             assert.ok(m.reduce((s, e) => s + (e.data.title || '').length + e.data.description.length + (e.data.footer?.text || '').length, 0) <= 6000);
         }
+        // 2.20: a big roster pages with ◀ ▶ buttons in one message
         const i = await run('directory', 'list', {}, PLAYER);
-        assert.ok(i.responses.length >= 2, 'the rest is sent as follow-up messages');
+        const comps = JSON.stringify(i.responses[0].p.components.map((r) => r.toJSON()));
+        assert.match(comps, /ui:l:all:wrestler:1/, 'has a next-page button');
+        assert.match(comps, /"1 \/ \d+"/);
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);

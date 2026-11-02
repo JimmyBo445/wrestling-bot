@@ -3,16 +3,18 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['character', 'team', 'stats', 'standings', 'championship', 'title', 'reign', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
+const ORDER = ['fnlw', 'whois', 'character', 'team', 'stats', 'standings', 'championship', 'title', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
 // Old command names that were merged into combined commands (so `/help command:injury` can point people to the new home).
 const MOVED = {
     leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season-standings | season-recap', roster: '/directory roster',
     halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
     contender: '/championship contender-challenge | contender-list (admins: /title contender-award | contender-revoke)',
     matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-add | signup-remove',
-    newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report'
+    newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report',
+    reign: '/title reign-add | reign-edit | reign-remove | add-defense | remove-defense'
 };
 const BLURB = {
+    fnlw: 'Home menu with buttons: champions, next show, results, roster, your wrestlers',
     character: 'Your wrestlers: submit, edit, profile cards, story and moves',
     team: 'Registered tag teams',
     standings: 'Leaderboards, division rankings and season standings',
@@ -23,8 +25,7 @@ const BLURB = {
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
     championship: 'Look at titles: champions, belt cards, a button panel, history, defenses',
-    title: 'Admins: log a title match (title, challenger, winner), contenders, vacate, belt pictures',
-    reign: 'Admins: add old reigns with dates and defenses, edit or remove them',
+    title: 'Admins: title matches, contenders, vacate, belt pictures, and fixing reigns (add, edit, remove, defenses)',
     contender: '#1 contender challenges and awards',
     matchmaking: 'Find fresh opponents or request a match',
     signup: 'Show signups: players click to say who is available',
@@ -120,10 +121,11 @@ module.exports = {
                 'Check records with `/stats`, ladders with `/standings rankings`, ask for matches with `/booking request`, and see who plays who with `/whois`.',
                 admin ? '**Admins:** book shows with `/card auto` or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
                 '',
-                'Use **`/help command:<name>`** for the full list of one command, for example `/help command:match`.'
+                'Tip: **`/fnlw`** opens a home menu with buttons for the most-used things.',
+                'Use **`/help command:<name>`** for the full list of one command, or pick a topic below.'
             ].filter((x) => x !== null).join('\n'))
             .addFields(fields.slice(0, 24))
             .setFooter({ text: admin ? '🔒 = admins only' : 'Some commands are only for admins' });
-        return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
+        return respond(interaction, { embeds: [embed], components: [require('../modules/menus').helpMenuRow(interaction)], flags: EPHEMERAL });
     }
 };
