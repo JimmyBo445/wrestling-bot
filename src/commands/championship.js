@@ -7,10 +7,11 @@ const rename = (parts, map) => parts.map((p) => (map[p.json.name] ? { ...p, json
 
 module.exports = makeUmbrella({
     name: 'championship',
-    description: 'Title belts: see the champions, belt cards, history, defenses and contenders',
+    description: 'Title belts: champions, belt cards, history, defenses, records and contenders',
     parts: [
         ...partsOf(champ, { only: ['list', 'belt', 'lineage', 'defenses', 'history', 'grand-slam', 'rematches'] }),
         ...partsOf(require('../modules/titlePanel'), { asSub: 'panel' }),
+        ...partsOf(require('../modules/records'), { asSub: 'records' }),
         ...rename(partsOf(require('../modules/contender'), { prefix: 'contender-', only: ['list', 'challenge'] }), {})
     ]
 });

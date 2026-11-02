@@ -112,10 +112,10 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
         assert.ok(hasFile(i), text(i));
         const ids = (p) => (p.components || []).flatMap((r) => r.components.map((c) => c.data.custom_id));
         let p = lastPayload(i);
-        assert.deepStrictEqual(ids(p).filter((x) => x.startsWith('chmp:')).map((x) => x.split(':')[1]), ['hist', 'def', 'lin']);
+        assert.deepStrictEqual(ids(p).filter((x) => x.startsWith('chmp:')).map((x) => x.split(':')[1]), ['hist', 'def', 'lin', 'rec']); // 2.21 added Records
         i = await run('championship', 'panel', { title: WH }, ADM);
         p = lastPayload(i);
-        assert.deepStrictEqual(ids(p).map((x) => x.split(':')[1]), ['hist', 'def', 'lin', 'log', 'sc', 'cc', 'vac']);
+        assert.deepStrictEqual(ids(p).map((x) => x.split(':')[1]), ['hist', 'def', 'lin', 'rec', 'log', 'sc', 'cc', 'vac']);
         for (const act of ['hist', 'def', 'lin']) {
             const c = await click(`chmp:${act}:${WH}`, { admin: false, user: 'u9' });
             assert.ok(c.responses.length && !isErr(c), `${act}: ${text(c)}`);

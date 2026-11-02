@@ -24,8 +24,9 @@ const data = new SlashCommandBuilder()
         .addChannelOption((o) => o.setName('matches').setDescription('Copy every match result here').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
         .addChannelOption((o) => o.setName('monthly').setDescription('Wrestler of the Month post').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
         .addChannelOption((o) => o.setName('newsletter').setDescription('Weekly newsletter').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addChannelOption((o) => o.setName('legacy').setDescription('Legacy announcements (MITB, Rumble, MVP, awards)').setRequired(false).addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
         .addStringOption((o) => o.setName('turn_off').setDescription('Stop posting one of these').setRequired(false)
-            .addChoices({ name: 'Match results copy', value: 'matches' }, { name: 'Wrestler of the Month', value: 'monthly' }, { name: 'Staff reminders', value: 'staff' }, { name: 'Newsletter', value: 'newsletter' })))
+            .addChoices({ name: 'Match results copy', value: 'matches' }, { name: 'Wrestler of the Month', value: 'monthly' }, { name: 'Staff reminders', value: 'staff' }, { name: 'Newsletter', value: 'newsletter' }, { name: 'Legacy announcements', value: 'legacy' })))
     .addSubcommand((s) => s.setName('rules').setDescription('Cooldowns, streak prompts, title deadlines, rematches, time zone. Run empty to see them.')
         .addIntegerOption((o) => o.setName('cooldown_hours').setDescription('Hours before the same singles matchup can be booked again (0 = off)').setRequired(false).setMinValue(0).setMaxValue(720))
         .addStringOption((o) => o.setName('cooldown_by').setDescription('Cooldown counts the same two players or the same two characters').setRequired(false)
@@ -84,7 +85,7 @@ module.exports = {
             return respond(interaction, { content: channel ? `Wrestler of the Month will be posted in <#${channel.id}> at the start of each month (it covers the month before).` : 'The automatic monthly post is **off**.' });
         }
         if (sub === 'channels') {
-            const map = { pending: 'pending_channel_id', staff: 'admin_channel_id', matches: 'matches_channel_id', monthly: 'monthly_channel_id', newsletter: 'newsletter_channel_id' };
+            const map = { pending: 'pending_channel_id', staff: 'admin_channel_id', matches: 'matches_channel_id', monthly: 'monthly_channel_id', newsletter: 'newsletter_channel_id', legacy: 'legacy_channel_id' };
             const changed = [];
             for (const [opt, col] of Object.entries(map)) {
                 const ch = interaction.options.getChannel(opt);
@@ -101,6 +102,7 @@ module.exports = {
                 `**Match results copy:** ${ch(st.matches_channel_id, 'off (results show where the command is used)')}`,
                 `**Wrestler of the Month:** ${ch(st.monthly_channel_id, 'off')}`,
                 `**Newsletter:** ${ch(st.newsletter_channel_id, 'off')}`,
+                `**Legacy announcements:** ${ch(st.legacy_channel_id, 'off')}`,
                 `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin history\`)_`
             ].join('\n'));
             return respond(interaction, { embeds: [embed], flags: changed.length ? undefined : EPHEMERAL });

@@ -9,7 +9,7 @@ const ALIGN = { face: { text: 'FACE', bg: '#2e9e5b' }, heel: { text: 'HEEL', bg:
 
 /**
  * data: { character:{name,division,imageUrl,alignment,bio,status}, ownerName, summary, titlesHeld:[string],
- *         reigns:int, defenses:int, teamName|null }
+ *         titleList:[{name,count,current,nth}], reigns:int, defenses:int, teamName|null, badges }
  */
 async function renderProfileCard(data) {
     const { character: c, summary: s } = data;
@@ -18,7 +18,11 @@ async function renderProfileCard(data) {
     const badges = (data.badges || []).slice(0, 6);
     const bd = badges.length ? 40 : 0; // room for the badge row
     const cp = c.catchphrase ? 26 : 0; // room for the catchphrase line
-    const W = 1000, H = 560 + dy + bd + cp;
+    // championships: one line per belt (up to 4), then a summary line
+    const titleList = data.titleList || data.titlesHeld.map((name) => ({ name, count: 1, current: true, nth: 1 }));
+    const tLines = titleList.slice(0, 4);
+    const tx = tLines.length ? Math.max(0, 26 * (tLines.length + 1) + 4 - 66) : 0;
+    const W = 1000, H = 560 + dy + bd + cp + tx;
     const th = themeOf(c.division);
     const canvas = createCanvas(W, H);
     const ctx = canvas.getContext('2d');
@@ -44,7 +48,7 @@ async function renderProfileCard(data) {
         ctx.fillStyle = '#17120a';
         ctx.textAlign = 'center';
         ctx.font = font(12, 'bold');
-        ctx.fillText(data.titlesHeld.length > 1 ? 'MULTI-TIME CHAMPION' : 'CHAMPION', ax + aw / 2, ay + ah - 58);
+        ctx.fillText(['CHAMPION', 'CHAMPION', 'DOUBLE CHAMPION', 'TRIPLE CHAMPION'][data.titlesHeld.length] || `${data.titlesHeld.length}-BELT CHAMPION`, ax + aw / 2, ay + ah - 58);
         fitText(ctx, data.titlesHeld[0].toUpperCase(), ax + aw / 2, ay + ah - 36, aw - 56, 16, 'bold', 10);
         ctx.textAlign = 'left';
     }
@@ -123,24 +127,36 @@ async function renderProfileCard(data) {
         }
     }
 
-    // titles
+    // titles: one line per belt
     ctx.fillStyle = C.gold;
     ctx.font = font(13, 'bold');
     ctx.fillText('CHAMPIONSHIPS', px, 418 + dy + bd);
-    let tx = px, ty = 430 + dy + bd;
-    if (!data.titlesHeld.length) {
+    const champName = (n) => String(n).replace(/\s+Championships?$/i, ' Champion');
+    const ord = (n) => { const v = n % 100; return n + (['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'); };
+    let ty = 446 + dy + bd;
+    if (!tLines.length) {
         ctx.fillStyle = C.grey; ctx.font = font(15, 'medium');
-        ctx.fillText(data.reigns ? `Former champion  •  ${data.reigns} past reign${data.reigns > 1 ? 's' : ''}` : 'No title reigns yet', px, ty + 20);
+        ctx.fillText('No title reigns yet', px, ty);
     } else {
-        for (const name of data.titlesHeld.slice(0, 4)) {
-            ctx.font = font(14, 'bold');
-            const w = Math.min(ctx.measureText(name).width + 28, W - px - 30);
-            if (tx + w > W - 30) { tx = px; ty += 36; }
-            chip(ctx, name.slice(0, 40), tx, ty, { bg: C.goldDark, fg: '#fff3cf', size: 14, h: 30 });
-            tx += w + 8;
+        const maxX = W - 30;
+        for (const t of tLines) {
+            const parts = t.current
+                ? [[champName(t.name), C.gold, 'bold'], [`  ·  ${ord(t.nth)} reign`, C.sub, 'medium']]
+                : [['Former ', C.sub, 'medium'], [champName(t.name), C.text, 'bold'], [`  (${t.count}x)`, C.sub, 'medium']];
+            let x = px;
+            if (t.current) { ctx.fillStyle = C.gold; rr(ctx, x, ty - 13, 5, 16, 2); ctx.fill(); x += 13; }
+            for (const [txt, col, wt] of parts) {
+                ctx.font = font(16, wt); ctx.fillStyle = col;
+                const w = ctx.measureText(txt).width;
+                if (x + w > maxX) { fitText(ctx, txt, x, ty, maxX - x, 16, wt, 10); x = maxX; break; }
+                ctx.fillText(txt, x, ty);
+                x += w;
+            }
+            ty += 26;
         }
+        const more = titleList.length - tLines.length;
         ctx.fillStyle = C.sub; ctx.font = font(13, 'medium');
-        ctx.fillText(`${data.reigns} total reign${data.reigns === 1 ? '' : 's'}  •  ${data.defenses} title defense${data.defenses === 1 ? '' : 's'}`, px, ty + 54);
+        ctx.fillText(`${more > 0 ? `+${more} more belt${more === 1 ? '' : 's'}  •  ` : ''}${data.reigns} total reign${data.reigns === 1 ? '' : 's'}  •  ${data.defenses} title defense${data.defenses === 1 ? '' : 's'}`, px, ty + 4);
     }
 
     if (c.catchphrase) {

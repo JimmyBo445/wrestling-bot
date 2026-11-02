@@ -64,6 +64,26 @@ async function buildMatchCardData(guild, result) {
     return { ...base, mode: 'sides', sides };
 }
 
+/**
+ * Every belt a character has held, one line each: [{ name, count, current, nth }].
+ * Current belts first (nth = which reign this is), then former belts by how many times, then by name.
+ */
+async function characterTitleList(characterId) {
+    const { rows } = await pool.query(
+        `SELECT t.name, tr.won_date, tr.lost_date FROM title_reigns tr JOIN titles t ON t.id = tr.title_id
+         WHERE (tr.team_id IS NULL AND tr.character_id = $1)
+            OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1)
+         ORDER BY tr.won_date, tr.id`, [characterId]);
+    const by = new Map();
+    for (const r of rows) {
+        if (!by.has(r.name)) by.set(r.name, { name: r.name, count: 0, current: false, nth: 0 });
+        const t = by.get(r.name);
+        t.count += 1;
+        if (!r.lost_date) { t.current = true; t.nth = t.count; }
+    }
+    return [...by.values()].sort((a, b) => b.current - a.current || b.count - a.count || a.name.localeCompare(b.name));
+}
+
 async function buildProfileData(guild, character) {
     const names = await getDisplayNames(guild, [character.owner_discord_id], 2500);
     const summary = await characterSummary(character.id, null, character.owner_id);
@@ -85,7 +105,9 @@ async function buildProfileData(guild, character) {
     );
     const teams = await getTeamsOfCharacter(character.id);
     const injured = (await injuredMap([character.id])).get(String(character.id));
-    const badges = await characterBadges(character, summary, { reigns: stats[0].reigns, defenses: stats[0].defenses });
+    const { characterLegacy, legacyBadges } = require('./legacy');
+    const badges = [...legacyBadges(await characterLegacy(character.id)), ...(await characterBadges(character, summary, { reigns: stats[0].reigns, defenses: stats[0].defenses }))];
+    const titleList = await characterTitleList(character.id);
     return {
         serverName: guild.name || null,
         injuredUntil: injured ? injured.returns_at : null,
@@ -93,7 +115,7 @@ async function buildProfileData(guild, character) {
         character: { name: character.name, division: character.division, imageUrl: character.image_url, alignment: character.alignment, bio: character.bio, finisher: character.finisher, entranceTheme: character.entrance_theme, status: character.status,
             signatures: character.signatures || null, catchphrase: character.catchphrase || null },
         ownerName: names.get(character.owner_discord_id) || 'unknown',
-        summary, allTime, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses,
+        summary, allTime, titlesHeld: held.map((r) => r.name), reigns: stats[0].reigns, defenses: stats[0].defenses, titleList,
         teamName: teams.length ? teams.map((t) => t.name).join(' / ') : null
     };
 }
@@ -242,14 +264,27 @@ async function buildPlayerData(guild, user, ownerId) {
     const u = await userSummary(guild.id, ownerId);
     const titles = await require('./playerTitles').playerTitleStats(guild.id, ownerId);
     const avatarUrl = typeof user.displayAvatarURL === 'function' ? user.displayAvatarURL({ extension: 'png', size: 256 }) : null;
+    const champs = await require('./rosterInfo').currentTitles(guild.id);
+    const { playerLegacy, legacyBadges } = require('./legacy');
+    // one line per belt: how many times, and which wrestler(s) held it
+    const by = new Map();
+    for (const r of [...titles.list].reverse()) {
+        if (!by.has(r.title)) by.set(r.title, { name: r.title, count: 0, current: false, nth: 0, holders: [] });
+        const t = by.get(r.title);
+        t.count += 1;
+        if (!r.lost_date) { t.current = true; t.nth = t.count; }
+        if (r.holder && !t.holders.includes(r.holder)) t.holders.push(r.holder);
+    }
+    const titleList = [...by.values()].sort((a, b) => b.current - a.current || b.count - a.count || a.name.localeCompare(b.name));
     return {
         serverName: guild.name || null, name: user.displayName || user.username, avatarUrl,
-        summary: u, byDivision: u.byDivision, titles,
-        wrestlers: u.chars.map((c) => ({ name: c.name, division: c.division, status: c.status, current: c.current, wins: c.wins, losses: c.losses, draws: c.draws }))
+        summary: u, byDivision: u.byDivision, titles, titleList,
+        legacy: legacyBadges(await playerLegacy(ownerId)),
+        wrestlers: u.chars.map((c) => ({ name: c.name, division: c.division, status: c.status, current: c.current, wins: c.wins, losses: c.losses, draws: c.draws, champ: c.current && champs.has(String(c.id)) }))
     };
 }
 
-module.exports = { buildRankingsData, buildPlayerData, buildLineageData, buildTapeData, buildMatchCardData, buildProfileData, buildTeamData, buildBeltData, outcomeText, toMember, DIVISION_LABELS, MATCH_CONFIG };
+module.exports = { characterTitleList, buildRankingsData, buildPlayerData, buildLineageData, buildTapeData, buildMatchCardData, buildProfileData, buildTeamData, buildBeltData, outcomeText, toMember, DIVISION_LABELS, MATCH_CONFIG };
 
 /** The moments that shaped a career, oldest first (at most `max` shown, titles always win a spot). */
 async function buildCareerData(guild, character, max = 12) {

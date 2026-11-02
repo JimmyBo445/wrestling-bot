@@ -305,6 +305,8 @@ const HELP = {
         '`/championship list` every champion · `/championship panel` a belt with buttons',
         '`/championship history` past champions · `lineage` the picture · `defenses`',
         '`/championship contender-list` #1 contenders · `contender-challenge` ask for a shot',
+        '`/championship records` the record book: longest, shortest, most defenses, most reigns',
+        '`/legacy list` the honor roll · `/legacy view` one wrestler\'s accolades',
         '`/stats champions` players with the most reigns'] },
     shows: { label: 'Shows & results', emoji: '📅', text: [
         '`/fnlw` → **Next Show** for the RAW and SmackDown cards',
@@ -316,6 +318,7 @@ const HELP = {
         '**Results:** `/match log-…` · `/match undo` · `/match edit`',
         '**Titles:** `/title match` · `vacate` · `contender-award` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
         '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
+        '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Approvals:** `/admin pending`',
         '**Settings:** `/admin channels` · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
 };
@@ -375,6 +378,10 @@ async function handle(interaction) {
             const payload = await titleHistoryPayload(interaction.guildId, parts[3]);
             return respond(interaction, { ...payload, flags: EPHEMERAL, allowedMentions: NOPING });
         }
+    }
+    if (kind === 'lg') {
+        const v = interaction.values?.[0];
+        return show(interaction, await require('../commands/legacy').honorRoll(interaction.guildId, { kind: v === 'all' ? null : v }));
     }
     if (kind === 'sp') {
         // /stats user dropdown → that wrestler's profile card

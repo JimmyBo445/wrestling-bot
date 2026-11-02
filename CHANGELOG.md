@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.21.0 — Legacy, belt-by-belt cards, record book
+**Legacy** (`/legacy`)
+- **`/legacy award`** (admins and staff): Money in the Bank and Royal Rumble (per division, defaults to the wrestler's), Face of FNLW MVP, or a year-end award. The accolade belongs to the character; the player who owned them gets the credit (for old wins, `player:` sets who played them then). Optional `year` (default this year) and `notes`.
+- Year-end awards come from a list: Breakout Wrestler of the Year, Rivalry of the Year, Kickout King of the Year, Promo Prince of the Year, Match of the Year, Rookie of the Year, Cringe Guy Award and OMG Moment of the Year to start. **`/legacy award-names`** adds, renames (past winners follow the new name) or removes names.
+- Awards are announced with a gold post in the Legacy channel: **`/admin channels legacy:#channel`**. `announce:false` skips it. Nobody is pinged.
+- **`/legacy list`** (everyone): the honor roll, grouped by accolade, newest first, with a dropdown to show one accolade. **`/legacy view`** shows one wrestler's or one player's accolades. **`/legacy remove`** takes one back.
+- Legacy shows as **gold badges** on the character card ("CUSTOM MITB 2026", "2X RUMBLE WINNER") and in a LEGACY row on the player card.
+
+**Character card**
+- The CHAMPIONSHIPS section lists every belt: current belts first in gold with the reign number ("Showtime Champion · 2nd reign"), then "Former Intercontinental Champion (2x)". Top 4, then "+N more belts". Tag belts count too.
+- The banner on the picture says DOUBLE / TRIPLE CHAMPION when a wrestler holds more than one belt (it used to say "multi-time champion").
+
+**Player card** (`/stats user`)
+- New CHAMPIONSHIPS section: each belt, how many times, and which wrestler(s) held it.
+- A gold marker next to wrestlers who hold a belt right now. The gold line under the name is shorter.
+
+**Record book**
+- **`/championship records`** and a **📚 Records** button on every belt panel: longest reign, shortest reign, most defenses in one reign and most reigns. Singles show the character with the player when the reign is linked, otherwise the player; tag titles show the team, its wrestlers and players.
+
+- Database change: migration 019 (Legacy tables and the Legacy channel setting). The bot now has 19 commands.
+
 ## 2.20.0 — Home menu, buttons, staff role, simpler commands
 **For everyone**
 - **`/fnlw`**: a private home menu with buttons. 🏆 Champions (pick a title from the dropdown for its belt card, history, defenses and lineage), 📅 Next Show (the RAW and SmackDown cards, now visible to members), 📰 Results (the last 10 matches, now visible to members), 📋 Roster, 🙋 My Wrestlers and ❓ Help. Every section has a 🏠 Home button.

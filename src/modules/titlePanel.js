@@ -25,7 +25,7 @@ const data = new SlashCommandBuilder()
 async function buildPanel(guild, title, admin) {
     const buffer = await renderBeltCard(await buildBeltData(guild, title));
     const rows = [new ActionRowBuilder().addComponents(
-        btn(`chmp:hist:${title.id}`, '📜 History'), btn(`chmp:def:${title.id}`, '🛡 Defenses'), btn(`chmp:lin:${title.id}`, '🕰 Lineage'))];
+        btn(`chmp:hist:${title.id}`, '📜 History'), btn(`chmp:def:${title.id}`, '🛡 Defenses'), btn(`chmp:lin:${title.id}`, '🕰 Lineage'), btn(`chmp:rec:${title.id}`, '📚 Records'))];
     if (admin) {
         rows.push(new ActionRowBuilder().addComponents(
             btn(`chmp:log:${title.id}`, '🎬 Log match', ButtonStyle.Primary),
@@ -86,11 +86,14 @@ async function handleComponent(interaction) {
     const [, act, tid, a, b] = interaction.customId.split(':');
     const guildId = interaction.guildId;
     try {
-        if (!['hist', 'def', 'lin'].includes(act) && !isAdmin(interaction)) {
+        if (!['hist', 'def', 'lin', 'rec'].includes(act) && !isAdmin(interaction)) {
             return await respond(interaction, { content: 'Only admins and staff can use that button.', flags: EPHEMERAL });
         }
         if (act === 'x') { await interaction.deferUpdate(); return await interaction.editReply({ content: 'Cancelled.', components: [] }); }
         const title = await requireTitle(guildId, act === 'pg' ? a : tid);
+        if (act === 'rec') {
+            return await respond(interaction, { embeds: [await require('./records').recordsEmbed(title)], flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+        }
         if (act === 'hist' || act === 'def' || act === 'lin') {
             await interaction.deferReply({ flags: EPHEMERAL });
             if (act === 'lin') {
