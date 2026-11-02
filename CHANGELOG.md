@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.0.0 — Award votes, PLEs, one match log, power rankings, error alerts
+**Award votes** (`/legacy`)
+- **`/legacy vote-open`** (admins and staff) for Face of FNLW MVP or any year-end award. Choose who can add nominees (`nominees_by`: admins and staff, or everyone) and who can vote (`voters`: everyone, or admins and staff). It posts in the Legacy channel (or `channel:`).
+- **`/legacy nominate`** adds a nominee. For a rivalry or a match, add `character2` and an optional `label` like "Ace vs Bolt, Survivor Series".
+- **`/legacy vote-start`** closes nominations and turns the post into a vote dropdown. **Votes are secret**: nobody sees who picked whom, people can change their vote, and the post never shows who is ahead.
+- **`/legacy vote-close`** ends it. The winner (both wrestlers of a rivalry or match) gets the Legacy accolade and the gold announcement. Only the winner is made public; the admin who closes it sees the totals privately. A tie or no votes awards nothing (settle it with `/legacy award`). `cancel:true` cancels a vote.
+
+**PLEs** (your graphics are untouched; this only tags matches)
+- **`/match log ple:WrestleMania`** tags a match as it is logged. After a show run through `/card view`: **`/match ple event:WrestleMania`** tags every match logged that day (`date:` for another day, `match_id:` for one match, `clear:true` to remove a tag). The year is added for you.
+- A **Money in the Bank** or **Royal Rumble** match won at a PLE gives the winner that Legacy accolade automatically (one clear winner only), with the announcement.
+- The history channel, the record book and title history say "won at WrestleMania 2026" for a title won at a PLE; `/stats character` shows the record at PLEs; **`/match ple`** with nothing filled in shows every PLE and the most PLE wins.
+
+**One `/match log`**
+- **`/match log`**: pick the `type`, the wrestlers in order (tag matches: Team 1 first, then Team 2) and the `winner` (wrestler number, or team 1 / 2). Same title, contender, stipulation, finish, score, notes and cooldown options as before, plus `ple`.
+- The old `/match log-singles`, `log-tag2v2` and so on **still work exactly the same**. Their `finish` is now a type-to-search list (same choices) to make room in Discord. `/card` is unchanged.
+
+**Power rankings**
+- **`/standings power`**: one list per division from the last 60 days. Counts wins (more for beating someone with a good record), title matches, recent form, current champions and #1 contenders; newer matches count more. Losses cost a little, less in a title match.
+- Posted **every Monday from 10am** (server time zone) in the channel set with **`/admin channels power:`**, with ▲ / ▼ / 🆕 movement since the week before.
+
+**Error alerts**
+- When something unexpected breaks (a command error, the history channel or power rankings failing to post), the bot tells the **staff channel** (`/admin channels staff:`). The same problem is mentioned at most once every 6 hours.
+
+- Database change: migration 020 (award votes, PLE tag on matches, power rankings). 19 commands.
+
 ## 2.21.0 — Legacy, belt-by-belt cards, record book
 **Legacy** (`/legacy`)
 - **`/legacy award`** (admins and staff): Money in the Bank and Royal Rumble (per division, defaults to the wrestler's), Face of FNLW MVP, or a year-end award. The accolade belongs to the character; the player who owned them gets the credit (for old wins, `player:` sets who played them then). Optional `year` (default this year) and `notes`.

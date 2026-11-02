@@ -60,6 +60,18 @@ async function tick(client) {
             } catch (err) { console.error('Signup close failed:', err.message); }
             try { await runContractWatch(client, g); } catch (err) { console.error('Contract watch failed:', err.message); }
             try { await runWeeklyReport(client, g); } catch (err) { console.error('Weekly report failed:', err.message); }
+            try {
+                // weekly power rankings: Monday from 10am (server time zone), once per week
+                if (g.power_channel_id) {
+                    const key = weekKey();
+                    const { date, hour } = localNow(g.tz);
+                    const monday = new Date(`${date}T00:00:00Z`).getUTCDay() === 1;
+                    if (monday && hour >= 10 && g.power_last !== key) {
+                        const { rowCount } = await pool.query(`UPDATE guilds SET power_last = $1 WHERE guild_id = $2 AND power_last IS DISTINCT FROM $1`, [key, g.guild_id]);
+                        if (rowCount) await require('./powerRankings').postWeekly(client, g, key);
+                    }
+                }
+            } catch (err) { console.error('Power rankings failed:', err.message); require('./alerts').alertStaff(client, g.guild_id, 'power', `I couldn't post this week's power rankings: ${err.message}`); }
             try { await runTitleWatch(client, g); } catch (err) { console.error('Title watch failed:', err.message); }
         }
     } catch (err) { console.error('Title checks failed:', err.message); }

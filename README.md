@@ -1,4 +1,4 @@
-# Wrestling Bot 2.21.0
+# Wrestling Bot 3.0.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -41,6 +41,9 @@ servers at once. Everything is saved permanently in Postgres.
 - **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. `/card auto` books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here and Edit/Move/Remove buttons; `/card post` sends one picture per division with the wrestlers pinged underneath. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
+- **Award votes**: `/legacy vote-open` → `nominate` → `vote-start` → `vote-close`. Secret votes; only the winner is announced and they get the Legacy accolade.
+- **PLEs**: `/match log ple:` or `/match ple event:WrestleMania` after the show. History and records note it; a Money in the Bank or Royal Rumble win at a PLE gives the Legacy accolade by itself.
+- **Power rankings**: `/standings power`, and posted every Monday in `/admin channels power:`.
 - **Legacy**: `/legacy award` gives Money in the Bank, Royal Rumble (per division), Face of FNLW MVP or a year-end award; they show as gold badges on cards and are announced in the Legacy channel (`/admin channels legacy:`). `/legacy list` is the honor roll.
 - **Record book**: `/championship records` (or 📚 Records on a belt panel): longest and shortest reign, most defenses, most reigns.
 - **Home menu**: `/fnlw` opens a private menu with buttons: Champions, Next Show, Results, Roster, My Wrestlers, Help, and Staff Tools for admins and staff. It's the one command members need to remember.

@@ -7,6 +7,7 @@ module.exports = makeUmbrella({
     parts: [
         ...partsOf(require('../modules/leaderboard'), { asSub: 'leaderboard' }),
         ...partsOf(require('../modules/rankings'), { asSub: 'rankings' }),
+        ...partsOf(require('../modules/power'), { asSub: 'power' }),
         ...partsOf(require('../modules/season'), { prefix: 'season-' })
     ]
 });

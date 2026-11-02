@@ -26,7 +26,7 @@ async function renderHistory(guildId) {
     const { rows: reigns } = await pool.query(
         `SELECT t.id AS title_id, t.name AS title, t.is_tag_title, tr.id, tr.won_date, tr.lost_date, tr.defenses, tr.notes,
                 tr.is_backfilled, tr.is_interim, tr.team_id, COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS holder,
-                c.name AS character_name,
+                c.name AS character_name, (SELECT wm.ple FROM matches wm WHERE wm.id = tr.won_match_id) AS won_ple,
                 (SELECT string_agg(mc.name, ' & ' ORDER BY m.id) FROM title_reign_members m JOIN characters mc ON mc.id = m.character_id WHERE m.reign_id = tr.id) AS member_chars
          FROM titles t
          JOIN title_reigns tr ON tr.title_id = t.id
@@ -70,7 +70,8 @@ async function renderHistory(guildId) {
                 if (r.isTeam && (r.ids.length || r.member_chars)) {
                     lines.push(`( ${r.ids.length ? joinNames(r.ids.map((id) => `<@${id}>`)) : r.member_chars} )${r.ids.length && r.member_chars ? ` · ${r.member_chars}` : ''}`);
                 }
-                lines.push(`${shortDate(r.won_date)}-${shortDate(r.lost_date)}`);
+                const ple = r.won_ple ? ` (won at ${r.won_ple} ${new Date(r.won_date).getFullYear()})` : '';
+                lines.push(`${shortDate(r.won_date)}-${shortDate(r.lost_date)}${ple}`);
             });
             return lines.join('\n');
         });
@@ -169,6 +170,7 @@ function onAudit(guildId, action) {
             await refreshHistory(botClient, guildId);
         } catch (err) {
             console.error('History channel update failed:', err.message);
+            require('./alerts').alertStaff(botClient, guildId, 'history', `I couldn't update the championship history channel: ${err.message} Fix it, then run \`/admin history\`.`);
         }
     }, 5000));
 }

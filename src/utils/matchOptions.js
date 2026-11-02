@@ -1,9 +1,13 @@
 const { STIPULATIONS, FINISHES } = require('./constants');
 
-/** Adds the optional stipulation / finish / score options to a log subcommand. */
-function addDetailOptions(sub) {
+/**
+ * Adds the optional stipulation / finish / score options to a log subcommand.
+ * finishSearch: the finish is a type-to-search list (same choices, much smaller command; see finishChoices).
+ */
+function addDetailOptions(sub, { finishSearch = false } = {}) {
     sub.addStringOption((o) => o.setName('stipulation').setDescription('Match type or stipulation (Ladder, Hell in a Cell...) - pick or type your own').setRequired(false).setMaxLength(40).setAutocomplete(true));
-    sub.addStringOption((o) => o.setName('finish').setDescription('How it ended (DQ, count-out, submission...)').setRequired(false).addChoices(...FINISHES));
+    if (finishSearch) sub.addStringOption((o) => o.setName('finish').setDescription('How it ended (DQ, count-out, submission...)').setRequired(false).setAutocomplete(true));
+    else sub.addStringOption((o) => o.setName('finish').setDescription('How it ended (DQ, count-out, submission...)').setRequired(false).addChoices(...FINISHES));
     sub.addStringOption((o) => o.setName('score').setDescription('Falls or score, like 3-2 for an Iron Man match').setRequired(false).setMaxLength(20));
     return sub;
 }
@@ -25,4 +29,10 @@ function stipulationChoices(typed) {
     return out.slice(0, 25);
 }
 
-module.exports = { addDetailOptions, readDetails, stipulationChoices };
+/** The finish list for a type-to-search finish option. */
+function finishChoices(typed) {
+    const q = String(typed || '').toLowerCase();
+    return FINISHES.filter((f) => f.name.toLowerCase().includes(q) || f.value.includes(q)).map((f) => ({ name: f.name, value: f.value }));
+}
+
+module.exports = { addDetailOptions, readDetails, stipulationChoices, finishChoices };

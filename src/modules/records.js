@@ -17,7 +17,7 @@ const DAYS = `(COALESCE(tr.lost_date, CURRENT_DATE) - tr.won_date)::int`;
 async function reignsOf(titleId) {
     const { rows } = await pool.query(
         `SELECT tr.id, tr.won_date, tr.lost_date, tr.defenses, ${DAYS} AS days,
-                COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS holder, c.name AS character_name,
+                COALESCE(tm.name, c.name, tr.reign_char_name, 'Unknown') AS holder, c.name AS character_name, (SELECT wm.ple FROM matches wm WHERE wm.id = tr.won_match_id) AS won_ple,
                 (SELECT string_agg(mc.name, ' & ' ORDER BY m.id) FROM title_reign_members m JOIN characters mc ON mc.id = m.character_id WHERE m.reign_id = tr.id) AS member_chars,
                 (SELECT array_agg(u.discord_id ORDER BY u.id) FROM reign_owners ro JOIN users u ON u.id = ro.user_id WHERE ro.reign_id = tr.id AND NOT u.is_placeholder) AS players
          FROM title_reigns tr LEFT JOIN characters c ON c.id = tr.character_id LEFT JOIN teams tm ON tm.id = tr.team_id
@@ -39,7 +39,7 @@ function who(r, isTag) {
     return `**${r.holder}**${chars}${players ? ` (${players})` : ''}`;
 }
 const { shortDate } = require('../utils/historyChannel');
-const span = (r) => `${shortDate(r.won_date)} → ${r.lost_date ? shortDate(r.lost_date) : 'now'}`;
+const span = (r) => `${shortDate(r.won_date)} → ${r.lost_date ? shortDate(r.lost_date) : 'now'}${r.won_ple ? ` · won at ${r.won_ple} ${new Date(r.won_date).getFullYear()}` : ''}`;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /** Top `n` rows by a score, keeping ties at the cut. */

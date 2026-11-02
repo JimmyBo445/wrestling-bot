@@ -162,10 +162,11 @@ async function staffPayload(interaction) {
         `**Waiting for approval:** ${p[0].n}`,
         '',
         '**Shows:** `/card auto` builds a card · `/card view` edits it · `/card post` posts it',
-        '**Results:** `/match log-…` or the 🎬 Record result button in `/card view`',
+        '**Results:** `/match log` (any match type) or the 🎬 Record result button in `/card view` · `/match ple` tags a PLE',
+        '**Legacy:** `/legacy award` · votes: `/legacy vote-open` → `nominate` → `vote-start` → `vote-close`',
         '**Titles:** `/title match` · `/title vacate` · fix history with `/title reign-add` / `reign-edit`',
         '**People:** `/character assign` · `/character transfer` · `/team create`',
-        '**Settings:** `/admin channels` · `/admin rules` · `/admin staff-role` · `/admin history`'
+        '**Settings:** `/admin channels` (also Legacy, power rankings) · `/admin rules` · `/admin staff-role` · `/admin history`'
     ].join('\n'));
     return {
         embeds: [embed],
@@ -268,7 +269,7 @@ async function titleHistoryPayload(guildId, characterId) {
     const { requireCharacter } = require('../utils/characterUtils');
     const c = await requireCharacter(guildId, characterId, { statuses: ['approved', 'retired'] });
     const { rows } = await pool.query(
-        `SELECT t.name, tr.won_date, tr.lost_date, tr.defenses, COALESCE(tm.name, tr.reign_char_name) AS team
+        `SELECT t.name, tr.won_date, tr.lost_date, tr.defenses, COALESCE(tm.name, tr.reign_char_name) AS team, (SELECT wm.ple FROM matches wm WHERE wm.id = tr.won_match_id) AS won_ple
          FROM title_reigns tr JOIN titles t ON t.id = tr.title_id LEFT JOIN teams tm ON tm.id = tr.team_id
          WHERE (tr.team_id IS NULL AND tr.character_id = $1)
             OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1)
@@ -281,7 +282,7 @@ async function titleHistoryPayload(guildId, characterId) {
     embed.setDescription(rows.map((r) => {
         const days = Math.max(0, Math.round(((r.lost_date ? new Date(r.lost_date) : new Date()) - new Date(r.won_date)) / 864e5));
         const tag = r.team && c.name !== r.team ? ` (with ${r.team})` : '';
-        return `${r.lost_date ? '' : '🏆 '}**${r.name}**${tag}\n${fmtYmd(r.won_date)} → ${r.lost_date ? fmtYmd(r.lost_date) : 'now'} · ${days} days · ${r.defenses} def.`;
+        return `${r.lost_date ? '' : '🏆 '}**${r.name}**${tag}\n${fmtYmd(r.won_date)} → ${r.lost_date ? fmtYmd(r.lost_date) : 'now'} · ${days} days · ${r.defenses} def.${r.won_ple ? ` · won at ${r.won_ple}` : ''}`;
     }).join('\n\n').slice(0, 4000));
     return { embeds: [embed] };
 }
@@ -298,7 +299,8 @@ const HELP = {
         '`/character submit` · `edit` · `picture` · `story` for your wrestlers',
         '`/character profile` the wrestler\'s card · `/stats user` your player card',
         '`/stats character` detailed stats · `/stats head-to-head` two wrestlers',
-        '`/standings rankings` division ladders · `/standings leaderboard` top lists',
+        '`/standings power` power rankings · `/standings rankings` division ladders · `/standings leaderboard` top lists',
+        '`/legacy nominate` nominate someone when an award vote is open to everyone',
         '`/booking request` ask for a match · `/booking suggest` fresh opponents',
         '`/whois` who plays a wrestler · `/directory list` the whole roster'] },
     titles: { label: 'Titles', emoji: '🏆', text: [
@@ -315,10 +317,11 @@ const HELP = {
         '`/tournament bracket` · `/feud list` · `/directory injury-list`'] },
     staff: { label: 'Staff tools', emoji: '🛠', staff: true, text: [
         '**Shows:** `/card auto` · `/card view` (edit, record results) · `/card post` · `/card schedule`',
-        '**Results:** `/match log-…` · `/match undo` · `/match edit`',
+        '**Results:** `/match log` (pick the type, wrestlers, winner) · `/match undo` · `/match edit` · `/match ple event:WrestleMania` tags today\'s matches as a PLE',
         '**Titles:** `/title match` · `vacate` · `contender-award` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
         '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
+        '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
         '**Approvals:** `/admin pending`',
         '**Settings:** `/admin channels` · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
 };
@@ -378,6 +381,14 @@ async function handle(interaction) {
             const payload = await titleHistoryPayload(interaction.guildId, parts[3]);
             return respond(interaction, { ...payload, flags: EPHEMERAL, allowedMentions: NOPING });
         }
+    }
+    if (kind === 'av') {
+        // award vote: secret, one per person, can be changed until it closes
+        const AV = require('../utils/awardVotes');
+        const p = await AV.getPoll(interaction.guildId, parts[2]);
+        if (p.vote_who === 'admins' && !isAdmin(interaction)) return respond(interaction, { content: 'Only admins and staff vote on this one.', flags: EPHEMERAL });
+        const n = await AV.castVote(p, interaction.user.id, interaction.values[0]);
+        return respond(interaction, { content: `🗳 Your vote for **${n.label}** is saved. It's secret, and you can change it until voting closes.`, flags: EPHEMERAL, allowedMentions: NOPING });
     }
     if (kind === 'lg') {
         const v = interaction.values?.[0];

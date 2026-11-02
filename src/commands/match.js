@@ -10,7 +10,8 @@ const { presentMatch, mirrorToMatchesChannel } = require('../utils/matchPresente
 const { maybeAutoRecap } = require('../utils/showRecap');
 const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
 const { recentMatches } = require('../utils/statsQueries');
-const { addDetailOptions, readDetails, stipulationChoices } = require('../utils/matchOptions');
+const { addDetailOptions, readDetails, stipulationChoices, finishChoices } = require('../utils/matchOptions');
+const L = require('../utils/legacy');
 
 const RESULT_CHOICES = [
     { name: 'Decisive (has a winner)', value: 'decisive' },
@@ -34,7 +35,7 @@ function buildLogSubcommand(sub, key, config) {
     sub.addStringOption((o) => o.setName('contender_for').setDescription('Make it a #1 contender match for this title (winner becomes #1 contender)').setRequired(false).setAutocomplete(true));
     sub.addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES));
     sub.addStringOption((o) => o.setName('notes').setDescription('Extra notes (shown on the card)').setRequired(false).setMaxLength(300));
-    addDetailOptions(sub);
+    addDetailOptions(sub, { finishSearch: true });
     if (key === 'singles') {
         sub.addBooleanOption((o) => o.setName('override_cooldown').setDescription('Book it even though the repeat-matchup cooldown is active').setRequired(false));
     }
@@ -47,9 +48,31 @@ const data = new SlashCommandBuilder()
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+// 3.0: one command for every match type. The old log-... commands below still work the same.
+data.addSubcommand((sub) => {
+    sub.setName('log').setDescription('Log any match: pick the type, the wrestlers in order, then who won')
+        .addStringOption((o) => o.setName('type').setDescription('Match type').setRequired(true)
+            .addChoices(...Object.entries(MATCH_CONFIG).map(([value, c]) => ({ name: c.label, value }))))
+        .addStringOption((o) => o.setName('wrestler1').setDescription('Wrestler 1 (tag: Team 1 first, then Team 2)').setRequired(true).setAutocomplete(true))
+        .addStringOption((o) => o.setName('wrestler2').setDescription('Wrestler 2').setRequired(true).setAutocomplete(true))
+        .addIntegerOption((o) => o.setName('winner').setDescription('Who won: their wrestler number, or 1 / 2 for the winning team').setRequired(true).setMinValue(1).setMaxValue(8));
+    for (let n = 3; n <= 8; n++) sub.addStringOption((o) => o.setName(`wrestler${n}`).setDescription(`Wrestler ${n}`).setRequired(false).setAutocomplete(true));
+    sub.addStringOption((o) => o.setName('title').setDescription('Title on the line').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('contender_for').setDescription('#1 contender match for this title').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('result_type').setDescription('Default: decisive').setRequired(false).addChoices(...RESULT_CHOICES))
+        .addStringOption((o) => o.setName('ple').setDescription('Premium live event, e.g. WrestleMania (optional)').setRequired(false).setMaxLength(40).setAutocomplete(true))
+        .addStringOption((o) => o.setName('notes').setDescription('Extra notes').setRequired(false).setMaxLength(300));
+    addDetailOptions(sub, { finishSearch: true });
+    return sub.addBooleanOption((o) => o.setName('override_cooldown').setDescription('Singles: book it even if the cooldown is active').setRequired(false));
+});
 for (const [key, config] of Object.entries(MATCH_CONFIG)) {
     data.addSubcommand((sub) => buildLogSubcommand(sub, key, config));
 }
+data.addSubcommand((sub) => sub.setName('ple').setDescription('Mark matches as part of a PLE (by date or one match), or see PLE history')
+    .addStringOption((o) => o.setName('event').setDescription('PLE name, e.g. WrestleMania (the year is added for you)').setRequired(false).setMaxLength(40).setAutocomplete(true))
+    .addStringOption((o) => o.setName('date').setDescription('Tag every match logged that day, YYYY-MM-DD (default: today)').setRequired(false))
+    .addIntegerOption((o) => o.setName('match_id').setDescription('Or tag just this match').setRequired(false).setAutocomplete(true))
+    .addBooleanOption((o) => o.setName('clear').setDescription('Remove the PLE tag instead').setRequired(false)));
 data.addSubcommand((sub) => sub.setName('rate').setDescription('Give a logged match 1 to 5 stars (used for Wrestler of the Month "best match")')
     .addIntegerOption((o) => o.setName('match_id').setDescription('Match to rate').setRequired(true).setAutocomplete(true))
     .addIntegerOption((o) => o.setName('stars').setDescription('1 to 5 stars').setRequired(true).setMinValue(1).setMaxValue(5)));
@@ -90,6 +113,14 @@ module.exports = {
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'match_id') return interaction.respond(await matchIdAutocomplete(interaction, focused.value));
         if (focused.name === 'stipulation') return interaction.respond(stipulationChoices(focused.value));
+        if (focused.name === 'finish') return interaction.respond(finishChoices(focused.value));
+        if (focused.name === 'ple' || focused.name === 'event') {
+            const names = await require('../utils/ple').pleNames(interaction.guildId, focused.value);
+            const typed = String(focused.value || '').trim();
+            const list = names.map((n) => ({ name: n, value: n }));
+            if (typed && !names.some((n) => n.toLowerCase() === typed.toLowerCase())) list.unshift({ name: typed.slice(0, 40), value: typed.slice(0, 40) });
+            return interaction.respond(list.slice(0, 25));
+        }
         if (focused.name === 'title' || focused.name === 'contender_for') return interaction.respond(await autocompleteTitles(interaction, focused.value));
         return interaction.respond(await autocompleteCharacters(interaction, focused.value));
     },
@@ -99,17 +130,43 @@ module.exports = {
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
 
-        if (sub.startsWith('log-')) {
-            const key = sub.replace(/^log-/, '').replace(/-/g, '_');
-            const config = MATCH_CONFIG[key];
-            if (!config) return respond(interaction, { content: 'Unknown match type.', flags: 64 });
+        if (sub === 'log' || sub.startsWith('log-')) {
+            let key, config, slotIds, winnerIndex = null, winningTeam = null;
+            if (sub === 'log') {
+                key = interaction.options.getString('type');
+                config = MATCH_CONFIG[key];
+                if (!config) throw new UserError('Unknown match type.');
+                const given = Array.from({ length: 8 }, (_, i) => interaction.options.getString(`wrestler${i + 1}`));
+                const filled = given.filter(Boolean).length;
+                const need = config.slots.length;
+                if (filled !== need || given.slice(0, need).some((v) => !v)) {
+                    throw new UserError(`A ${config.label} has **${need}** wrestlers: fill in wrestler1 to wrestler${need}${config.winnerMode === 'team' ? ` (Team 1 is wrestler1-${need / 2}, Team 2 is wrestler${need / 2 + 1}-${need})` : ''}, and nothing after that.`);
+                }
+                slotIds = given.slice(0, need);
+                const w = interaction.options.getInteger('winner');
+                if (config.winnerMode === 'team') {
+                    if (w !== 1 && w !== 2) throw new UserError('For a tag match, `winner` is the winning team: 1 or 2.');
+                    winningTeam = w;
+                } else {
+                    if (w < 1 || w > need) throw new UserError(`\`winner\` must be a wrestler number from 1 to ${need}.`);
+                    winnerIndex = w - 1;
+                }
+            } else {
+                key = sub.replace(/^log-/, '').replace(/-/g, '_');
+                config = MATCH_CONFIG[key];
+                if (!config) return respond(interaction, { content: 'Unknown match type.', flags: 64 });
+                slotIds = config.slots.map((s) => interaction.options.getString(s.name));
+                winnerIndex = config.winnerMode === 'single' ? interaction.options.getInteger('winner') - 1 : null;
+                winningTeam = config.winnerMode === 'team' ? interaction.options.getInteger('winning_team') : null;
+            }
+            const pleName = sub === 'log' && interaction.options.getString('ple') ? require('../utils/ple').cleanName(interaction.options.getString('ple')) : null;
 
             const result = await logMatch({
                 guildId,
                 matchType: key,
-                slotCharacterIds: config.slots.map((s) => interaction.options.getString(s.name)),
-                winnerIndex: config.winnerMode === 'single' ? interaction.options.getInteger('winner') - 1 : null,
-                winningTeam: config.winnerMode === 'team' ? interaction.options.getInteger('winning_team') : null,
+                slotCharacterIds: slotIds,
+                winnerIndex,
+                winningTeam,
                 resultType: interaction.options.getString('result_type') || 'decisive',
                 notes: interaction.options.getString('notes'),
                 titleValue: interaction.options.getString('title'),
@@ -120,11 +177,51 @@ module.exports = {
             });
 
             await interaction.deferReply();
+            let pleNote = null;
+            if (pleName) {
+                const t = await require('../utils/ple').tagMatches(interaction.client, guildId, [result.matchId], pleName, interaction.user.id);
+                pleNote = `🎆 Part of **${pleName} ${new Date().getUTCFullYear()}**${t.awards.length ? `. 🎖 ${t.awards.map((a) => `${a.ch.name} earned **${L.accoladeName(a.row)}**`).join(', ')}` : ''}.`;
+            }
             const { payload } = await presentMatch(interaction, result);
+            if (pleNote) payload.content = [payload.content, pleNote].filter(Boolean).join('\n');
             await interaction.editReply(payload);
             await mirrorToMatchesChannel(interaction, payload);
             await maybeAutoRecap(interaction, result);
             return;
+        }
+
+        if (sub === 'ple') {
+            const P = require('../utils/ple');
+            const clear = interaction.options.getBoolean('clear') === true;
+            const eventRaw = interaction.options.getString('event');
+            const matchId = interaction.options.getInteger('match_id');
+            const dateRaw = interaction.options.getString('date');
+            if (!eventRaw && !clear && !matchId && !dateRaw) {
+                // no options: show PLE history
+                const [list, leaders] = await Promise.all([P.pleList(guildId), P.pleLeaders(guildId, 10)]);
+                const embed = new EmbedBuilder().setTitle('🎆 Premium Live Events').setColor(0x9B59B6)
+                    .setDescription(list.length ? list.map((r) => `**${r.ple} ${r.year}** · ${r.matches} match${r.matches === 1 ? '' : 'es'}`).join('\n').slice(0, 2000) : 'No PLEs tagged yet. After a show: `/match ple event:WrestleMania` tags every match logged today.');
+                if (leaders.length) embed.addFields({ name: 'Most PLE wins', value: leaders.map((r, i) => `${i + 1}. **${r.name}**${r.discord_id ? ` (<@${r.discord_id}>)` : ''}: ${r.w}-${r.l}`).join('\n').slice(0, 1024) });
+                return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
+            }
+            if (!clear && !eventRaw) throw new UserError('Fill in `event` (the PLE name), or set `clear:true` to remove a tag.');
+            const event = clear ? null : P.cleanName(eventRaw);
+            let ids;
+            if (matchId) {
+                const { rows } = await pool.query(`SELECT id FROM matches WHERE id = $1 AND guild_id = $2`, [matchId, guildId]);
+                if (!rows.length) throw new UserError('I could not find that match on this server.');
+                ids = [matchId];
+            } else {
+                const s = await require('../utils/ensureGuild').getGuildSettings(guildId);
+                const { localNow } = require('../utils/titleWatch');
+                const date = dateRaw ? require('../utils/dates').parseDate(dateRaw.trim(), 'The date') : localNow(s.tz).date;
+                ids = await P.matchIdsOnDate(guildId, date, s.tz);
+                if (!ids.length) throw new UserError(`No matches were logged on ${date}. Pick another \`date\`, or tag one match with \`match_id\`.`);
+            }
+            const r = await P.tagMatches(interaction.client, guildId, ids, event, interaction.user.id);
+            await logAudit(guildId, interaction.user.id, clear ? 'ple_cleared' : 'ple_tagged', { event, matches: r.tagged });
+            const awards = r.awards.length ? `\n🎖 ${r.awards.map((a) => `**${a.ch.name}** earned **${L.accoladeName(a.row)}**`).join('\n🎖 ')}` : '';
+            return respond(interaction, { content: clear ? `Removed the PLE tag from ${r.tagged} match${r.tagged === 1 ? '' : 'es'}.` : `🎆 Tagged ${r.tagged} match${r.tagged === 1 ? '' : 'es'} as **${event}**.${awards}`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'rate') {

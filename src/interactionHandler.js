@@ -6,7 +6,12 @@ const { handleButtonInteraction } = require('./handlers/buttonHandler');
 /** Tells the user what went wrong, privately, whatever state the interaction is in. */
 async function reportError(interaction, err) {
     const isUser = err instanceof UserError;
-    if (!isUser) console.error(`Error in ${interaction.commandName || interaction.customId || 'interaction'}:`, err);
+    if (!isUser) {
+        console.error(`Error in ${interaction.commandName || interaction.customId || 'interaction'}:`, err);
+        const where = interaction.commandName ? `/${interaction.commandName}${(() => { try { return ` ${interaction.options.getSubcommand(false) || ''}`; } catch (_) { return ''; } })()}` : `a button (${String(interaction.customId || '').split(':').slice(0, 2).join(':')})`;
+        require('./utils/alerts').alertStaff(interaction.client, interaction.guildId, `err:${where}:${String(err?.message).slice(0, 60)}`,
+            `\`${where.trim()}\` failed for <@${interaction.user?.id}>: ${String(err?.message || err).slice(0, 300)}. Nothing was lost; they were told to try again. If it keeps happening, send me (Claude) this message.`);
+    }
     const content = isUser ? `⚠️ ${err.message}` : '⚠️ Something went wrong on my side. Nothing was lost, and the error was logged. Please try again.';
     const payload = { content, flags: EPHEMERAL, embeds: [], files: [], components: [], allowedMentions: { parse: [] } };
     try {

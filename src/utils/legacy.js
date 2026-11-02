@@ -72,4 +72,42 @@ function legacyBadges(list) {
     return out.sort((x, y) => y.count - x.count || y.year - x.year);
 }
 
-module.exports = { KINDS, DEFAULT_AWARDS, accoladeName, awardNames, characterLegacy, playerLegacy, legacyBadges };
+/**
+ * Gives a character an accolade (used by /legacy award, award votes and PLE results).
+ * Credit goes to `playerDiscord` if given, otherwise the character's current owner (none if unclaimed).
+ * Returns the new row (with user_discord), or null if they already have this exact accolade.
+ */
+async function giveAccolade(guildId, { kind, awardName = null, division = null, year, character, playerDiscord, notes = null, actor = 'bot' }) {
+    const { ensureUser } = require('./ensureGuild');
+    const who = playerDiscord !== undefined ? playerDiscord : (character.unclaimed ? null : character.owner_discord_id);
+    const { rows: dupe } = await pool.query(
+        `SELECT 1 FROM legacy WHERE guild_id = $1 AND kind = $2 AND year = $3 AND character_id = $4
+           AND COALESCE(lower(award_name), '') = COALESCE(lower($5), '') AND COALESCE(division, '') = COALESCE($6, '')`,
+        [guildId, kind, year, character.id, awardName, division]);
+    if (dupe.length) return null;
+    const userId = who ? await ensureUser(guildId, who) : null;
+    const { rows } = await pool.query(
+        `INSERT INTO legacy (guild_id, kind, award_name, division, year, character_id, holder_name, user_id, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [guildId, kind, awardName, division, year, character.id, character.name, userId, notes, actor]);
+    return { ...rows[0], user_discord: who };
+}
+
+/** Posts the gold announcement in the Legacy channel. Returns the channel id, null if none is set, false if posting failed. */
+async function announceAccolade(client, guildId, row, character, extra = '') {
+    const { EmbedBuilder } = require('discord.js');
+    const { rows } = await pool.query(`SELECT legacy_channel_id FROM guilds WHERE guild_id = $1`, [guildId]);
+    const chId = rows[0]?.legacy_channel_id;
+    if (!chId) return null;
+    try {
+        const ch = await client.channels.fetch(chId);
+        const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`🎖 ${accoladeName(row)}`)
+            .setDescription(`**${character.name}**${row.user_discord ? ` (<@${row.user_discord}>)` : ''} is the **${accoladeName(row)}**${KINDS[row.kind].perDivision || row.kind === 'mvp' ? ' winner' : ''}!${extra ? `\n${extra}` : ''}${row.notes ? `\n_${row.notes}_` : ''}`)
+            .setFooter({ text: '/legacy list for the honor roll' });
+        if (character.image_url) embed.setThumbnail(character.image_url);
+        await ch.send({ embeds: [embed], allowedMentions: { parse: [] } });
+        return ch.id;
+    } catch (_) { return false; }
+}
+
+module.exports = { KINDS, DEFAULT_AWARDS, accoladeName, awardNames, characterLegacy, playerLegacy, legacyBadges, giveAccolade, announceAccolade };

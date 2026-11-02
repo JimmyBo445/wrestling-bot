@@ -3,7 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const { pool } = require('../db/pool');
 const { respond, requireAdmin, EPHEMERAL, NO_MENTIONS, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { autocompleteCharacters, requireCharacter } = require('../utils/characterUtils');
-const { ensureUser, getGuildSettings } = require('../utils/ensureGuild');
+const { ensureUser } = require('../utils/ensureGuild');
 const { UserError } = require('../utils/errors');
 const { logAudit } = require('../utils/audit');
 const L = require('../utils/legacy');
@@ -38,7 +38,25 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(false)
             .addChoices({ name: 'Show the list', value: 'list' }, { name: 'Add a name', value: 'add' }, { name: 'Remove a name', value: 'remove' }, { name: 'Rename', value: 'rename' }))
         .addStringOption((o) => o.setName('name').setDescription('The award name').setRequired(false).setMaxLength(50).setAutocomplete(true))
-        .addStringOption((o) => o.setName('new_name').setDescription('Rename: the new name').setRequired(false).setMaxLength(50)));
+        .addStringOption((o) => o.setName('new_name').setDescription('Rename: the new name').setRequired(false).setMaxLength(50)))
+    .addSubcommand((s) => s.setName('vote-open').setDescription('[Admin] Open a community vote for Face of FNLW MVP or a year-end award')
+        .addStringOption((o) => o.setName('accolade').setDescription('What is being voted on').setRequired(true)
+            .addChoices({ name: 'Face of FNLW MVP', value: 'mvp' }, { name: 'Year-end award', value: 'award' }))
+        .addStringOption((o) => o.setName('award_name').setDescription('Year-end awards: which award').setRequired(false).setAutocomplete(true))
+        .addIntegerOption((o) => o.setName('year').setDescription('Year (default: this year)').setRequired(false).setMinValue(2000).setMaxValue(2100))
+        .addStringOption((o) => o.setName('nominees_by').setDescription('Who can add nominees (default: admins and staff)').setRequired(false).addChoices(...[{ name: 'Admins and staff', value: 'admins' }, { name: 'Everyone', value: 'everyone' }]))
+        .addStringOption((o) => o.setName('voters').setDescription('Who can vote (default: everyone)').setRequired(false).addChoices(...[{ name: 'Admins and staff', value: 'admins' }, { name: 'Everyone', value: 'everyone' }]))
+        .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: the Legacy channel, or here)').setRequired(false)))
+    .addSubcommand((s) => s.setName('nominate').setDescription('Add a nominee to a vote (for a rivalry or match, add a second wrestler)')
+        .addIntegerOption((o) => o.setName('vote').setDescription('Which vote').setRequired(true).setAutocomplete(true))
+        .addStringOption((o) => o.setName('character').setDescription('The nominee').setRequired(true).setAutocomplete(true))
+        .addStringOption((o) => o.setName('character2').setDescription('Rivalry / match: the other wrestler').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('label').setDescription('How it shows, e.g. "Ace vs Bolt, Survivor Series"').setRequired(false).setMaxLength(100)))
+    .addSubcommand((s) => s.setName('vote-start').setDescription('[Admin] Close nominations and open the voting')
+        .addIntegerOption((o) => o.setName('vote').setDescription('Which vote').setRequired(true).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName('vote-close').setDescription('[Admin] End a vote: the winner gets the accolade (only the winner is announced)')
+        .addIntegerOption((o) => o.setName('vote').setDescription('Which vote').setRequired(true).setAutocomplete(true))
+        .addBooleanOption((o) => o.setName('cancel').setDescription('Cancel it instead (nobody wins)').setRequired(false)));
 
 function honorRollEmbed(rows, { kind, year }) {
     const title = `🎖 Legacy${kind ? `: ${L.KINDS[kind].label}` : ''}${year ? ` · ${year}` : ''}`;
@@ -74,20 +92,6 @@ async function honorRoll(guildId, { kind = null, year = null } = {}) {
     return { embeds: [honorRollEmbed(rows, { kind, year })], components: [filterMenu(kind)], allowedMentions: NO_MENTIONS };
 }
 
-async function announce(interaction, row, character) {
-    const s = await getGuildSettings(interaction.guildId);
-    if (!s.legacy_channel_id) return null;
-    try {
-        const ch = await interaction.client.channels.fetch(s.legacy_channel_id);
-        const embed = new EmbedBuilder().setColor(GOLD).setTitle(`🎖 ${L.accoladeName(row)}`)
-            .setDescription(`**${character.name}**${row.user_discord ? ` (<@${row.user_discord}>)` : ''} is the **${L.accoladeName(row)}**${L.KINDS[row.kind].perDivision || row.kind === 'mvp' ? ' winner' : ''}!${row.notes ? `\n_${row.notes}_` : ''}`)
-            .setFooter({ text: '/legacy list for the honor roll' });
-        if (character.image_url) embed.setThumbnail(character.image_url);
-        await ch.send({ embeds: [embed], allowedMentions: NO_MENTIONS });
-        return ch.id;
-    } catch (_) { return false; }
-}
-
 module.exports = {
     data,
     honorRoll,
@@ -95,7 +99,12 @@ module.exports = {
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused(true);
         const guildId = interaction.guildId;
-        if (focused.name === 'character') return interaction.respond(await autocompleteCharacters(interaction, focused.value, { statuses: ['approved', 'retired'] }));
+        if (focused.name === 'character' || focused.name === 'character2') return interaction.respond(await autocompleteCharacters(interaction, focused.value, { statuses: ['approved', 'retired'] }));
+        if (focused.name === 'vote') {
+            const sub = interaction.options.getSubcommand();
+            const statuses = sub === 'nominate' ? ['nominating'] : sub === 'vote-start' ? ['nominating'] : ['nominating', 'voting'];
+            return interaction.respond(await require('../utils/awardVotes').pollChoices(guildId, focused.value, statuses));
+        }
         if (focused.name === 'award_name' || focused.name === 'name') {
             const names = await L.awardNames(guildId);
             const typed = String(focused.value || '').toLowerCase();
@@ -138,7 +147,65 @@ module.exports = {
             return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
         }
 
+        const AV = require('../utils/awardVotes');
+        if (sub === 'nominate') {
+            const p = await AV.getPoll(guildId, interaction.options.getInteger('vote'));
+            if (p.nominate_who !== 'everyone') requireAdmin(interaction, 'add nominees to this vote');
+            const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            const c2v = interaction.options.getString('character2');
+            const c2 = c2v ? await requireCharacter(guildId, c2v, { statuses: ['approved', 'retired'] }) : null;
+            if (c2 && String(c2.id) === String(c.id)) throw new UserError('Pick two different wrestlers.');
+            const n = await AV.addNominee(p, { character: c, character2: c2, label: interaction.options.getString('label'), actor: interaction.user.id });
+            await AV.postOrUpdate(interaction.client, p, await AV.nominationsPayload(p));
+            return respond(interaction, { content: `✅ **${n.label}** is nominated for **${AV.pollName(p)}**.`, flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+        }
+
         requireAdmin(interaction, 'manage Legacy accolades');
+
+        if (sub === 'vote-open') {
+            const kind = interaction.options.getString('accolade');
+            let awardName = null;
+            if (kind === 'award') {
+                const raw = interaction.options.getString('award_name')?.trim();
+                if (!raw) throw new UserError('Pick which year-end award in `award_name`.');
+                awardName = (await L.awardNames(guildId)).find((n) => n.toLowerCase() === raw.toLowerCase());
+                if (!awardName) throw new UserError(`**${raw}** isn't on your award list. Add it first with \`/legacy award-names action:Add a name\`.`);
+            }
+            const s = await require('../utils/ensureGuild').getGuildSettings(guildId);
+            const channelId = interaction.options.getChannel('channel')?.id || s.legacy_channel_id || interaction.channelId;
+            const p = await AV.openPoll(guildId, {
+                kind, awardName, year: interaction.options.getInteger('year') || thisYear(),
+                nominateWho: interaction.options.getString('nominees_by') || 'admins', voteWho: interaction.options.getString('voters') || 'everyone',
+                channelId, actor: interaction.user.id });
+            const posted = await AV.postOrUpdate(interaction.client, p, await AV.nominationsPayload(p));
+            await logAudit(guildId, interaction.user.id, 'award_vote_opened', { vote: AV.pollName(p) });
+            return respond(interaction, { content: `🗳 Opened **${AV.pollName(p)}**${posted ? ` in <#${channelId}>` : ''}. Add nominees with \`/legacy nominate\`${p.nominate_who === 'everyone' ? ' (anyone can)' : ''}, then \`/legacy vote-start\` to open voting.`, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'vote-start') {
+            const p = await AV.getPoll(guildId, interaction.options.getInteger('vote'));
+            if (p.status !== 'nominating') throw new UserError('Voting has already started (or the vote is closed).');
+            const list = await AV.nominees(p.id);
+            if (list.length < 2) throw new UserError('A vote needs at least 2 nominees. Add them with `/legacy nominate`.');
+            await pool.query(`UPDATE award_polls SET status = 'voting' WHERE id = $1`, [p.id]);
+            const live = { ...p, status: 'voting' };
+            const posted = await AV.postOrUpdate(interaction.client, live, await AV.votingPayload(live));
+            await logAudit(guildId, interaction.user.id, 'award_vote_started', { vote: AV.pollName(p) });
+            return respond(interaction, { content: `🗳 Voting is open for **${AV.pollName(p)}**${posted ? ` in <#${p.channel_id}>` : ''}. Close it with \`/legacy vote-close\`.`, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'vote-close') {
+            const p = await AV.getPoll(guildId, interaction.options.getInteger('vote'));
+            const cancel = interaction.options.getBoolean('cancel') === true;
+            const r = await AV.closePoll(interaction.client, guildId, p, { cancel, actor: interaction.user.id });
+            await logAudit(guildId, interaction.user.id, cancel ? 'award_vote_cancelled' : 'award_vote_closed', { vote: AV.pollName(p) });
+            if (r.cancelled) return respond(interaction, { content: `Cancelled **${AV.pollName(p)}**. Nobody wins.`, flags: EPHEMERAL });
+            // staff see the totals privately; the public post only names the winner
+            const totals = r.totals.map((x) => `${x.votes} · ${x.nominee.label}`).join('\n') || '_No votes._';
+            const result = r.winners.length === 1 ? `🏆 **${r.winners[0].label}** won${r.given.length ? ` and got **${AV.pollName(p)}** on their Legacy` : ''}.`
+                : r.winners.length > 1 ? '🤝 It\'s a tie. Settle it with `/legacy award`.' : 'Nobody voted.';
+            return respond(interaction, { content: `${result}\n\n**Totals (only you can see these):**\n${totals}`.slice(0, 1900), flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+        }
 
         if (sub === 'award') {
             const kind = interaction.options.getString('accolade');
@@ -154,21 +221,12 @@ module.exports = {
             }
             if (L.KINDS[kind].perDivision) division = interaction.options.getString('division') || c.division;
             const playerOpt = interaction.options.getUser('player');
-            const playerDiscord = playerOpt ? playerOpt.id : (c.unclaimed ? null : c.owner_discord_id);
-            const userId = playerDiscord ? await ensureUser(guildId, playerDiscord) : null;
-            const { rows: dupe } = await pool.query(
-                `SELECT 1 FROM legacy WHERE guild_id = $1 AND kind = $2 AND year = $3 AND character_id = $4
-                   AND COALESCE(lower(award_name), '') = COALESCE(lower($5), '') AND COALESCE(division, '') = COALESCE($6, '')`,
-                [guildId, kind, year, c.id, awardName, division]);
-            if (dupe.length) throw new UserError(`**${c.name}** already has **${L.accoladeName({ kind, award_name: awardName, division, year })}**.`);
-            const notes = interaction.options.getString('notes');
-            const { rows } = await pool.query(
-                `INSERT INTO legacy (guild_id, kind, award_name, division, year, character_id, holder_name, user_id, notes, created_by)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-                [guildId, kind, awardName, division, year, c.id, c.name, userId, notes, interaction.user.id]);
-            const row = { ...rows[0], user_discord: playerDiscord };
+            const row = await L.giveAccolade(guildId, { kind, awardName, division, year, character: c, playerDiscord: playerOpt ? playerOpt.id : undefined,
+                notes: interaction.options.getString('notes'), actor: interaction.user.id });
+            if (!row) throw new UserError(`**${c.name}** already has **${L.accoladeName({ kind, award_name: awardName, division, year })}**.`);
+            const playerDiscord = row.user_discord;
             await logAudit(guildId, interaction.user.id, 'legacy_awarded', { accolade: L.accoladeName(row), character: c.name });
-            const posted = interaction.options.getBoolean('announce') === false ? null : await announce(interaction, row, c);
+            const posted = interaction.options.getBoolean('announce') === false ? null : await L.announceAccolade(interaction.client, guildId, row, c);
             const tail = posted ? ` Announced in <#${posted}>.` : posted === false ? ' ⚠️ I couldn\'t post in the Legacy channel. Check I can send messages there.' : '';
             return respond(interaction, { content: `🎖 **${c.name}** now has **${L.accoladeName(row)}**${playerDiscord ? ` (credit: <@${playerDiscord}>)` : ''}.${tail}`, allowedMentions: NO_MENTIONS });
         }

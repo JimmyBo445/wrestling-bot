@@ -84,6 +84,8 @@ module.exports = {
                     { name: 'Most Faced', value: opps[0] ? `${opps[0].name} (${opps[0].w}-${opps[0].l}${opps[0].d ? `-${opps[0].d}` : ''})` : '—', inline: true }
                 );
             if (allOwners.total !== s.total) embed.addFields({ name: 'All owners (before transfer)', value: rec(allOwners), inline: true });
+            const pr = await require('../utils/ple').plePlayerRecord(c.id);
+            if (pr.w + pr.l + pr.d) embed.addFields({ name: 'At PLEs', value: `${pr.w}-${pr.l}${pr.d ? `-${pr.d}` : ''}`, inline: true });
             const types = Object.entries(s.byType);
             if (types.length) embed.addFields({ name: 'By Match Type', value: types.map(([k, v]) => `${matchLabel(k)}: **${v.w}-${v.l}**${v.d ? `-${v.d}` : ''}`).join('\n') });
             const sb = await stipulationBreakdown(c.id, c.owner_id, days);
