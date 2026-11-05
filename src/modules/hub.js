@@ -657,7 +657,7 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
         let desc = lines.length ? lines.join('\n') : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
         if (desc.length > 3800) desc = `${lines.slice(0, 30).join('\n')}\n…and ${lines.length - 30} more`;
         const embed = new EmbedBuilder().setColor(0xE67E22).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(desc.slice(0, 4000))
-            .setFooter({ text: auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.' });
+            .setFooter({ text: `${auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (/card schedule) counts from the day it was made.` });
         const cards = row(...Object.entries(CARD_PICK).map(([k, l]) => tab(`ui:uf:h:${k}`, k === 'raw' ? '🟥 RAW' : k === 'smackdown' ? '🟦 SmackDown' : 'Both cards', k === brand)));
         const pingLabel = brand === 'all' ? '📣 Ping them here now' : `📣 Ping the ${CARD_PICK[brand]} players here`;
         const buttons = [btn(`ui:uf:p:${brand}`, pingLabel, P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];

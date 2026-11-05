@@ -164,6 +164,24 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
         await f.pool.query(`DELETE FROM card_shows WHERE brand = 'smackdown'`);
     });
 
+    await t('a card with no show date (never scheduled) counts from the day it was made', async () => {
+        await svc.startShow(G, 'smackdown', 'admin1', 'Friday Night');
+        const X = (await q(`select id::text from characters where name='Xena'`))[0].id;
+        const Y = (await q(`select id::text from characters where name='Yuri'`))[0].id;
+        await svc.addMatchToCard(G, 'smackdown', { matchType: 'singles', characterIds: [X, Y] });
+        assert.strictEqual((await q(`select show_date from card_shows where brand='smackdown'`))[0].show_date, null);
+        let i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
+        assert.match(text(i), /Nothing unfinished on the SmackDown card/, 'made today: not late yet');
+        await f.pool.query(`UPDATE card_drafts SET created_at = now() - interval '2 days' WHERE brand = 'smackdown'`);
+        i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
+        assert.match(text(i), /SmackDown \(1\)/);
+        assert.match(text(i), /card from .*Xena.*2 days late/s);
+        await run('match', 'log', { type: 'singles', wrestler1: X, wrestler2: Y, winner: 1 }, ADM);
+        i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
+        assert.match(text(i), /Nothing unfinished/, 'gone once the result is in');
+        await f.pool.query(`DELETE FROM card_shows WHERE brand = 'smackdown'`);
+    });
+
     await t('/admin channels has reminders and can turn them off', async () => {
         let i = await run('admin', 'channels', {}, ADM);
         assert.match(text(i), /Unfinished match pings:\*\* <#remch>/);

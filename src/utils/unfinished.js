@@ -1,5 +1,5 @@
 // Unfinished matches (3.2): matches on a RAW / SmackDown card whose show date has passed
-// but that have no result recorded yet. Staff can list them and ping the players any time;
+// but that have no result recorded yet. A card with no show date (/card schedule) counts from the day it was made. Staff can list them and ping the players any time;
 // with a reminders channel set, the bot also pings them once a day from noon (server time),
 // starting the day after the show, for up to MAX_PINGS days in a row.
 const { pool } = require('../db/pool');
@@ -13,15 +13,22 @@ const mdy = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return `${m
 
 /** Every unfinished match, oldest show first. today = 'YYYY-MM-DD' in the server's time zone. */
 async function listUnfinished(guildId, today) {
+    // The show date set with /card schedule. A card with no date set counts from the day it was made.
     const { rows } = await pool.query(
-        `SELECT cs.brand, cs.name AS show_name, to_char(cs.show_date, 'YYYY-MM-DD') AS show_ymd, ($2::date - cs.show_date) AS days_late,
+        `WITH shows AS (
+             SELECT cs.guild_id, cs.brand, cs.name, cs.show_date IS NULL AS no_date,
+                    COALESCE(cs.show_date, (SELECT (MIN(d.created_at) AT TIME ZONE COALESCE(g.tz, 'UTC'))::date FROM card_drafts d
+                                            WHERE d.guild_id = cs.guild_id AND d.brand = cs.brand)) AS day
+             FROM card_shows cs JOIN guilds g ON g.guild_id = cs.guild_id
+             WHERE cs.guild_id = $1)
+         SELECT s.brand, s.name AS show_name, s.no_date, to_char(s.day, 'YYYY-MM-DD') AS show_ymd, ($2::date - s.day) AS days_late,
                 cd.division, cdm.position, cdm.match_type, cdm.character_ids, cdm.title_id, cdm.stipulation,
                 (SELECT t.name FROM titles t WHERE t.id = cdm.title_id) AS title_name
-         FROM card_shows cs
-         JOIN card_drafts cd ON cd.guild_id = cs.guild_id AND cd.brand = cs.brand
+         FROM shows s
+         JOIN card_drafts cd ON cd.guild_id = s.guild_id AND cd.brand = s.brand
          JOIN card_draft_matches cdm ON cdm.draft_id = cd.id
-         WHERE cs.guild_id = $1 AND cs.show_date IS NOT NULL AND cs.show_date < $2::date AND cdm.match_id IS NULL
-         ORDER BY cs.show_date, cs.brand, cd.division, cdm.position`, [guildId, today]);
+         WHERE s.day IS NOT NULL AND s.day < $2::date AND cdm.match_id IS NULL
+         ORDER BY s.day, s.brand, cd.division, cdm.position`, [guildId, today]);
     const allIds = [...new Set(rows.flatMap((r) => (r.character_ids || []).map(String)))];
     const { rows: chars } = allIds.length
         ? await pool.query(`SELECT c.id, c.name, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [allIds])
@@ -48,7 +55,7 @@ function matchLine(m, { mention = false, extra = '' } = {}) {
         vs = `${m.people.slice(0, half).map(who).join(' & ')} vs ${m.people.slice(half).map(who).join(' & ')}`;
     } else vs = m.people.map(who).join(' vs ');
     const bits = [m.title_name ? `🏆 ${m.title_name}` : null, m.stipulation, `${m.days_late} day${m.days_late === 1 ? '' : 's'} late`].filter(Boolean);
-    return `• ${BRAND[m.brand] || m.brand} ${mdy(m.show_ymd)} · ${DIVISION_LABELS[m.division] || m.division} #${m.position} (${matchLabel(m.match_type)}): ${vs} · ${bits.join(' · ')}${extra}`;
+    return `• ${BRAND[m.brand] || m.brand} ${m.no_date ? `card from ${mdy(m.show_ymd)}` : mdy(m.show_ymd)} · ${DIVISION_LABELS[m.division] || m.division} #${m.position} (${matchLabel(m.match_type)}): ${vs} · ${bits.join(' · ')}${extra}`;
 }
 
 /** Builds the ping messages (each under Discord's limit) and the list of people to notify. */
