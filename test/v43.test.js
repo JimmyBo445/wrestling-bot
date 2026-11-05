@@ -175,7 +175,7 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
         await f.pool.query(`UPDATE card_drafts SET created_at = now() - interval '2 days' WHERE brand = 'smackdown'`);
         i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
         assert.match(text(i), /SmackDown \(1\)/);
-        assert.match(text(i), /card from .*Xena.*2 days late/s);
+        assert.match(text(i), /card from .*2 days late.*Xena/s);
         await run('match', 'log', { type: 'singles', wrestler1: X, wrestler2: Y, winner: 1 }, ADM);
         i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
         assert.match(text(i), /Nothing unfinished/, 'gone once the result is in');

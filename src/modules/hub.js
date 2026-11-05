@@ -639,6 +639,7 @@ async function today(guildId) {
 }
 
 const CARD_PICK = { all: 'Both cards', raw: 'RAW', smackdown: 'SmackDown' };
+const late = (n) => `${n} day${n === 1 ? '' : 's'} late`;
 /** Unfinished matches, optionally only one card (raw / smackdown). */
 async function unfinishedList(guildId, brand = 'all') {
     const list = await require('../utils/unfinished').listUnfinished(guildId, await today(guildId));
@@ -653,11 +654,30 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
         const list = await unfinishedList(interaction.guildId, brand);
         const { rows } = await pool.query(`SELECT reminders_channel_id FROM guilds WHERE guild_id = $1`, [interaction.guildId]);
         const auto = rows[0]?.reminders_channel_id;
-        const lines = list.map((m) => U.matchLine(m));
-        let desc = lines.length ? lines.join('\n') : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
-        if (desc.length > 3800) desc = `${lines.slice(0, 30).join('\n')}\n…and ${lines.length - 30} more`;
-        const embed = new EmbedBuilder().setColor(0xE67E22).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(desc.slice(0, 4000))
+        const secs = U.sections(list);
+        const byBrand = (b) => list.filter((m) => m.brand === b).length;
+        const summary = list.length
+            ? [`**${list.length}** match${list.length === 1 ? '' : 'es'} still to play${brand === 'all' ? ` · 🟥 RAW **${byBrand('raw')}** · 🟦 SmackDown **${byBrand('smackdown')}**` : ''}.`,
+                `Oldest: **${late(Math.max(...list.map((m) => m.days_late)))}** · players to ping: **${new Set(list.flatMap((m) => m.players)).size}**`].join('\n')
+            : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
+        const embed = new EmbedBuilder().setColor(list.length ? 0xE67E22 : 0x2ECC71).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(summary)
             .setFooter({ text: `${auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (/card schedule) counts from the day it was made.` });
+        // one field per card; a long card continues in the next field
+        let fields = 0;
+        for (const sec of secs) {
+            let chunk = [], part = 0;
+            const flush = () => {
+                if (!chunk.length || fields >= 24) return;
+                embed.addFields({ name: clip(part ? `${sec.title} (continued)` : sec.title, 256), value: chunk.join('\n').slice(0, 1024) });
+                fields++; part++; chunk = [];
+            };
+            for (const l of sec.lines) {
+                if ([...chunk, l].join('\n').length > 1000) flush();
+                chunk.push(l);
+            }
+            flush();
+        }
+        if (fields >= 24) embed.addFields({ name: '…', value: 'More matches than fit here. Pick one card with the buttons below.' });
         const cards = row(...Object.entries(CARD_PICK).map(([k, l]) => tab(`ui:uf:h:${k}`, k === 'raw' ? '🟥 RAW' : k === 'smackdown' ? '🟦 SmackDown' : 'Both cards', k === brand)));
         const pingLabel = brand === 'all' ? '📣 Ping them here now' : `📣 Ping the ${CARD_PICK[brand]} players here`;
         const buttons = [btn(`ui:uf:p:${brand}`, pingLabel, P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];

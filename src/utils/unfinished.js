@@ -58,9 +58,48 @@ function matchLine(m, { mention = false, extra = '' } = {}) {
     return `• ${BRAND[m.brand] || m.brand} ${m.no_date ? `card from ${mdy(m.show_ymd)}` : mdy(m.show_ymd)} · ${DIVISION_LABELS[m.division] || m.division} #${m.position} (${matchLabel(m.match_type)}): ${vs} · ${bits.join(' · ')}${extra}`;
 }
 
+const BRAND_ICON = { raw: '🟥', smackdown: '🟦' };
+const late = (n) => `${n} day${n === 1 ? '' : 's'} late`;
+
+/** Short line for one match inside its card + division section: `#2` Ace vs Bolt · 🏆 IC · Street Fight */
+function shortLine(m, { mention = false, extra = '' } = {}) {
+    const who = (p) => (mention && !p.is_placeholder && p.discord_id ? `<@${p.discord_id}> (${p.name})` : `**${p.name}**`);
+    const cfg = MATCH_CONFIG[m.match_type];
+    let vs;
+    if (cfg?.winnerMode === 'team') {
+        const half = m.people.length / 2;
+        vs = `${m.people.slice(0, half).map(who).join(' & ')} vs ${m.people.slice(half).map(who).join(' & ')}`;
+    } else vs = m.people.map(who).join(' vs ');
+    const type = m.match_type === 'singles' ? null : matchLabel(m.match_type);
+    const bits = [type, m.title_name ? `🏆 ${m.title_name}` : null, m.stipulation].filter(Boolean);
+    return `\`#${m.position}\` ${vs}${bits.length ? ` · ${bits.join(' · ')}` : ''}${extra}`;
+}
+
+/**
+ * Groups matches by card (RAW / SmackDown, with its date) and then by division.
+ * Returns [{ title, body }] — one section per card, body lines grouped under **division** headings.
+ */
+function sections(list, opts = {}) {
+    const out = [];
+    for (const m of list) {
+        const key = `${m.brand}|${m.show_ymd}`;
+        let sec = out.find((x) => x.key === key);
+        if (!sec) {
+            const when = m.no_date ? `card from ${mdy(m.show_ymd)}` : `show on ${mdy(m.show_ymd)}`;
+            sec = { key, title: `${BRAND_ICON[m.brand] || '📅'} ${BRAND[m.brand] || m.brand}${m.show_name ? ` “${m.show_name}”` : ''} · ${when} · ${late(m.days_late)}`, lines: [], div: null, count: 0 };
+            out.push(sec);
+        }
+        if (sec.div !== m.division) { sec.lines.push(`**${DIVISION_LABELS[m.division] || m.division}**`); sec.div = m.division; }
+        sec.lines.push(shortLine(m, { ...opts, extra: opts.extras?.get(m.key) || '' }));
+        sec.count++;
+    }
+    return out.map((x) => ({ title: x.title, lines: x.lines, count: x.count }));
+}
+
 /** Builds the ping messages (each under Discord's limit) and the list of people to notify. */
 function pingMessages(list, { header, extras = new Map() } = {}) {
-    const lines = list.map((m) => matchLine(m, { mention: true, extra: extras.get(m.key) || '' }));
+    const lines = [];
+    for (const sec of sections(list, { mention: true, extras })) lines.push('', `__${sec.title}__`, ...sec.lines);
     const out = [];
     let cur = header;
     for (const l of lines) {
@@ -117,4 +156,4 @@ async function unfinishedFor(guildId, today, discordId) {
     return (await listUnfinished(guildId, today)).filter((m) => m.players.includes(String(discordId)));
 }
 
-module.exports = { MAX_PINGS, listUnfinished, matchLine, pingNow, runUnfinishedReminders, unfinishedFor };
+module.exports = { MAX_PINGS, listUnfinished, matchLine, shortLine, sections, pingNow, runUnfinishedReminders, unfinishedFor };
