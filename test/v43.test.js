@@ -134,9 +134,34 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
     await t('/admin unfinished opens the same list privately', async () => {
         const i = await run('admin', 'unfinished', {}, ADM);
         assert.match(text(i), /Unfinished matches \(1\)/);
-        assert.ok(ids(i).includes('ui:uf:p'));
+        assert.ok(ids(i).includes('ui:uf:p:all'));
         const j = await run('admin', 'unfinished', {}, P('u1'));
         assert.match(text(j), /Only admins and staff/);
+    });
+
+    await t('pick the RAW or SmackDown card: list and ping only that card', async () => {
+        const X = await f.makeChar(G, 'u7', 'Xena', 'mens');
+        const Y = await f.makeChar(G, 'u8', 'Yuri', 'mens');
+        await svc.addMatchToCard(G, 'smackdown', { matchType: 'singles', characterIds: [X, Y] });
+        await f.pool.query(`INSERT INTO card_shows (guild_id, brand, show_date) VALUES ($1,'smackdown',$2::date) ON CONFLICT (guild_id, brand) DO UPDATE SET show_date = EXCLUDED.show_date`, [G, showDay]);
+        let i = await run('admin', 'unfinished', {}, ADM);
+        assert.match(text(i), /Unfinished matches \(2\)/);
+        assert.ok(ids(i).includes('ui:uf:h:raw') && ids(i).includes('ui:uf:h:smackdown'));
+        i = await run('admin', 'unfinished', { card: 'smackdown' }, ADM);
+        assert.match(text(i), /Unfinished matches: SmackDown \(1\)/);
+        assert.match(text(i), /Xena/);
+        assert.ok(!/Ace/.test(text(i)));
+        i = await click('ui:uf:h:raw', priv(ADM));
+        assert.match(text(i), /RAW \(1\)/);
+        assert.ok(!/Xena/.test(text(i)));
+        const before = sent.length;
+        i = await click('ui:uf:p:smackdown', priv(ADM));
+        assert.match(text(i), /Pinged the players of 1 SmackDown match/);
+        assert.deepStrictEqual(sent[before].payload.allowedMentions.users.sort(), ['u7', 'u8']);
+        assert.strictEqual(sent.length, before + 1);
+        i = await click('ui:uf:p:smackdown', priv(P('u7')));
+        assert.match(text(i), /Only admins/);
+        await f.pool.query(`DELETE FROM card_shows WHERE brand = 'smackdown'`);
     });
 
     await t('/admin channels has reminders and can turn them off', async () => {
@@ -150,7 +175,7 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
         await f.pool.query(`DELETE FROM card_shows`);
         const i = await click('ui:uf:h', priv(ADM));
         assert.match(text(i), /Nothing unfinished/);
-        const btn = i.responses.at(-1).p.components[0].toJSON().components.find((c) => c.custom_id === 'ui:uf:p');
+        const btn = i.responses.at(-1).p.components[1].toJSON().components.find((c) => c.custom_id === 'ui:uf:p:all');
         assert.strictEqual(btn.disabled, true);
     });
 

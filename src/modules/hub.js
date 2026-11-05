@@ -638,21 +638,31 @@ async function today(guildId) {
     return require('../utils/titleWatch').localNow(rows[0]?.tz).date;
 }
 
-async function unfinishedPanel(interaction, notice = null) {
+const CARD_PICK = { all: 'Both cards', raw: 'RAW', smackdown: 'SmackDown' };
+/** Unfinished matches, optionally only one card (raw / smackdown). */
+async function unfinishedList(guildId, brand = 'all') {
+    const list = await require('../utils/unfinished').listUnfinished(guildId, await today(guildId));
+    return CARD_PICK[brand] && brand !== 'all' ? list.filter((m) => m.brand === brand) : list;
+}
+
+async function unfinishedPanel(interaction, notice = null, brand = 'all') {
     requireAdmin(interaction, 'see unfinished matches');
+    if (!CARD_PICK[brand]) brand = 'all';
     return open(interaction, async () => {
         const U = require('../utils/unfinished');
-        const list = await U.listUnfinished(interaction.guildId, await today(interaction.guildId));
+        const list = await unfinishedList(interaction.guildId, brand);
         const { rows } = await pool.query(`SELECT reminders_channel_id FROM guilds WHERE guild_id = $1`, [interaction.guildId]);
         const auto = rows[0]?.reminders_channel_id;
         const lines = list.map((m) => U.matchLine(m));
-        let desc = lines.length ? lines.join('\n') : '✅ Nothing unfinished. Every match on a past card has a result.';
+        let desc = lines.length ? lines.join('\n') : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
         if (desc.length > 3800) desc = `${lines.slice(0, 30).join('\n')}\n…and ${lines.length - 30} more`;
-        const embed = new EmbedBuilder().setColor(0xE67E22).setTitle(`⏳ Unfinished matches (${list.length})`).setDescription(desc.slice(0, 4000))
+        const embed = new EmbedBuilder().setColor(0xE67E22).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(desc.slice(0, 4000))
             .setFooter({ text: auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.' });
-        const buttons = [btn('ui:uf:p', '📣 Ping them here now', P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];
+        const cards = row(...Object.entries(CARD_PICK).map(([k, l]) => tab(`ui:uf:h:${k}`, k === 'raw' ? '🟥 RAW' : k === 'smackdown' ? '🟦 SmackDown' : 'Both cards', k === brand)));
+        const pingLabel = brand === 'all' ? '📣 Ping them here now' : `📣 Ping the ${CARD_PICK[brand]} players here`;
+        const buttons = [btn(`ui:uf:p:${brand}`, pingLabel, P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];
         if (!auto) buttons.push(btn('ui:ch:k:reminders', '🔔 Set up daily pings'));
-        return withNotice({ embeds: [embed], components: withHome([row(...buttons)]) }, notice);
+        return withNotice({ embeds: [embed], components: withHome([cards, row(...buttons)]) }, notice);
     });
 }
 
@@ -843,14 +853,15 @@ async function handle(interaction, parts) {
     }
 
     if (kind === 'uf') {
-        if (a === 'h') return unfinishedPanel(interaction);
+        const brand = CARD_PICK[b] ? b : 'all';
+        if (a === 'h') return unfinishedPanel(interaction, null, brand);
         if (a === 'p') {
             requireAdmin(interaction, 'ping players');
             const U = require('../utils/unfinished');
-            const list = (await U.listUnfinished(interaction.guildId, await today(interaction.guildId))).filter((m) => m.players.length);
-            if (!list.length) return unfinishedPanel(interaction, 'Nothing to ping: every unfinished match is with unclaimed wrestlers only, or there are none.');
-            try { await U.pingNow(interaction.channel, list); } catch (_) { return unfinishedPanel(interaction, '⚠️ I couldn\'t post in this channel. Check I\'m allowed to send messages here.'); }
-            return unfinishedPanel(interaction, `📣 Pinged the players of ${list.length} match${list.length === 1 ? '' : 'es'} in <#${interaction.channel.id}>.`);
+            const list = (await unfinishedList(interaction.guildId, brand)).filter((m) => m.players.length);
+            if (!list.length) return unfinishedPanel(interaction, 'Nothing to ping: every unfinished match is with unclaimed wrestlers only, or there are none.', brand);
+            try { await U.pingNow(interaction.channel, list); } catch (_) { return unfinishedPanel(interaction, '⚠️ I couldn\'t post in this channel. Check I\'m allowed to send messages here.', brand); }
+            return unfinishedPanel(interaction, `📣 Pinged the players of ${list.length} ${brand === 'all' ? '' : `${CARD_PICK[brand]} `}match${list.length === 1 ? '' : 'es'} in <#${interaction.channel.id}>.`, brand);
         }
     }
 

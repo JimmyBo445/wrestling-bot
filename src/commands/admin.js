@@ -58,7 +58,9 @@ const data = new SlashCommandBuilder()
             .addChoices({ name: 'On', value: 'on' }, { name: 'Off (only when I run /admin history)', value: 'off' })))
     .addSubcommand((s) => s.setName('import-template').setDescription('Get example CSV files showing the columns to use for /admin import'))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
-    .addSubcommand((s) => s.setName('unfinished').setDescription('Card matches from past shows with no result yet, with a button to ping the players'))
+    .addSubcommand((s) => s.setName('unfinished').setDescription('Card matches from past shows with no result yet, with a button to ping the players')
+        .addStringOption((o) => o.setName('card').setDescription('Just one card (default: both)').setRequired(false)
+            .addChoices({ name: 'RAW', value: 'raw' }, { name: 'SmackDown', value: 'smackdown' })))
     .addSubcommand((s) => s.setName('audit').setDescription('Recent admin actions')
         .addIntegerOption((o) => o.setName('count').setDescription('How many (default 15, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
 
@@ -87,7 +89,7 @@ module.exports = {
             await logAudit(guildId, interaction.user.id, 'setting_monthly_channel', { channel: channel?.id || null });
             return respond(interaction, { content: channel ? `Wrestler of the Month will be posted in <#${channel.id}> at the start of each month (it covers the month before).` : 'The automatic monthly post is **off**.' });
         }
-        if (sub === 'unfinished') return require('../modules/hub').unfinishedPanel(interaction);
+        if (sub === 'unfinished') return require('../modules/hub').unfinishedPanel(interaction, null, interaction.options.getString('card') || 'all');
         if (sub === 'channels') {
             const map = { pending: 'pending_channel_id', staff: 'admin_channel_id', matches: 'matches_channel_id', monthly: 'monthly_channel_id', newsletter: 'newsletter_channel_id', legacy: 'legacy_channel_id', power: 'power_channel_id', reminders: 'reminders_channel_id' };
             const changed = [];

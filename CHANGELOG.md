@@ -2,7 +2,7 @@
 
 ## 3.2.0 — Unfinished match reminders
 A match counts as **unfinished** when it was on a RAW or SmackDown card, the show date has passed, and no result was recorded for it. Nothing about `/card` changed; the bot only reads your cards.
-- **`/admin unfinished`** or **🛠 Staff Tools → ⏳ Unfinished matches** (red when there are some): every unfinished match with who's in it and how many days late it is. **📣 Ping them here now** posts one message tagging everyone who still owes a match (staff only).
+- **`/admin unfinished`** (`card:` RAW or SmackDown to see just one) or **🛠 Staff Tools → ⏳ Unfinished matches** (red when there are some; 🟥 RAW / 🟦 SmackDown / Both cards buttons): every unfinished match with who's in it and how many days late it is. **📣 Ping them here now** posts one message tagging everyone who still owes a match (staff only).
 - **Daily pings**: pick a channel in 📺 Channels → *Unfinished match pings* (or `/admin channels reminders:`). From the day after the show, the bot pings the players once a day from noon (server time zone), **up to 6 days in a row** per match ("reminder 3/6", "last reminder"). After that the match just stays on the staff list. Moving a match on the card doesn't reset its count; a new show date starts fresh.
 - **🙋 My Wrestlers** tells players "⏳ You have 1 unfinished match" with the details.
 - When a result is recorded (card view, `/match log` or the old log commands), the match drops off the list and the pings stop.
