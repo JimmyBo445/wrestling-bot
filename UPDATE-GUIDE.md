@@ -1,11 +1,10 @@
-# How to install Version 3.1.0 (Mac, step by step)
+# How to install Version 3.2.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.1.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.2.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**Tell your admins:** every `/fnlw` section now has buttons. Staff see extra edit buttons
-(green / red) that players never see. Every result also gets ⭐ Rate and 🛠 Staff buttons.
-All the old commands still work the same.
+**Tell your admins:** 🛠 Staff Tools now has ⏳ Unfinished matches: matches from past cards
+that have no result yet, with a button to ping the players. All the old commands still work the same.
 
 ---
 
@@ -21,16 +20,16 @@ All the old commands still work the same.
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Applying migration 021_v31.sql` and `Slash commands registered.`
+The log should say `Applying migration 022_unfinished.sql` and `Slash commands registered.`
 
-## Step 3: Try it (in Discord, press Cmd + R first)
+## Step 3: Set it up (in Discord, press Cmd + R first)
 
-1. `/fnlw` and tap each new button: 📈 Standings, 📊 Stats, 🎖 Legacy, 👥 Teams & Factions,
-   🔥 Feuds, 🏟 Tournaments, 📝 Contracts, and 📋 Roster → 🏛 Hall of Fame / 🤕 Injuries.
-2. 🙋 **My Wrestlers** → ✏️ **Edit details** on one of yours.
-3. 🛠 **Staff Tools** → 📺 **Channels** to see the channel picker.
-4. After your next match: tap ⭐ **Rate this match** under the result, then 🛠 **Staff**.
-5. Ask a regular member to open `/fnlw` and check they **don't** see any edit buttons.
+1. `/fnlw` → 🛠 **Staff Tools** → ⏳ **Unfinished matches** to see what's left from past cards.
+2. For the daily pings: 📺 **Channels** → pick **Unfinished match pings** → pick a channel
+   (for example #match-reminders). Or type `/admin channels reminders:#match-reminders`.
+   From then on, every day from noon the bot pings players whose card match is at least a day
+   late, up to 6 days in a row.
+3. Players see their own late matches in `/fnlw` → 🙋 **My Wrestlers**.
 
 ---
 

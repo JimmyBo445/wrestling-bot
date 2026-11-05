@@ -112,6 +112,8 @@ async function resultsPayload(guildId) {
 async function staffPayload(interaction) {
     const guildId = interaction.guildId;
     const { rows: p } = await pool.query(`SELECT COUNT(*)::int AS n FROM pending_requests WHERE guild_id = $1 AND status = 'pending'`, [guildId]);
+    const { rows: tzr } = await pool.query(`SELECT tz FROM guilds WHERE guild_id = $1`, [guildId]);
+    const unfinished = (await require('../utils/unfinished').listUnfinished(guildId, require('../utils/titleWatch').localNow(tzr[0]?.tz).date)).length;
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle('🛠 Staff Tools').setDescription([
         `**Waiting for approval:** ${p[0].n}`,
         '',
@@ -126,7 +128,8 @@ async function staffPayload(interaction) {
         embeds: [embed],
         components: [row(
             btn('ui:h:pending', `📥 Approvals (${p[0].n})`, ButtonStyle.Primary, p[0].n === 0),
-            btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'), btn('ui:ch:h', '📺 Channels'))]
+            btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'), btn('ui:ch:h', '📺 Channels')),
+            row(btn('ui:uf:h', `⏳ Unfinished matches (${unfinished})`, unfinished ? ButtonStyle.Danger : ButtonStyle.Secondary))]
     };
 }
 
@@ -211,6 +214,13 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
         }
         embed.addFields({ name: picked ? `All of ${name}'s wrestlers (${chars.length})` : 'Wrestlers', value: clip(lines.join('\n\n'), 1024) });
     }
+    if (mine) {
+        // 3.2: matches from past cards this player still owes
+        const { rows: tzr } = await pool.query(`SELECT tz FROM guilds WHERE guild_id = $1`, [guildId]);
+        const U = require('../utils/unfinished');
+        const owed = await U.unfinishedFor(guildId, require('../utils/titleWatch').localNow(tzr[0]?.tz).date, interaction.user.id);
+        if (owed.length) embed.addFields({ name: `⏳ You have ${owed.length} unfinished match${owed.length === 1 ? '' : 'es'}`, value: clip(`${owed.map((m) => U.matchLine(m)).join('\n')}\nPlay ${owed.length === 1 ? 'it' : 'them'}, then tell staff so the result gets recorded.`, 1024) });
+    }
     embed.setFooter({ text: 'Record is with this player · pick a wrestler below for their card, stats and titles' });
 
     const components = [];
@@ -289,6 +299,7 @@ const HELP = {
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
         '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
+        '**Unfinished matches:** 🛠 Staff Tools → ⏳ lists matches from past cards with no result, with a 📣 ping button. Daily pings: `/admin channels reminders:`.',
         '**Approvals:** `/admin pending`',
         '**Settings:** `/admin channels` (or 🛠 Staff Tools → 📺 Channels) · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
 };

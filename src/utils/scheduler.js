@@ -40,6 +40,10 @@ async function tick(client) {
         for (const g of rows) {
             try { await runRematchWatch(client, g); } catch (err) { console.error('Rematch watch failed:', err.message); }
             try { await runCardReminders(client, g); } catch (err) { console.error('Card reminder failed:', err.message); }
+            try { await require('./unfinished').runUnfinishedReminders(client, g); } catch (err) {
+                console.error('Unfinished match reminder failed:', err.message);
+                require('./alerts').alertStaff(client, g.guild_id, 'unfinished', `I couldn't post today's unfinished match reminders: ${err.message}`);
+            }
             try {
                 // weekly newsletter: Monday from 9am (server time zone), once per week
                 if (g.newsletter_channel_id) {

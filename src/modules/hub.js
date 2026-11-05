@@ -19,7 +19,7 @@ const { UserError } = require('../utils/errors');
 const { NOPING, btn, row, clip, homeRow, onPrivateMessage, show, capture, open, withNotice, ButtonStyle } = require('../utils/panelKit');
 
 const SECTIONS = ['stand', 'stats', 'legacy', 'teams', 'feuds', 'tourn', 'contract'];
-const KINDS = ['pk', 'pg', 'sx', 'sd', 'lx', 'tf', 'tn', 'm', 'k', 'mw', 'fd', 'ch', 'hi', 'md'];
+const KINDS = ['pk', 'pg', 'sx', 'sd', 'lx', 'tf', 'tn', 'm', 'k', 'mw', 'fd', 'ch', 'hi', 'md', 'uf'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const tab = (id, label, active) => btn(id, label, active ? P : S);
 const thisYear = () => new Date().getFullYear();
@@ -566,7 +566,8 @@ const CHANNELS = [
     ['pending', 'Approvals & streak prompts', 'pending_channel_id'], ['staff', 'Staff reminders & bot alerts', 'admin_channel_id'],
     ['matches', 'Match results copy', 'matches_channel_id'], ['monthly', 'Wrestler of the Month', 'monthly_channel_id'],
     ['newsletter', 'Weekly newsletter', 'newsletter_channel_id'], ['legacy', 'Legacy announcements', 'legacy_channel_id'],
-    ['power', 'Weekly power rankings', 'power_channel_id'], ['history', 'Championship history', 'history_channel_id']];
+    ['power', 'Weekly power rankings', 'power_channel_id'], ['reminders', 'Unfinished match pings (daily)', 'reminders_channel_id'],
+    ['history', 'Championship history', 'history_channel_id']];
 
 async function channelsPanel(interaction, notice = null) {
     requireAdmin(interaction, 'change bot channels');
@@ -627,6 +628,31 @@ async function injuryPanel(interaction, notice = null) {
         if (isAdmin(interaction)) nav.push(btn('ui:pg:inj:0:all:0', '🤕 Add an injury', G));
         components.push(row(...nav));
         return withNotice({ ...p, components: withHome(components) }, notice);
+    });
+}
+
+// ================================================================== unfinished matches (staff)
+
+async function today(guildId) {
+    const { rows } = await pool.query(`SELECT tz FROM guilds WHERE guild_id = $1`, [guildId]);
+    return require('../utils/titleWatch').localNow(rows[0]?.tz).date;
+}
+
+async function unfinishedPanel(interaction, notice = null) {
+    requireAdmin(interaction, 'see unfinished matches');
+    return open(interaction, async () => {
+        const U = require('../utils/unfinished');
+        const list = await U.listUnfinished(interaction.guildId, await today(interaction.guildId));
+        const { rows } = await pool.query(`SELECT reminders_channel_id FROM guilds WHERE guild_id = $1`, [interaction.guildId]);
+        const auto = rows[0]?.reminders_channel_id;
+        const lines = list.map((m) => U.matchLine(m));
+        let desc = lines.length ? lines.join('\n') : '✅ Nothing unfinished. Every match on a past card has a result.';
+        if (desc.length > 3800) desc = `${lines.slice(0, 30).join('\n')}\n…and ${lines.length - 30} more`;
+        const embed = new EmbedBuilder().setColor(0xE67E22).setTitle(`⏳ Unfinished matches (${list.length})`).setDescription(desc.slice(0, 4000))
+            .setFooter({ text: auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.' });
+        const buttons = [btn('ui:uf:p', '📣 Ping them here now', P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];
+        if (!auto) buttons.push(btn('ui:ch:k:reminders', '🔔 Set up daily pings'));
+        return withNotice({ embeds: [embed], components: withHome([row(...buttons)]) }, notice);
     });
 }
 
@@ -798,7 +824,7 @@ async function handle(interaction, parts) {
 
     if (kind === 'ch') {
         if (a === 'h') return channelsPanel(interaction);
-        if (a === 'k') return channelPick(interaction, v);
+        if (a === 'k') return channelPick(interaction, v || b);
         if (a === 's') return setChannel(interaction, b, v);
         if (a === 'off') return setChannel(interaction, b, null);
     }
@@ -813,6 +839,18 @@ async function handle(interaction, parts) {
             requireAdmin(interaction, 'clear injuries');
             const r = await asError(() => capture(interaction, 'directory', 'injury-clear', { character: v }))();
             return injuryPanel(interaction, r.content);
+        }
+    }
+
+    if (kind === 'uf') {
+        if (a === 'h') return unfinishedPanel(interaction);
+        if (a === 'p') {
+            requireAdmin(interaction, 'ping players');
+            const U = require('../utils/unfinished');
+            const list = (await U.listUnfinished(interaction.guildId, await today(interaction.guildId))).filter((m) => m.players.length);
+            if (!list.length) return unfinishedPanel(interaction, 'Nothing to ping: every unfinished match is with unclaimed wrestlers only, or there are none.');
+            try { await U.pingNow(interaction.channel, list); } catch (_) { return unfinishedPanel(interaction, '⚠️ I couldn\'t post in this channel. Check I\'m allowed to send messages here.'); }
+            return unfinishedPanel(interaction, `📣 Pinged the players of ${list.length} match${list.length === 1 ? '' : 'es'} in <#${interaction.channel.id}>.`);
         }
     }
 
