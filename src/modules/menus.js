@@ -299,7 +299,7 @@ const HELP = {
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
         '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
-        '**Unfinished matches:** 🛠 Staff Tools → ⏳ lists matches from past cards with no result, with a 📣 ping button. Daily pings: `/admin channels reminders:`.',
+        '**Unfinished matches:** `/admin unfinished` (or 🛠 Staff Tools → ⏳) lists matches from past cards with no result, with a 📣 ping button. Daily pings: `/admin channels reminders:`.',
         '**Approvals:** `/admin pending`',
         '**Settings:** `/admin channels` (or 🛠 Staff Tools → 📺 Channels) · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
 };

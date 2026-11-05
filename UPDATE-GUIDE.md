@@ -24,7 +24,7 @@ The log should say `Applying migration 022_unfinished.sql` and `Slash commands r
 
 ## Step 3: Set it up (in Discord, press Cmd + R first)
 
-1. `/fnlw` → 🛠 **Staff Tools** → ⏳ **Unfinished matches** to see what's left from past cards.
+1. `/admin unfinished` (or `/fnlw` → 🛠 **Staff Tools** → ⏳ **Unfinished matches**) to see what's left from past cards.
 2. For the daily pings: 📺 **Channels** → pick **Unfinished match pings** → pick a channel
    (for example #match-reminders). Or type `/admin channels reminders:#match-reminders`.
    From then on, every day from noon the bot pings players whose card match is at least a day

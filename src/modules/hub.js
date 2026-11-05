@@ -961,4 +961,4 @@ async function onModal(interaction, what, a, b) {
     throw new UserError('That form is from an older version of the bot. Run `/fnlw` again.');
 }
 
-module.exports = { SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload };
+module.exports = { SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload, unfinishedPanel };

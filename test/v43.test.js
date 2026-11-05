@@ -131,6 +131,14 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
         assert.ok(!/unfinished/.test(text(i)), 'Eve played hers');
     });
 
+    await t('/admin unfinished opens the same list privately', async () => {
+        const i = await run('admin', 'unfinished', {}, ADM);
+        assert.match(text(i), /Unfinished matches \(1\)/);
+        assert.ok(ids(i).includes('ui:uf:p'));
+        const j = await run('admin', 'unfinished', {}, P('u1'));
+        assert.match(text(j), /Only admins and staff/);
+    });
+
     await t('/admin channels has reminders and can turn them off', async () => {
         let i = await run('admin', 'channels', {}, ADM);
         assert.match(text(i), /Unfinished match pings:\*\* <#remch>/);
