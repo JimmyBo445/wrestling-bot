@@ -54,6 +54,7 @@ async function filledDrafts(guildId, brand, division = null, client = pool) {
 /** Starts a fresh, empty show card for the brand. Replaces whatever was there (all divisions). */
 async function startShow(guildId, brand, createdBy, name = null, client = pool) {
     await client.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
+    require('./signupBooked').onCardChange(guildId);
     const { rows } = await client.query(
         `INSERT INTO card_shows (guild_id, brand, name, created_by) VALUES ($1, $2, $3, $4)
          ON CONFLICT (guild_id, brand) DO UPDATE SET name = EXCLUDED.name, created_by = EXCLUDED.created_by, show_date = NULL, reminded_on = NULL, updated_at = now()
@@ -82,6 +83,7 @@ async function setShowName(guildId, brand, name, client = pool) {
 async function startDraft(guildId, brand, division, createdBy, name = null, client = pool) {
     const d = await ensureDraft(guildId, brand, division, createdBy, client);
     await client.query(`DELETE FROM card_draft_matches WHERE draft_id = $1`, [d.id]);
+    require('./signupBooked').onCardChange(guildId);
     await client.query(`UPDATE card_drafts SET name = COALESCE($2, name), recap_posted = false WHERE id = $1`, [d.id, name]);
     if (name) await setShowName(guildId, brand, name, client);
     return { ...d, name: name || d.name };
@@ -104,6 +106,7 @@ async function saveMatches(client, draftId, list) {
         );
     }
     await client.query(`UPDATE card_drafts SET updated_at = now() WHERE id = $1`, [draftId]);
+    await require('./signupBooked').onDraftChange(draftId, client); // mark signed-up wrestlers as booked
 }
 
 // ------------------------------------------------------------------ linking logged matches to card slots
@@ -287,6 +290,7 @@ async function moveMatchOnCard(guildId, brand, division, from, to) {
 
 /** Deletes one division's part of the card, or the whole show card when no division is given. */
 async function clearCard(guildId, brand, division = null) {
+    require('./signupBooked').onCardChange(guildId);
     if (division) {
         const { rowCount } = await pool.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2 AND division = $3`, [guildId, brand, division]);
         if (!rowCount) throw new UserError(`There are no ${divisionLabel(division)} matches on the ${brandLabel(brand)} card.`);

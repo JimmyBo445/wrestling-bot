@@ -1,10 +1,10 @@
-# How to install Version 3.2.0 (Mac, step by step)
+# How to install Version 3.3.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.2.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.3.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**Tell your admins:** 🛠 Staff Tools now has ⏳ Unfinished matches: matches from past cards
-that have no result yet, with a button to ping the players. All the old commands still work the same.
+**Tell your admins:** when you put a signed-up wrestler on a card, the signup post now shows
+them crossed out under 🔴 Booked, so everyone can see who's still open. Nothing else changes.
 
 ---
 
@@ -20,16 +20,14 @@ that have no result yet, with a button to ping the players. All the old commands
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Applying migration 022_unfinished.sql` and `Slash commands registered.`
+The log should say `Slash commands registered.` (no database change this time).
 
-## Step 3: Set it up (in Discord, press Cmd + R first)
+## Step 3: Try it (in Discord, press Cmd + R first)
 
-1. `/admin unfinished` (or `/fnlw` → 🛠 **Staff Tools** → ⏳ **Unfinished matches**) to see what's left from past cards.
-2. For the daily pings: 📺 **Channels** → pick **Unfinished match pings** → pick a channel
-   (for example #match-reminders). Or type `/admin channels reminders:#match-reminders`.
-   From then on, every day from noon the bot pings players whose card match is at least a day
-   late, up to 6 days in a row.
-3. Players see their own late matches in `/fnlw` → 🙋 **My Wrestlers**.
+1. Open signups the usual way (`/booking signup-open`) and let a few people sign up.
+2. Put two of them in a match on the card (`/card add` or `/card auto`).
+3. A few seconds later the signup post shows them under 🔴 **Booked** with their names crossed out.
+4. Remove that match from the card: they go back to the open list.
 
 ---
 

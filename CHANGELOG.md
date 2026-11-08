@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.3.0 — Booked wrestlers on the signup post
+- When a wrestler who signed up is put on the RAW or SmackDown card, the signup post **keeps their name but crosses it out under 🔴 Booked**, with which card they're on, e.g. `🔴 Booked: ~~Ace~~ (SmackDown)`. The division line shows how many are still open: `Men's (4 · 2 still open): Cruz, Dax`. If a whole division is booked it says *everyone is booked*.
+- The post updates by itself a few seconds after any card change (add, move, remove, auto, clear). Take a match off the card and those wrestlers are open again.
+- The staff list (`/booking signup-list` and the list posted when signups close) puts booked wrestlers at the bottom: `🔴 ~~Ace~~ · booked on SmackDown #1`.
+- Only cards changed after the signup was opened count, so a leftover card from an earlier show doesn't mark anyone. A finished signup (`signup-done`) shows no booked marks.
+- Discord can't show red text in posts that look right on phones, so "booked" is shown with 🔴 and crossed-out names instead.
+- No database change. Still 19 commands. `/card` works the same.
+
 ## 3.2.0 — Unfinished match reminders
 A match counts as **unfinished** when it was on a RAW or SmackDown card, the show date has passed, and no result was recorded for it. A card with no show date (never set with `/card schedule`) counts from the day it was made. Nothing about `/card` changed; the bot only reads your cards.
 - **`/admin unfinished`** (`card:` RAW or SmackDown to see just one) or **🛠 Staff Tools → ⏳ Unfinished matches** (red when there are some; 🟥 RAW / 🟦 SmackDown / Both cards buttons): every unfinished match with who's in it and how many days late it is. **📣 Ping them here now** posts one message tagging everyone who still owes a match (staff only).

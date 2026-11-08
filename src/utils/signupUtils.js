@@ -125,17 +125,26 @@ const buttons = (signup) => [new ActionRowBuilder().addComponents(
 async function buildSignupMessage(signup) {
     const entries = await getEntries(signup.id);
     const open = signup.status === 'open';
+    const SB = require('./signupBooked');
+    const booked = signup.status === 'done' ? new Map() : await SB.bookedMap(signup);
+    const names = (list) => list.slice(0, MAX_ENTRY_NAMES).map((e) => e.name).join(', ') + (list.length > MAX_ENTRY_NAMES ? ` +${list.length - MAX_ENTRY_NAMES} more` : '');
     const lines = DIV_ORDER.map((d) => {
         const list = entries.filter((e) => e.division === d);
-        const names = list.slice(0, MAX_ENTRY_NAMES).map((e) => `${e.name}`).join(', ');
-        const more = list.length > MAX_ENTRY_NAMES ? ` +${list.length - MAX_ENTRY_NAMES} more` : '';
-        return `**${DIVISION_LABELS[d]}** (${list.length}): ${list.length ? names + more : '_nobody yet_'}`;
+        if (!list.length) return `**${DIVISION_LABELS[d]}** (0): _nobody yet_`;
+        const free = list.filter((e) => !booked.has(String(e.character_id)));
+        const taken = list.filter((e) => booked.has(String(e.character_id)));
+        const out = [`**${DIVISION_LABELS[d]}** (${list.length}${taken.length ? ` · ${free.length} still open` : ''}): ${free.length ? names(free) : '_everyone is booked_'}`];
+        // 3.3: wrestlers already on a card stay listed, crossed out with a red 🔴 BOOKED
+        if (taken.length) {
+            out.push(`> 🔴 **Booked:** ${taken.slice(0, MAX_ENTRY_NAMES).map((e) => `~~${e.name}~~ (${SB.where(booked.get(String(e.character_id)))})`).join(', ')}${taken.length > MAX_ENTRY_NAMES ? ` +${taken.length - MAX_ENTRY_NAMES} more` : ''}`);
+        }
+        return out.join('\n');
     });
     const dl = signup.deadline ? `\nSignups close after **${new Date(signup.deadline).toISOString().slice(0, 10)}**.` : '';
     const embed = new EmbedBuilder().setColor(open ? 0x2ECC71 : 0x95A5A6)
         .setTitle(`${open ? '✋' : '🔒'} ${signup.title}`)
         .setDescription(`${open ? 'Press **Sign up / change** and pick the wrestler(s) you want on this show. You can change your picks any time until it closes.' : 'Signups are closed.'}${dl}\n\n${lines.join('\n')}`)
-        .setFooter({ text: `${entries.length} wrestler${entries.length === 1 ? '' : 's'} signed up` });
+        .setFooter({ text: `${entries.length} wrestler${entries.length === 1 ? '' : 's'} signed up${booked.size ? ` · ${booked.size} booked · 🔴 = already on a card` : ''}` });
     return { embeds: [embed], components: open ? buttons(signup) : [], allowedMentions: NO_MENTIONS };
 }
 
@@ -199,21 +208,29 @@ async function buildBookingList(signup, division = null) {
     const { rows: champs } = ids.length ? await pool.query(
         `SELECT character_id FROM title_reigns WHERE lost_date IS NULL AND team_id IS NULL AND character_id = ANY($1::bigint[])`, [ids]) : { rows: [] };
     const champSet = new Set(champs.map((r) => String(r.character_id)));
+    const SB = require('./signupBooked');
+    const booked = await SB.bookedMap(signup);
+    const isBooked = (e) => booked.has(String(e.character_id));
 
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`📋 ${signup.title} — available wrestlers`)
-        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · /card auto and /booking suggest use this list' });
+        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · 🔴 already on a card · /card auto and /booking suggest use this list' });
     let count = 0;
     for (const d of DIV_ORDER) {
-        const list = entries.filter((e) => e.division === d).sort((a, b) => (passed.get(String(b.character_id)) || 0) - (passed.get(String(a.character_id)) || 0) || a.name.localeCompare(b.name));
+        const list = entries.filter((e) => e.division === d).sort((a, b) => isBooked(a) - isBooked(b) || (passed.get(String(b.character_id)) || 0) - (passed.get(String(a.character_id)) || 0) || a.name.localeCompare(b.name));
         if (!list.length) continue;
         count += list.length;
         const text = list.map((e) => {
             const r = recMap.get(String(e.character_id));
             const p = passed.get(String(e.character_id)) || 0;
             const last = r?.last ? ` · last <t:${Math.floor(new Date(r.last).getTime() / 1000)}:R>` : ' · no matches yet';
+            if (isBooked(e)) {
+                const spots = booked.get(String(e.character_id));
+                return `🔴 ~~${e.name}~~ (<@${e.discord_id}>) · **booked** on ${spots.map((s) => `${s.brand === 'raw' ? 'RAW' : 'SmackDown'} #${s.position}`).join(', ')}`;
+            }
             return `${champSet.has(String(e.character_id)) ? '👑 ' : ''}**${e.name}** (<@${e.discord_id}>) ${r ? `${r.w}-${r.l}` : '0-0'}${last}${p ? ` · ⏭️ passed over ×${p}` : ''}`;
         }).join('\n').slice(0, 1020);
-        embed.addFields({ name: `${DIVISION_LABELS[d]} (${list.length})`, value: text });
+        const nb = list.filter(isBooked).length;
+        embed.addFields({ name: `${DIVISION_LABELS[d]} (${list.length}${nb ? ` · ${list.length - nb} open · ${nb} booked` : ''})`, value: text });
     }
     if (!count) embed.setDescription('_Nobody has signed up yet._');
     return embed;

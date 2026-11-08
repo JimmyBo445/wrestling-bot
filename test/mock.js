@@ -11,7 +11,7 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'src', 'commands')).fi
 // the old two-name title-match subs still exist inside the module; tests reach them through this hidden command
 commands.set('championship-legacy', require('../src/modules/championship'));
 const client = { commands, user: { id: 'bot1' } };
-client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async () => ({ edit: async () => {} }) } }) };
+client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async (mid) => ({ id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); } }) } }) };
 client.guilds = { cache: new Map() };
 let getChannelLazy = (id) => ({ id, isTextBased: () => true, send: async () => ({ id: 'x' }) });
 
