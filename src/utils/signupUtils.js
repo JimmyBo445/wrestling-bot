@@ -161,15 +161,16 @@ async function refreshSignupPost(client, signup) {
 /** Picker shown privately after pressing the button: every eligible wrestler, grouped by division in the description. */
 async function buildPicker(signup, guildId, discordId) {
     const { chars, injured } = await eligibleCharacters(guildId, discordId);
+    const help = await require('./signupHelp').pickerExtras(signup, guildId, discordId);
     if (!chars.length) {
-        return { content: injured.length ? 'All your approved wrestlers are injured right now, so none can sign up.' : 'You have no approved wrestlers yet. Submit one with `/character submit` first.', components: [] };
+        return { content: `${injured.length ? 'All your approved wrestlers are injured right now, so none can sign up.' : 'You have no approved wrestlers yet.'}\n\n${help.text}`, components: [help.row] };
     }
     const mine = await signedUpIds(signup.id);
     const menu = new StringSelectMenuBuilder().setCustomId(`signup:pick:${signup.id}`)
         .setPlaceholder('Pick the wrestlers for this show').setMinValues(0).setMaxValues(Math.min(chars.length, 25))
         .addOptions(chars.slice(0, 25).map((c) => ({ label: c.name.slice(0, 100), description: DIVISION_LABELS[c.division], value: String(c.id), default: mine.has(String(c.id)) })));
     const note = injured.length ? `\n_Not shown (injured): ${injured.map((c) => c.name).join(', ')}_` : '';
-    return { content: `**${signup.title}** — which wrestler(s) do you want to bring? Pick as many as you like, then press outside the menu to confirm. Picking none withdraws you.${note}`, components: [new ActionRowBuilder().addComponents(menu)] };
+    return { content: `**${signup.title}** — which wrestler(s) do you want to bring? Pick as many as you like, then press outside the menu to confirm. Picking none withdraws you.${note}\n\n${help.text}`, components: [new ActionRowBuilder().addComponents(menu), help.row] };
 }
 
 /** Closes a signup, tidies the public post and sends the final list to the staff channel. */

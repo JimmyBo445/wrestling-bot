@@ -8,6 +8,8 @@ const { requireTitle } = require('../utils/titleLogic');
 const { isAdmin, respond, EPHEMERAL, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { logAudit } = require('../utils/audit');
+const { ensureUser } = require('../utils/ensureGuild');
+const { canAddCharacter } = require('../utils/characterUtils');
 const { PERIODS } = require('../utils/statsQueries');
 
 function resolvedEmbed(interaction, approve, line) {
@@ -36,7 +38,17 @@ async function handlePending(interaction) {
         const r = await claimRequest(client, id, interaction.guildId, approve ? 'approved' : 'denied', interaction.user.id);
         if (!r) return null;
 
-        if (r.request_type === 'character_submission') {
+        if (r.request_type === 'character_claim' && approve) {
+            // a player takes over a wrestler that has no player (3.4)
+            const { rows: cRows } = await client.query(
+                `SELECT c.id, c.name, c.status, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = $1 FOR UPDATE OF c`, [r.character_id]);
+            const ch = cRows[0];
+            if (!ch || ch.status !== 'approved' || !ch.is_placeholder) throw new UserError('That wrestler already has a player now (or was retired), so this can\'t be approved. Deny it instead.');
+            const newOwner = await ensureUser(interaction.guildId, r.requested_by, client);
+            if (!(await canAddCharacter(interaction.guildId, newOwner, client))) throw new UserError(`<@${r.requested_by}> already has the most wrestlers allowed. Retire one of theirs first, or deny this.`);
+            await client.query(`UPDATE characters SET owner_id = $1 WHERE id = $2`, [newOwner, ch.id]);
+            line = `${ch.name} moved to <@${r.requested_by}>`;
+        } else if (r.request_type === 'character_submission') {
             await client.query(
                 `UPDATE characters SET status = $1, approved_by = $2, approved_at = now() WHERE id = $3`,
                 [approve ? 'approved' : 'denied', interaction.user.id, r.character_id]);
@@ -60,6 +72,12 @@ async function handlePending(interaction) {
     }
 
     await logAudit(interaction.guildId, interaction.user.id, `request_${approve ? 'approved' : 'denied'}`, { id, type: request.request_type });
+    if (approve && ['character_submission', 'character_claim'].includes(request.request_type)) {
+        const extra = await require('../utils/signupHelp').afterApproval(interaction, request);
+        if (extra) line = [line, extra].filter(Boolean).join(' · ');
+    } else if (!approve && request.request_type === 'character_claim') {
+        try { const u = await interaction.client.users.fetch(request.requested_by); await u.send('Your request to claim a wrestler was denied by staff.'); } catch (_) { /* DMs closed */ }
+    }
     const who = approve ? `Approved by <@${interaction.user.id}>` : `Denied by <@${interaction.user.id}>`;
     const result = [who, line].filter(Boolean).join(' · ');
     await interaction.update({ embeds: [resolvedEmbed(interaction, approve, result)], components: [], allowedMentions: NO_MENTIONS });
@@ -267,11 +285,15 @@ async function handleButtonInteraction(interaction) {
 
     // ---- show signups: anyone can use ----
     if (id.startsWith('signup:')) {
-        const [, action, signupId] = id.split(':');
+        const parts = id.split(':');
+        const [, action, signupId] = parts;
         const su = require('../utils/signupUtils');
         const signup = await su.getSignup(signupId, interaction.guildId);
         if (!signup) return respond(interaction, { content: 'That signup no longer exists.', flags: EPHEMERAL });
         if (signup.status !== 'open') return respond(interaction, { content: '🔒 That signup is closed.', flags: EPHEMERAL });
+        // 3.4: "don't see your wrestler?" (request a new one / claim one with no player)
+        const help = require('../utils/signupHelp');
+        if (help.ACTIONS.includes(action)) return help.handle(interaction, action, signup, parts);
         if (interaction.isButton() && action === 'join') {
             return respond(interaction, { ...(await su.buildPicker(signup, interaction.guildId, interaction.user.id)), flags: EPHEMERAL });
         }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 3.4.0 — "Don't see your wrestler?" on signups
+When someone presses **Sign up / change**, the private picker now says:
+> **Don't see your wrestler?**
+> ➕ New wrestler: tap **Request a new wrestler** (or `/character submit`)
+> 🔄 Wrestler with no player: tap **Claim a wrestler**
+> Staff approve both. Once approved, you're signed up automatically.
+
+It also shows for players who have no approved wrestlers yet (instead of a dead end).
+- **➕ Request a new wrestler**: pick the division, then a short form: name (required), finisher, face/heel/neutral, one-line bio and picture link (all optional). It goes through the normal character approval; the approval card says it came from the signup. To upload a picture file, `/character submit` still works.
+- **🔄 Claim a wrestler**: lists only wrestlers with **no player** (unclaimed), by division. The request goes to the **staff room** (or the approvals channel if no staff room is set) with Approve / Deny. Approving moves the wrestler to that player with all its stats and history. Asking twice for the same wrestler is stopped; if two people ask, only the first approval goes through.
+- **Approved while signups are still open** → the wrestler is signed up automatically. Either way the player gets a DM (if their DMs are open). Denied claims get a DM too.
+- Players at the wrestler limit still see the buttons, with a note to ask staff to retire one first.
+- Database change: migration 023 (new request type). Still 19 commands.
+
 ## 3.3.0 — Booked wrestlers on the signup post
 - When a wrestler who signed up is put on the RAW or SmackDown card, the signup post **keeps their name but crosses it out under 🔴 Booked**, with which card they're on, e.g. `🔴 Booked: ~~Ace~~ (SmackDown)`. The division line shows how many are still open: `Men's (4 · 2 still open): Cruz, Dax`. If a whole division is booked it says *everyone is booked*.
 - The post updates by itself a few seconds after any card change (add, move, remove, auto, clear). Take a match off the card and those wrestlers are open again.

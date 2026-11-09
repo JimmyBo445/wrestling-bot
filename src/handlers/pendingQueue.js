@@ -7,7 +7,8 @@ const TITLES = {
     character_submission: 'New Character Submission',
     contender_challenge: 'Title Contender Challenge',
     match_request: 'Match Request',
-    streak_contender: 'Win Streak: Title Shot?'
+    streak_contender: 'Win Streak: Title Shot?',
+    character_claim: 'Claim a Wrestler'
 };
 
 /** Loads everything needed to describe a request in words. */
@@ -20,8 +21,12 @@ async function describeRequest(r) {
     ]);
     const c = ch?.rows[0], challenger = chal?.rows[0], t = team?.rows[0], ti = title?.rows[0];
 
+    const fromSignup = r.payload?.signup_title ? `\n_From the signup **${r.payload.signup_title}**: approving also signs them up._` : '';
     if (r.request_type === 'character_submission') {
-        return `**${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}) submitted by <@${r.requested_by}>`;
+        return `**${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}) submitted by <@${r.requested_by}>${fromSignup}`;
+    }
+    if (r.request_type === 'character_claim') {
+        return `<@${r.requested_by}> wants to take over **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}), a wrestler with no player right now. Approving moves it to them with all its stats and history.${fromSignup}`;
     }
     if (r.request_type === 'contender_challenge') {
         const who = t?.name || challenger?.name || 'Unknown';
@@ -65,7 +70,7 @@ async function buildPendingMessage(r) {
  * Saves a request and, if a pending channel is set, posts an approval card there.
  * If no channel is set, it still queues, and admins see it via /admin pending.
  */
-async function postPendingCard(guild, { type, characterId = null, titleId = null, challengerCharacterId = null, teamId = null, payload = null, requestedBy }) {
+async function postPendingCard(guild, { type, characterId = null, titleId = null, challengerCharacterId = null, teamId = null, payload = null, requestedBy, staffRoom = false }) {
     const { rows } = await pool.query(
         `INSERT INTO pending_requests (guild_id, request_type, requested_by, character_id, title_id, challenger_character_id, team_id, payload)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
@@ -73,8 +78,9 @@ async function postPendingCard(guild, { type, characterId = null, titleId = null
     );
     const request = rows[0];
 
-    const { rows: g } = await pool.query(`SELECT pending_channel_id FROM guilds WHERE guild_id = $1`, [guild.id]);
-    const channelId = g[0]?.pending_channel_id;
+    const { rows: g } = await pool.query(`SELECT pending_channel_id, admin_channel_id FROM guilds WHERE guild_id = $1`, [guild.id]);
+    // staffRoom: post in the staff room (falls back to the approvals channel if no staff room is set)
+    const channelId = (staffRoom && g[0]?.admin_channel_id) || g[0]?.pending_channel_id;
     if (!channelId) return request.id;
 
     try {

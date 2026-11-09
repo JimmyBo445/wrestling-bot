@@ -1,10 +1,10 @@
-# How to install Version 3.3.0 (Mac, step by step)
+# How to install Version 3.4.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.3.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.4.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**Tell your admins:** when you put a signed-up wrestler on a card, the signup post now shows
-them crossed out under 🔴 Booked, so everyone can see who's still open. Nothing else changes.
+**Tell your admins:** the signup picker now has **Request a new wrestler** and **Claim a wrestler**
+buttons. Claim requests show up in the staff room with Approve / Deny.
 
 ---
 
@@ -20,14 +20,14 @@ them crossed out under 🔴 Booked, so everyone can see who's still open. Nothin
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Slash commands registered.` (no database change this time).
+The log should say `Applying migration 023_claims.sql` and `Slash commands registered.`
 
 ## Step 3: Try it (in Discord, press Cmd + R first)
 
-1. Open signups the usual way (`/booking signup-open`) and let a few people sign up.
-2. Put two of them in a match on the card (`/card add` or `/card auto`).
-3. A few seconds later the signup post shows them under 🔴 **Booked** with their names crossed out.
-4. Remove that match from the card: they go back to the open list.
+1. Make sure the staff room is set (`/admin channels staff:#staff-room`); claim requests go there.
+2. Open signups the usual way, press **Sign up / change**: you'll see the new message and buttons.
+3. Try **Claim a wrestler** with a test account (or ask a member) and approve it in the staff room.
+   The wrestler moves to them and lands on the signup.
 
 ---
 

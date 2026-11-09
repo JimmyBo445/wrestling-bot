@@ -13,6 +13,8 @@ commands.set('championship-legacy', require('../src/modules/championship'));
 const client = { commands, user: { id: 'bot1' } };
 client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async (mid) => ({ id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); } }) } }) };
 client.guilds = { cache: new Map() };
+const dms = []; // direct messages the bot sent: { id, content }
+client.users = { fetch: async (uid) => ({ id: uid, send: async (c) => { dms.push({ id: uid, content: typeof c === 'string' ? c : c.content }); } }) };
 let getChannelLazy = (id) => ({ id, isTextBased: () => true, send: async () => ({ id: 'x' }) });
 
 const sent = []; // messages posted to channels by the bot
@@ -132,4 +134,4 @@ const modalOf = (i) => {
     return { id: j.custom_id, title: j.title, inputs: j.components.map((r) => r.components[0].custom_id), json: j };
 };
 
-module.exports = { edited, run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client, ids, modalOf };
+module.exports = { dms, edited, run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client, ids, modalOf };

@@ -151,6 +151,8 @@ const edits = [];
         const p2 = await su.passedOverCounts(G, [C.Ace, C.Cruz, C.Dane]);
         assert.strictEqual(p2.get(String(C.Ace)) || 0, 0);
         assert.strictEqual(p2.get(String(C.Dane)), 1);
+        // 3.3: wrestlers already on a card show as booked instead, so clear the cards for this check
+        await f.pool.query(`delete from card_drafts`);
         const i = await run('signup', 'list', {}, ADM);
         assert.match(text(i), /passed over ×1/, text(i));
     });
