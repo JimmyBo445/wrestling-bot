@@ -44,7 +44,7 @@ async function resolveSignup(guildId, value) {
         return s;
     }
     const s = await latestSignup(guildId);
-    if (!s) throw new UserError('There are no signups yet. Open one with `/booking signup-open`.');
+    if (!s) throw new UserError('There are no signups yet. Open one with `/booking signups` → 🆕 Open a signup.');
     return s;
 }
 
@@ -218,7 +218,7 @@ async function buildBookingList(signup, division = null) {
     const isBooked = (e) => booked.has(String(e.character_id));
 
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`📋 ${signup.title} — available wrestlers`)
-        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · 🔴 already on a card · /card auto and /booking suggest use this list' });
+        .setFooter({ text: '👑 champion · ⏭️ passed over on earlier shows (book them first) · 🔴 already on a card · ⚡ Auto-build and 🔎 Suggest opponents use this list' });
     let count = 0;
     for (const d of DIV_ORDER) {
         const list = entries.filter((e) => e.division === d).sort((a, b) => isBooked(a) - isBooked(b) || (passed.get(String(b.character_id)) || 0) - (passed.get(String(a.character_id)) || 0) || a.name.localeCompare(b.name));

@@ -15,7 +15,7 @@ const slug = (s) => String(s).replace(/[^a-z0-9]+/gi, '-').toLowerCase();
  */
 async function buildCardMessages(guild, guildId, brand, { division = null, tapes = false, ping = true } = {}) {
     const drafts = await svc.filledDrafts(guildId, brand, division);
-    if (!drafts.length) throw new UserError(division ? `There are no ${svc.divisionLabel(division)} matches on the ${svc.brandLabel(brand)} card yet.` : `The ${svc.brandLabel(brand)} card has no matches yet. Add some with \`/card add\` or \`/card auto\`.`);
+    if (!drafts.length) throw new UserError(division ? `There are no ${svc.divisionLabel(division)} matches on the ${svc.brandLabel(brand)} card yet.` : `The ${svc.brandLabel(brand)} card has no matches yet. Add some with \`/card add\` or \`/card view\` → 🧰 More tools → ⚡ Auto-build.`);
     const out = [];
     for (const draft of drafts) {
         const files = [new AttachmentBuilder(await renderShowCard(await svc.buildShowData(guild, draft)), { name: `${draft.brand}-${slug(draft.division)}-card.png` })];

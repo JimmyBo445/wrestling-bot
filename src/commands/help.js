@@ -8,9 +8,9 @@ const ORDER = ['fnlw', 'whois', 'legacy', 'character', 'team', 'stats', 'standin
 const MOVED = {
     leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season (picture: for the recap)', roster: '/directory roster',
     halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
-    contender: '/championship contender-challenge | contender-list (admins: /title contender give / take away)',
-    matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-edit',
-    newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report',
+    contender: '/championship title: → ⚔️ Challenge for it / 🎯 Contenders (admins: /title contender give / take away)',
+    matchmaking: '/booking request, and /booking signups → 🔎 Suggest opponents', signup: '/booking signups (buttons: open, list, close, add, remove)',
+    newsletter: '/admin panel → 📰 Newsletter', report: '/admin panel → 📊 Staff report',
     reign: '/title reign-add | reign-edit | reign-remove | add-defense | remove-defense',
     faction: '/team (kind: Faction)'
 };
@@ -20,13 +20,13 @@ const BLURB = {
     character: 'Your wrestlers: submit, edit, profile cards, story and moves',
     team: 'Tag teams and factions',
     standings: 'Leaderboards, division rankings and season standings',
-    booking: 'Find opponents, request matches, run show signups',
+    booking: 'Ask for a match, and show signups with a 🔎 Suggest opponents button',
     directory: 'Roster pages and a text roster list, Hall of Fame and the injury report',
     whois: 'Who plays a wrestler, and all of that player\'s wrestlers',
     stats: 'Records, streaks, head-to-head, history, most decorated players',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
-    championship: 'Look at titles: champions, belt cards, a button panel, history, defenses',
+    championship: 'Every title and champion. Add title: to open one belt with buttons',
     title: 'Admins: title matches, contenders, vacate, belt pictures, and fixing reigns (add, edit, remove, defenses)',
     contender: '#1 contender challenges and awards',
     matchmaking: 'Find fresh opponents or request a match',
@@ -34,7 +34,7 @@ const BLURB = {
     contract: 'Contracts and career earnings (just for fun)',
     report: 'Staff report: idle wrestlers, thin divisions, stale titles',
     match: 'Report your card match result (staff: log, undo and edit results)',
-    card: 'Build and post the RAW / SmackDown show cards, one picture per division',
+    card: 'Staff: `/card view` shows a card with every tool as buttons; `/card add` adds one match',
     season: 'Yearly standings and a season recap picture',
     injury: 'Injury report: who is out and until when',
     roster: 'Flip through a division A to Z with profile cards',
@@ -43,7 +43,7 @@ const BLURB = {
     feud: 'Rivalries: a timeline and heat meter for each feud',
     tournament: 'Tournaments with a bracket picture',
     newsletter: 'Weekly newsletter: add lines, preview, post',
-    admin: 'Server settings, monthly awards, backups and the approval queue'
+    admin: '`/admin pending` approvals · `/admin panel` every setting as buttons · `/admin data` backups and spreadsheet import'
 };
 
 const ADMIN_TAG = /^\[Admin\]\s*/i;
@@ -121,7 +121,7 @@ module.exports = {
             .setDescription([
                 '**Players:** `/character submit` to add a wrestler (an admin approves it), then `/character profile` for their card. ' +
                 'Check records with `/stats`, ladders with `/standings rankings`, ask for matches with `/booking request`, and see who plays who with `/whois`.',
-                admin ? '**Admins:** book shows with `/card auto` or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
+                admin ? '**Admins:** book shows with `/card view` → 🧰 More tools → ⚡ Auto-build or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
                 '',
                 'Tip: **`/fnlw`** opens a home menu with buttons for the most-used things.',
                 'Use **`/help command:<name>`** for the full list of one command, or pick a topic below.'

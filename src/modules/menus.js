@@ -118,12 +118,12 @@ async function staffPayload(interaction) {
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle('🛠 Staff Tools').setDescription([
         `**Waiting for approval:** ${p[0].n}`,
         '',
-        '**Shows:** `/card auto` builds a card · `/card view` edits it · `/card post` posts it',
+        '**Shows:** `/card view` → the card with buttons. 🧰 More tools there: auto-build, schedule, recap, MOTN vote, clear',
+        '**Signups:** `/booking signups` · **Settings and more:** `/admin panel` (🛠 Admin panel below)',
         '**Results:** `/match log` (any match type) or the 🎬 Record result button in `/card view` · `/match ple` tags a PLE',
         '**Legacy:** `/legacy award` · votes: `/legacy vote-open` → `nominate` → `vote-start` → `vote-close`',
         '**Titles:** `/title match` · `/title vacate` · fix history with `/title reign-add` / `reign-edit`',
-        '**People:** `/character assign` · `/character transfer` · `/team create`',
-        '**Settings:** `/admin channels` (also Legacy, power rankings) · `/admin rules` · `/admin staff-role` · `/admin history`'
+        '**People:** `/character assign` · `/character transfer` · `/team create`'
     ].join('\n'));
     return {
         embeds: [embed],
@@ -131,7 +131,8 @@ async function staffPayload(interaction) {
             btn('ui:h:pending', `📥 Approvals (${p[0].n})`, ButtonStyle.Primary, p[0].n === 0),
             btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'), btn('ui:ch:h', '📺 Channels')),
             row(btn('ui:uf:h', `⏳ Unfinished matches (${unfinished})`, unfinished ? ButtonStyle.Danger : ButtonStyle.Secondary),
-                btn('ui:rr:list', `📝 Reported results (${reported})`, reported ? ButtonStyle.Danger : ButtonStyle.Secondary))]
+                btn('ui:rr:list', `📝 Reported results (${reported})`, reported ? ButtonStyle.Danger : ButtonStyle.Secondary),
+                btn('ui:ad:h', '🛠 Admin panel', ButtonStyle.Primary), btn('ui:bk:h', '📝 Signups'))]
     };
 }
 
@@ -285,23 +286,23 @@ const HELP = {
         '`/fnlw go:Stats` every stat for a wrestler with buttons · `/fnlw go:Standings` leaderboards, rankings, power, season, rivalries',
         '`/standings power` power rankings · `/standings rankings` division ladders · `/standings leaderboard` top lists',
         '`/legacy nominate` nominate someone when an award vote is open to everyone',
-        '`/booking request` ask for a match · `/booking suggest` fresh opponents',
+        '`/booking request` ask for a match · `/booking signups` signups and 🔎 Suggest opponents',
         '`/whois` who plays a wrestler · `/directory list` the whole roster'] },
     titles: { label: 'Titles', emoji: '🏆', text: [
-        '`/championship list` every champion · `/championship panel` a belt with buttons',
-        '`/championship history` past champions · `lineage` the picture · `defenses`',
-        '`/championship contender-list` #1 contenders · `contender-challenge` ask for a shot',
-        '`/championship records` the record book: longest, shortest, most defenses, most reigns',
+        '`/championship` every title and champion, with 🏅 Grand slam, 🎯 #1 contenders and 🔁 Rematches buttons',
+        '`/championship title:` one belt with buttons: 📜 History · 🛡 Defenses · 🕰 Lineage · 📚 Records · 🎯 Contenders',
+        '⚔️ **Challenge for it** on a belt asks staff to make you the #1 contender',
         '`/legacy list` the honor roll · `/legacy view` one wrestler\'s accolades',
         '`/stats champions` players with the most reigns'] },
     shows: { label: 'Shows & results', emoji: '📅', text: [
         '`/fnlw` → **Next Show** for the RAW and SmackDown cards',
         '`/fnlw` → **Results** for the latest matches',
-        '`/booking` signups: tap the button on a signup post to say you\'re available',
+        '`/booking signups` signups: tap the button on a signup post to say you\'re available',
         '`/tournament bracket` · `/feud list` · `/directory injury-list`',
         '**Rate matches:** tap ⭐ under any result. Only the average is shown.'] },
     staff: { label: 'Staff tools', emoji: '🛠', staff: true, text: [
-        '**Shows:** `/card auto` · `/card view` (edit, record results) · `/card post` · `/card schedule`',
+        '**Shows:** `/card view` shows the card with 📣 Post here and match buttons (edit, move, remove, 🎬 record, 📼 tape). 🧰 **More tools**: 🆕 New card · ⚡ Auto-build · 📨 Match requests · 📅 Schedule · 🧾 Recap · ⭐ MOTN vote · 🗑 Clear',
+        '**Signups:** `/booking signups` → open, list, close, add or remove wrestlers',
         '**Results:** `/match log` (pick the type, wrestlers, winner) · `/match undo` · `/match edit` · `/match ple event:WrestleMania` tags today\'s matches as a PLE',
         '**Titles:** `/title match` · `vacate` · `contender` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
         '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
@@ -309,9 +310,9 @@ const HELP = {
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
         '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
         '**Reported results:** players report their card matches; approve, fix or deny them in the staff room or 🛠 Staff Tools → 📝 Reported results.',
-        '**Unfinished matches:** `/admin unfinished` (or 🛠 Staff Tools → ⏳) lists matches from past cards with no result, with a 📣 ping button. Daily pings: `/admin channels reminders:`.',
+        '**Unfinished matches:** `/admin panel` → ⏳ Unfinished lists matches from past cards with no result, with a 📣 ping button. Daily pings: 📺 Channels.',
         '**Approvals:** `/admin pending`',
-        '**Settings:** `/admin channels` (or 🛠 Staff Tools → 📺 Channels) · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
+        '**Everything else:** `/admin panel` → 📺 Channels · 📜 Rules · 👮 Staff role · 🏆 History channel · 📰 Newsletter · 📊 Staff report · 🏅 Monthly awards · 📒 Audit log · 💾 Backups. Spreadsheet import: `/admin data`.'] }
 };
 
 function helpPayload(interaction, cat = 'start') {
@@ -392,6 +393,8 @@ async function handle(interaction) {
     if (hub.KINDS.includes(kind)) return hub.handle(interaction, parts);
     const reports = require('./reports');
     if (reports.KINDS.includes(kind)) return reports.handle(interaction, parts);
+    const panels = require('./staffPanels');
+    if (panels.KINDS.includes(kind)) return panels.handle(interaction, parts);
     throw new UserError('That button is from an older version of the bot. Run the command again.');
 }
 

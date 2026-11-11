@@ -262,7 +262,7 @@ async function validateTitleMatch({ title, characters, matchType, teamMode, side
             : characters.some((c) => reignMatchesSubject(current, { type: 'character', id: c.id }));
         if (!champIn) {
             const holder = current.team_name || current.character_name || current.reign_char_name || 'the champion';
-            throw new UserError(`**${holder}** holds the **${title.name}** but isn't in this match. Add them, or vacate the title first with \`/championship vacate\`.`);
+            throw new UserError(`**${holder}** holds the **${title.name}** but isn't in this match. Add them, or vacate the title first with \`/title vacate\`.`);
         }
     }
     void resultType;

@@ -37,7 +37,7 @@ module.exports = {
         }
         if (sub === 'list') {
             const { rows } = await pool.query(`SELECT id, body FROM newsletter_entries WHERE guild_id = $1 AND posted_in IS NULL ORDER BY id`, [guildId]);
-            return respond(interaction, { content: rows.length ? rows.map((r) => `**#${r.id}** ${r.body}`).join('\n') : 'No lines waiting. Add one with `/admin newsletter add`.', flags: 64 });
+            return respond(interaction, { content: rows.length ? rows.map((r) => `**#${r.id}** ${r.body}`).join('\n') : 'No lines waiting. Add one with `/admin panel` → 📰 Newsletter.', flags: 64 });
         }
         if (sub === 'remove') {
             const { rowCount } = await pool.query(`DELETE FROM newsletter_entries WHERE id = $1 AND guild_id = $2 AND posted_in IS NULL`, [interaction.options.getInteger('id'), guildId]);

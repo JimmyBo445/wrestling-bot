@@ -87,7 +87,7 @@ module.exports = {
             await su.closeSignup(interaction.client, signup);
             await logAudit(guildId, interaction.user.id, 'signup_close', { title: signup.title });
             const n = (await su.getEntries(signup.id)).length;
-            return respond(interaction, { content: `🔒 Closed **${signup.title}** with ${n} wrestler${n === 1 ? '' : 's'} signed up. \`/card auto\` and \`/matchmaking suggest\` will favor them for the next week.` });
+            return respond(interaction, { content: `🔒 Closed **${signup.title}** with ${n} wrestler${n === 1 ? '' : 's'} signed up. \`/card view\` → 🧰 More tools → ⚡ Auto-build and \`/matchmaking suggest\` will favor them for the next week.` });
         }
 
         const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved'] });

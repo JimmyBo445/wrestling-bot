@@ -119,7 +119,7 @@ async function revertTournamentMatch(client, matchId) {
     if (!tm) return;
     const { rows: mx } = await client.query(`SELECT MAX(round)::int AS r FROM tournament_matches WHERE tournament_id = $1`, [tm.tournament_id]);
     if (tm.round === mx[0].r) {
-        if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/championship vacate` or `edit-reign`), then undo the match.');
+        if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/title vacate` or `edit-reign`), then undo the match.');
         await client.query(`UPDATE tournaments SET status = 'active', winner_id = NULL, winner_name = NULL WHERE id = $1`, [tm.tournament_id]);
     } else {
         const nextSlot = Math.ceil(tm.slot / 2);

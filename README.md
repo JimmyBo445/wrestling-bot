@@ -15,15 +15,15 @@ servers at once. Everything is saved permanently in Postgres.
 | **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` `unclaim` `swap-division` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
 | **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
 | **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
-| **Championships (everyone)** | `/championship list` `belt` `panel` `lineage` `defenses` `history` `grand-slam` `rematches` `contender-list` `contender-challenge` |
+| **Championships (everyone)** | `/championship` every title (buttons: 🏅 Grand slam, 🎯 #1 contenders, 🔁 Rematches; a menu opens a belt) · `/championship title:` one belt with 📜 History, 🛡 Defenses, 🕰 Lineage, 📚 Records, 🎯 Contenders, ⚔️ Challenge for it |
 | **Run belts (admin)** | `/title match` `belt-image` `vacate` `interim` `unify` `watch` `waive-rematch` `contender-award` `contender-revoke` |
 | **Fix the record (admin)** | `/reign add` `edit` `remove` `add-defense` `remove-defense` |
 | **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
 | **Boards** | `/standings leaderboard` (category + time period dropdowns), `/standings rankings`, `/standings season-standings` `season-recap` |
-| **Booking** | `/booking suggest` `request` (players), `/booking signup-open` `signup-list` `signup-close` `signup-done` `signup-add` `signup-remove` (admins) |
+| **Booking** | `/booking request` (players) · `/booking signups` (buttons: 🔎 Suggest opponents for everyone; staff: open, list, close, finish, add, remove) |
 | **Contracts** | `/contract offer` `view` `request` `release` `list` `free-agents` `earnings` `bonuses` (fun only: salary + win bonuses = career earnings) |
-| **Reports** (admins) | `/admin report` (also posted weekly to the staff channel) |
-| **Match cards** (admins) | `/card new` `auto` `add` `request` `edit` `remove` `move` `view` `post` `recap` `tape` `schedule` `clear` (RAW red / SmackDown blue; one card per brand, up to 15 matches per division) |
+| **Admin** | `/admin pending` · `/admin panel` (buttons: channels, rules, staff role, history channel, newsletter, staff report, monthly awards, audit log, settings, backups) · `/admin data` (spreadsheet import) |
+| **Match cards** (admins) | `/card view` (the card with buttons; 🧰 More tools: new, auto-build, match requests, schedule, upcoming, recap, MOTN vote, auto recap, clear) · `/card add` (RAW red / SmackDown blue; one card per brand, up to 15 matches per division) |
 | **Injuries** | `/directory injury-add` `injury-clear` `injury-list` (out until a return date; auto cards skip them) |
 | **Seasons** | `/standings season-recap` `season-standings` (calendar-year view; nothing resets) |
 | **Roster** | `/directory roster` flip through a division A to Z with profile cards (Prev / Next buttons) |
@@ -40,13 +40,13 @@ servers at once. Everything is saved permanently in Postgres.
 - **Rematch clause**: the champion who loses a belt is owed a rematch for N days (`/admin rematches`). It is used when that wrestler or team appears in the next title match for that belt.
 - **Title deadlines** (`/admin deadlines`): `defense_days` only warns the staff channel; `vacate_days` vacates a belt when the champion has not wrestled any match for that many days. Both are off until you set them.
 - **Tournaments**: singles only. Log the real matches with `/match log-singles` (or any command that logs a singles match) and the bracket advances; use `/tournament advance` for walkovers.
-- **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. `/card auto` books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here and Edit/Move/Remove buttons; `/card post` sends one picture per division with the wrestlers pinged underneath. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
+- **Match cards**: one show card per brand (RAW or SmackDown). Each match is filed under its division automatically (everyone in a match must share a division), numbering restarts per division, up to 15 matches per division. ⚡ Auto-build (`/card view` → 🧰 More tools) books every division at once; `/card add` lets you pick every wrestler yourself (for tag matches list Team 1 first, then Team 2). `/card view` has Preview, Post here (one picture per division with the wrestlers pinged underneath) and Edit/Move/Remove/Tape buttons. A wrestler can be in one match per card. Cards are plans only: log the real result with `/match` afterwards.
 - **Characters**: max 4 per player (approved + pending). Players submit, admins approve (`/admin pending` `set-monthly-channel` `monthly-awards` `backup` `milestones` or the buttons in the approval channel). Admins can assign directly.
 - **Matches** are logged by admins (no randomness). Singles, tag 2v2/3v3, triple threat, fatal 4-way, 5-way, 6-man (3v3) and 8-man (4v4). Draws and no contests are allowed and don't break a streak.
 - **Award votes**: `/legacy vote-open` → `nominate` → `vote-start` → `vote-close`. Secret votes; only the winner is announced and they get the Legacy accolade.
 - **PLEs**: `/match log ple:` or `/match ple event:WrestleMania` after the show. History and records note it; a Money in the Bank or Royal Rumble win at a PLE gives the Legacy accolade by itself.
-- **Power rankings**: `/standings power`, and posted every Monday in `/admin channels power:`.
-- **Legacy**: `/legacy award` gives Money in the Bank, Royal Rumble (per division), Face of FNLW MVP or a year-end award; they show as gold badges on cards and are announced in the Legacy channel (`/admin channels legacy:`). `/legacy list` is the honor roll.
+- **Power rankings**: `/standings power`, and posted every Monday in `/admin panel` → 📺 Channels.
+- **Legacy**: `/legacy award` gives Money in the Bank, Royal Rumble (per division), Face of FNLW MVP or a year-end award; they show as gold badges on cards and are announced in the Legacy channel (`/admin panel` → 📺 Channels). `/legacy list` is the honor roll.
 - **Record book**: `/championship records` (or 📚 Records on a belt panel): longest and shortest reign, most defenses, most reigns.
 - **Home menu**: `/fnlw` opens a private menu with buttons: Champions, Next Show, Results, Roster, My Wrestlers, Help, and Staff Tools for admins and staff. It's the one command members need to remember.
 - **Staff role**: `/admin staff-role role:@Staff` lets that role use the admin tools without the Manage Server permission.

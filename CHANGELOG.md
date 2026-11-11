@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.8.0 — Fewer commands: /admin, /booking, /card and /championship are mostly buttons now
+What Discord lists now (type `/` to see):
+| Command | Typed parts left | Everything else is a button in… |
+|---|---|---|
+| `/admin` | `pending` (first), `panel`, `data` | **`/admin panel`**: 📥 Pending · 📝 Reported results · ⏳ Unfinished · 📺 Channels · 📜 Rules · 👮 Staff role · 🏆 History channel · ⚙️ All settings · 📰 Newsletter · 📊 Staff report · 🏅 Monthly awards · 📒 Audit log · 💾 Backup & import |
+| `/booking` | `request`, `signups` | **`/booking signups`**: 🔎 Suggest opponents (everyone) · staff: 🆕 Open a signup · 📋 Who signed up · 🔒 Close · ✅ Mark finished · ➕ Sign a wrestler up · ➖ Take one off |
+| `/card` | `view` (first), `add` | **`/card view`** → 🧰 **More tools**: 🆕 New card · ⚡ Auto-build · 📨 Add a match request · 📅 Schedule · 🗓 Upcoming · 🧾 Post recap here · ⭐ MOTN vote here · 🔒 Close MOTN vote · Auto recap on/off · 🗑 Clear. A 🔁 button flips between RAW and SmackDown. Each match also has 📼 **Tale of the tape** (with 📣 Post it here). |
+| `/championship` | just `/championship` or `/championship title:` | No title: every champion, a menu to open a belt, 🏅 Grand slam per division, 🎯 #1 contenders, 🔁 Rematches owed. With a title: the belt with 📜 History · 🛡 Defenses · 🕰 Lineage · 📚 Records · 🎯 Contenders · ⚔️ **Challenge for it** (players pick one of their own wrestlers or teams; staff approve it) · 🔁 Rematches, plus the staff buttons as before. |
+- Rules are a form (cooldown hours, streak wins, defense days, vacate days, rematch days) plus on/off buttons and a time zone form. Staff role is a role menu.
+- `/card view` no longer errors when there's no card yet: it shows the tools so you can start one.
+- 🛠 Staff Tools now has **🛠 Admin panel** and **📝 Signups** buttons, and 📺 Channels goes back to the admin panel.
+- Every message that used to say "use `/card auto`", "`/admin channels`" etc. now says where the button is.
+- Things that need a file still need typing: spreadsheet import is `/admin data`.
+- Nothing is lost: the old subcommands still exist inside the bot (the buttons run them, with the same checks). No database change. Still 18 commands.
+
 ## 3.7.0 — Players report their own results (staff approve)
 - **Players:** `/fnlw` → 🙋 My Wrestlers → **📝 Report a result** (shows how many of their card matches still need one), or **`/match report`**. Pick the match and how it ended (who won / draw / no contest). Finish, score, notes and a **screenshot** are optional (the screenshot only works with `/match report`). Only players whose wrestler is in the match can report it, and only unrecorded matches on the current cards. Reporting the same match again replaces your earlier report.
 - **Staff:** each report is posted in the **staff room** with **✅ Approve · ✏️ Fix & approve · ❌ Deny**. Approving records it exactly like recording it in `/card view` (result picture in the results channel, title changes, contenders, tournaments). Fix lets you change the winner, finish, score and notes first. Deny asks for an optional reason. The player gets a DM either way.

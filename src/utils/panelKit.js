@@ -52,7 +52,12 @@ function privately(interaction, sub, values = {}) {
 }
 
 // commands that were merged away but whose code the panels still use directly
-const MODULES = { tagteam: () => require('../modules/tagteam'), faction: () => require('../modules/faction') };
+const MODULES = {
+    tagteam: () => require('../modules/tagteam'), faction: () => require('../modules/faction'),
+    // 3.8: parts of /admin and /booking the panels reach directly
+    signup: () => require('../modules/signup'), matchmaking: () => require('../modules/matchmaking'),
+    newsletter: () => require('../modules/newsletter'), report: () => require('../modules/report')
+};
 const command = (interaction, name) => {
     const c = MODULES[name] ? MODULES[name]() : interaction.client.commands.get(name);
     if (!c) throw new UserError(`The /${name} command isn't available right now.`);

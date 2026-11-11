@@ -62,7 +62,7 @@ async function buildReport(guildId, guildName) {
     const { rows: open } = await pool.query(`SELECT title, status FROM signups WHERE guild_id = $1 AND status IN ('open','closed') ORDER BY created_at DESC LIMIT 1`, [guildId]);
     const todo = [];
     if (pend[0].n) todo.push(`${pend[0].n} request${pend[0].n === 1 ? '' : 's'} waiting in \`/admin pending\``);
-    if (open[0]) todo.push(open[0].status === 'open' ? `signup **${open[0].title}** is still open` : `signup **${open[0].title}** is closed but still guiding booking (run \`/booking signup-done\` when you've finished booking)`);
+    if (open[0]) todo.push(open[0].status === 'open' ? `signup **${open[0].title}** is still open` : `signup **${open[0].title}** is closed but still guiding booking (run \`/booking signups\` → ✅ Mark it finished when you've finished booking)`);
     if (todo.length) embed.addFields({ name: '📌 To do', value: todo.map((t) => `• ${t}`).join('\n') });
     return embed;
 }

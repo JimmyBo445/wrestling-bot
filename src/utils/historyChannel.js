@@ -106,7 +106,7 @@ async function refreshHistory(client, guildId) {
 
 async function doRefresh(client, guildId) {
     const s = await getGuildSettings(guildId);
-    if (!s?.history_channel_id) throw new Error('No history channel is set. Use `/admin history channel:#your-channel`.');
+    if (!s?.history_channel_id) throw new Error('No history channel is set. Use `/admin panel` → 🏆 History channel.');
     let channel;
     try { channel = await client.channels.fetch(s.history_channel_id); } catch (_) { channel = null; }
     if (!channel || !channel.isTextBased?.()) throw new Error('I can\'t reach the history channel. Check it still exists and that I can see it.');
@@ -170,7 +170,7 @@ function onAudit(guildId, action) {
             await refreshHistory(botClient, guildId);
         } catch (err) {
             console.error('History channel update failed:', err.message);
-            require('./alerts').alertStaff(botClient, guildId, 'history', `I couldn't update the championship history channel: ${err.message} Fix it, then run \`/admin history\`.`);
+            require('./alerts').alertStaff(botClient, guildId, 'history', `I couldn't update the championship history channel: ${err.message} Fix it, then run \`/admin panel\` → 🏆 History channel.`);
         }
     }, 5000));
 }

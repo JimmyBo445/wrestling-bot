@@ -91,7 +91,7 @@ async function importTitles(guildId, rows, { apply, actor, today = new Date().to
         const lost = parseFlexDate(r.lost || r.lostdate || r.end || r.to);
         const defenses = r.defenses === undefined || r.defenses === '' ? 0 : Number(r.defenses);
         const where = `Line ${r._line}${holder ? ` (${holder})` : ''}`;
-        if (!title) { problems.push(`${where}: I don't know a title called "${rawTitle || ''}". Use the name from \`/championship list\`.`); continue; }
+        if (!title) { problems.push(`${where}: I don't know a title called "${rawTitle || ''}". Use the name from \`/championship\`.`); continue; }
         if (!holder) { problems.push(`${where}: no holder name.`); continue; }
         if (!won) { problems.push(`${where}: the won date ${won === false ? 'isn\'t a real date' : 'is missing'} (use 4/1/23 or 2023-04-01).`); continue; }
         if (lost === false) { problems.push(`${where}: the lost date isn't a real date. Leave it empty for the current champion.`); continue; }

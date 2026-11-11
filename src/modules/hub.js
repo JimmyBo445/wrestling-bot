@@ -71,7 +71,9 @@ const PURPOSES = {
     fd2: { title: '🔥 New feud: pick their rival', statuses: ['approved'], staff: true, back: () => 'ui:fd:l' },
     hof: { title: '🏛 Induct into the Hall of Fame', statuses: ALL, staff: true, back: () => 'ui:hi:h' },
     inj: { title: '🤕 Who is injured?', statuses: ['approved'], staff: true, back: () => 'ui:hi:i' },
-    ko: { title: '📨 Offer a contract to…', statuses: ['approved'], staff: true, back: () => 'ui:k:h' }
+    ko: { title: '📨 Offer a contract to…', statuses: ['approved'], staff: true, back: () => 'ui:k:h' },
+    sga: { title: '➕ Sign a wrestler up', statuses: ['approved'], staff: true, back: () => 'ui:bk:h' },
+    sug: { title: '🔎 Suggest opponents for…', statuses: ['approved'], back: () => 'ui:bk:h' }
 };
 
 async function pickerPayload(interaction, purpose, arg = '0', div = 'all', page = 0) {
@@ -137,6 +139,8 @@ async function onPick(interaction, purpose, arg, id) {
             { id: 'reason', label: 'Reason (optional)', max: 60, placeholder: 'Torn ACL, kayfabe injury…' }]));
     }
     if (purpose === 'ko') return interaction.showModal(contractModal(`ui:md:ko:${id}`, 'Offer a contract'));
+    if (purpose === 'sga') return require('./staffPanels').signupAdd(interaction, arg, id);
+    if (purpose === 'sug') return require('./staffPanels').suggestFor(interaction, id);
     throw new UserError('That button is from an older version. Run `/fnlw` again.');
 }
 
@@ -573,7 +577,7 @@ async function channelsPanel(interaction, notice = null) {
     requireAdmin(interaction, 'change bot channels');
     return open(interaction, async () => {
         const p = await capture(interaction, 'admin', 'channels');
-        return withNotice({ ...p, components: withHome([select('ui:ch:k', 'Change where the bot posts…', CHANNELS.map(([value, label]) => ({ label, value }))), row(btn('ui:h:staff', '◀ Staff Tools'))]) }, notice);
+        return withNotice({ ...p, components: withHome([select('ui:ch:k', 'Change where the bot posts…', CHANNELS.map(([value, label]) => ({ label, value }))), row(btn('ui:ad:h', '◀ Admin panel'), btn('ui:h:staff', '🛠 Staff Tools'))]) }, notice);
     });
 }
 
@@ -661,7 +665,7 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
                 `Oldest: **${late(Math.max(...list.map((m) => m.days_late)))}** · players to ping: **${new Set(list.flatMap((m) => m.players)).size}**`].join('\n')
             : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
         const embed = new EmbedBuilder().setColor(list.length ? 0xE67E22 : 0x2ECC71).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(summary)
-            .setFooter({ text: `${auto ? `Daily pings: on (around 1 pm, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (/card schedule) counts from the day it was made.` });
+            .setFooter({ text: `${auto ? `Daily pings: on (around 1 pm, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (📅 Schedule in /card view → 🧰 More tools) counts from the day it was made.` });
         // one field per card; a long card continues in the next field
         let fields = 0;
         for (const sec of secs) {

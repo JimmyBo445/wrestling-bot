@@ -295,7 +295,7 @@ module.exports = {
                  WHERE tr.lost_date IS NULL AND ((tr.team_id IS NULL AND tr.character_id = $1)
                    OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1))`, [character.id]);
             if (held.rows.length) {
-                throw new UserError(`**${character.name}** currently holds the ${held.rows.map((r) => `**${r.name}**`).join(', ')}. Vacate it first with \`/championship vacate\`.`);
+                throw new UserError(`**${character.name}** currently holds the ${held.rows.map((r) => `**${r.name}**`).join(', ')}. Vacate it first with \`/title vacate\`.`);
             }
             const teams = await withTransaction(async (client) => {
                 await client.query(`UPDATE characters SET status = 'retired', retired_at = now() WHERE id = $1`, [character.id]);

@@ -25,7 +25,9 @@ const data = new SlashCommandBuilder()
 async function buildPanel(guild, title, admin) {
     const buffer = await renderBeltCard(await buildBeltData(guild, title));
     const rows = [new ActionRowBuilder().addComponents(
-        btn(`chmp:hist:${title.id}`, '📜 History'), btn(`chmp:def:${title.id}`, '🛡 Defenses'), btn(`chmp:lin:${title.id}`, '🕰 Lineage'), btn(`chmp:rec:${title.id}`, '📚 Records'))];
+        btn(`chmp:hist:${title.id}`, '📜 History'), btn(`chmp:def:${title.id}`, '🛡 Defenses'), btn(`chmp:lin:${title.id}`, '🕰 Lineage'), btn(`chmp:rec:${title.id}`, '📚 Records'), btn(`chmp:cl:${title.id}`, '🎯 Contenders')),
+    // 3.8: players can ask for a title shot right from the belt
+    new ActionRowBuilder().addComponents(btn(`chmp:ch:${title.id}`, '⚔️ Challenge for it', ButtonStyle.Primary), btn(`chmp:rm:${title.id}`, '🔁 Rematches owed'))];
     if (admin) {
         rows.push(new ActionRowBuilder().addComponents(
             btn(`chmp:log:${title.id}`, '🎬 Log match', ButtonStyle.Primary),
@@ -86,11 +88,39 @@ async function handleComponent(interaction) {
     const [, act, tid, a, b] = interaction.customId.split(':');
     const guildId = interaction.guildId;
     try {
-        if (!['hist', 'def', 'lin', 'rec'].includes(act) && !isAdmin(interaction)) {
+        if (!['hist', 'def', 'lin', 'rec', 'cl', 'ch', 'chp', 'rm'].includes(act) && !isAdmin(interaction)) {
             return await respond(interaction, { content: 'Only admins and staff can use that button.', flags: EPHEMERAL });
         }
         if (act === 'x') { await interaction.deferUpdate(); return await interaction.editReply({ content: 'Cancelled.', components: [] }); }
         const title = await requireTitle(guildId, act === 'pg' ? a : tid);
+        if (act === 'cl' || act === 'rm' || act === 'chp') {
+            const { capture } = require('../utils/panelKit');
+            let p;
+            if (act === 'chp') {
+                const v = interaction.values[0];
+                p = await capture(interaction, 'championship', 'contender-challenge', title.is_tag_title ? { title: title.id, team: v } : { title: title.id, character: v });
+            } else p = await capture(interaction, 'championship', act === 'cl' ? 'contender-list' : 'rematches', act === 'cl' ? { title: title.id } : {});
+            const { flags, ...rest } = p; // eslint-disable-line no-unused-vars
+            if (act === 'chp') { await interaction.deferUpdate(); return await interaction.editReply({ content: rest.content || '✅ Sent.', embeds: [], components: [] }); }
+            return await respond(interaction, { ...rest, components: [], flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+        }
+        if (act === 'ch') {
+            // who can this person challenge with? their own wrestlers (singles) or teams they're on (tag)
+            const { rows } = title.is_tag_title
+                ? await pool.query(
+                    `SELECT DISTINCT t.id, t.name FROM teams t JOIN team_members tm ON tm.team_id = t.id AND tm.left_at IS NULL
+                     JOIN characters c ON c.id = tm.character_id JOIN users u ON u.id = c.owner_id
+                     WHERE t.guild_id = $1 AND t.division = $2 AND t.status = 'active' AND u.discord_id = $3 ORDER BY t.name LIMIT 25`, [guildId, title.division, interaction.user.id])
+                : await pool.query(
+                    `SELECT c.id, c.name FROM characters c JOIN users u ON u.id = c.owner_id
+                     WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND u.discord_id = $3 ORDER BY c.name LIMIT 25`, [guildId, title.division, interaction.user.id]);
+            if (!rows.length) {
+                return await respond(interaction, { content: title.is_tag_title ? `You need a team in this division to challenge for the **${title.name}** (make one with \`/team create\`).` : `You don't have a wrestler in this division to challenge for the **${title.name}**.`, flags: EPHEMERAL });
+            }
+            const sel = new StringSelectMenuBuilder().setCustomId(`chmp:chp:${title.id}`).setPlaceholder(title.is_tag_title ? 'Which team?' : 'Which wrestler?')
+                .addOptions(rows.map((r) => ({ label: r.name.slice(0, 100), value: String(r.id) })));
+            return await respond(interaction, { content: `⚔️ Ask to be the #1 contender for the **${title.name}**. Staff approve it.`, components: [new ActionRowBuilder().addComponents(sel)], flags: EPHEMERAL });
+        }
         if (act === 'rec') {
             return await respond(interaction, { embeds: [await require('./records').recordsEmbed(title)], flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
         }

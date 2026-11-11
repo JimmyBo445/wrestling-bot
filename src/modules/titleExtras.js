@@ -155,7 +155,7 @@ module.exports = {
                 `INSERT INTO title_images (title_id, data, content_type) VALUES ($1, $2, 'image/jpeg')
                  ON CONFLICT (title_id) DO UPDATE SET data = EXCLUDED.data, content_type = 'image/jpeg', updated_at = now()`, [title.id, buffer]);
             await logAudit(guildId, interaction.user.id, 'title_image_set', { title: title.name });
-            return respond(interaction, { content: `Saved the belt picture for the **${title.name}**. See it with \`/championship belt\` or \`/championship panel\`.` });
+            return respond(interaction, { content: `Saved the belt picture for the **${title.name}**. See it with \`/championship title:\`.` });
         }
 
         const reign = await reignRow(guildId, title.id, interaction.options.getInteger('reign'));
@@ -175,7 +175,7 @@ module.exports = {
                 await client.query(`UPDATE title_reigns SET defenses = defenses + 1 WHERE id = $1`, [reign.id]);
             });
             await logAudit(guildId, interaction.user.id, 'defense_added', { title: title.name, reign: reign.id });
-            return respond(interaction, { content: `Added the defense to ${reignHolderName(reign)}'s reign. It now shows in \`/championship defenses\`.`, allowedMentions: NO_MENTIONS });
+            return respond(interaction, { content: `Added the defense to ${reignHolderName(reign)}'s reign. It now shows in \`/championship title:\` → 🛡 Defenses.`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'remove-defense') {

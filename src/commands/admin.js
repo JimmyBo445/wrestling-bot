@@ -56,7 +56,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('history').setDescription('Championship history channel the bot keeps up to date. Run with nothing to update it now.')
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (the bot posts its own messages there)').setRequired(false).addChannelTypes(ChannelType.GuildText))
         .addStringOption((o) => o.setName('auto').setDescription('Update it by itself after every title change').setRequired(false)
-            .addChoices({ name: 'On', value: 'on' }, { name: 'Off (only when I run /admin history)', value: 'off' })))
+            .addChoices({ name: 'On', value: 'on' }, { name: 'Off (only when I press Update in /admin panel)', value: 'off' })))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('unfinished').setDescription('Card matches from past shows with no result yet, with a button to ping the players')
         .addStringOption((o) => o.setName('card').setDescription('Just one card (default: both)').setRequired(false)
@@ -128,7 +128,7 @@ module.exports = {
                 `**Legacy announcements:** ${ch(st.legacy_channel_id, 'off')}`,
                 `**Weekly power rankings:** ${ch(st.power_channel_id, 'off')}`,
                 `**Unfinished match pings:** ${ch(st.reminders_channel_id, 'off')}`,
-                `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin history\`)_`
+                `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin panel\` → 🏆 History channel)_`
             ].join('\n'));
             return respond(interaction, { embeds: [embed], flags: changed.length ? undefined : EPHEMERAL });
         }
@@ -165,7 +165,7 @@ module.exports = {
                 `**Rematch clause:** ${st.rematch_enabled ? `on (${st.rematch_days} days)` : 'off'}`,
                 `**Time zone:** ${st.tz || 'UTC'}`
             ].join('\n'));
-            const tip = (st.defense_days || st.vacate_days) && !st.admin_channel_id ? 'Tip: set a staff channel with `/admin channels staff:` so title warnings have somewhere to go.' : null;
+            const tip = (st.defense_days || st.vacate_days) && !st.admin_channel_id ? 'Tip: set a staff channel with `/admin panel` → 📺 Channels so title warnings have somewhere to go.' : null;
             return respond(interaction, { content: tip || undefined, embeds: [embed], flags: changed ? undefined : EPHEMERAL });
         }
         if (sub === 'staff-role') {
@@ -177,7 +177,7 @@ module.exports = {
                 await logAudit(guildId, interaction.user.id, 'setting_staff_role', { role: remove ? null : role.id });
             }
             const st = await getGuildSettings(guildId);
-            if (!st.staff_role_id) return respond(interaction, { content: remove ? 'The staff role is **off**. Only members with Manage Server can use the admin tools.' : 'No staff role yet. Pick one: `/admin staff-role role:@Staff`.', flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
+            if (!st.staff_role_id) return respond(interaction, { content: remove ? 'The staff role is **off**. Only members with Manage Server can use the admin tools.' : 'No staff role yet. Pick one: `/admin panel` → 👮 Staff role.', flags: EPHEMERAL, allowedMentions: NO_MENTIONS });
             return respond(interaction, {
                 content: `${role ? '✅ ' : ''}Members with <@&${st.staff_role_id}> can use the bot's admin tools (booking, logging matches, titles, approvals).\n`
                     + '**One more step so they can see the admin commands:** Server Settings → **Integrations** → this bot → open each admin command (`/admin`, `/card`, `/match`, `/title`) → **Add Roles or Members** → pick the staff role.',
@@ -213,7 +213,7 @@ module.exports = {
             await pool.query(`UPDATE guilds SET ${col} = $1 WHERE guild_id = $2`, [channel?.id || null, guildId]);
             await logAudit(guildId, interaction.user.id, `setting_${col}`, { channel: channel?.id || null });
             if (sub === 'set-admin-channel') return respond(interaction, { content: channel ? `Staff reminders (tonight's card, rematches owed, title warnings) will post in <#${channel.id}>. Make sure only staff can see that channel.` : 'Staff reminders are **off**.' });
-            return respond(interaction, { content: channel ? `The weekly newsletter will post in <#${channel.id}> (use \`/admin newsletter add\` to add your own lines or post it now).` : 'The weekly newsletter is **off**.' });
+            return respond(interaction, { content: channel ? `The weekly newsletter will post in <#${channel.id}> (use \`/admin panel\` → 📰 Newsletter to add your own lines or post it now).` : 'The weekly newsletter is **off**.' });
         }
         if (sub === 'deadlines') {
             const d = interaction.options.getInteger('defense_days');
@@ -224,7 +224,7 @@ module.exports = {
             const s = await getGuildSettings(guildId);
             const bits = [s.defense_days ? `warn staff when a title has gone **${s.defense_days} days** without a defense` : 'no defense warnings',
                 s.vacate_days ? `auto-vacate a belt when the champion has not wrestled in **${s.vacate_days} days**` : 'no auto-vacate'];
-            return respond(interaction, { content: `Title deadlines: ${bits.join('; ')}.${(s.defense_days || s.vacate_days) && !s.admin_channel_id ? '\nTip: set a staff channel with `/admin channels staff:` so the warnings have somewhere to go.' : ''}` });
+            return respond(interaction, { content: `Title deadlines: ${bits.join('; ')}.${(s.defense_days || s.vacate_days) && !s.admin_channel_id ? '\nTip: set a staff channel with `/admin panel` → 📺 Channels so the warnings have somewhere to go.' : ''}` });
         }
         if (sub === 'rematches') {
             const on = interaction.options.getString('action') === 'on';
@@ -254,11 +254,11 @@ module.exports = {
             const s = await getGuildSettings(guildId);
             if (channel || auto) await logAudit(guildId, interaction.user.id, 'setting_history_channel', { channel: s.history_channel_id, auto: s.history_auto });
             if (!s.history_channel_id) {
-                return respond(interaction, { content: 'No history channel yet. Pick one: `/admin history channel:#your-channel`. The bot posts every title\'s history there and keeps it up to date.', flags: EPHEMERAL });
+                return respond(interaction, { content: 'No history channel yet. Pick one: `/admin panel` → 🏆 History channel. The bot posts every title\'s history there and keeps it up to date.', flags: EPHEMERAL });
             }
             const how = s.history_auto === false
-                ? 'Automatic updates are **off**: run `/admin history` whenever you want it updated.'
-                : 'It updates by itself a few seconds after any title change. Run `/admin history` to update it right away.';
+                ? 'Automatic updates are **off**: run `/admin panel` → 🏆 History channel whenever you want it updated.'
+                : 'It updates by itself a few seconds after any title change. Run `/admin panel` → 🏆 History channel to update it right away.';
             if (auto && !channel) return respond(interaction, { content: `Championship history channel: <#${s.history_channel_id}>. ${how}` });
             await interaction.deferReply({ flags: EPHEMERAL });
             try {
@@ -302,7 +302,7 @@ module.exports = {
                 ? `\n🔗 ${apply ? 'Linked' : 'Will link'} the character on **${res.filled.length}** reign(s) already in the bot: ${res.filled.slice(0, 5).map((x) => `${x.characters.map((c) => c.name).join(' & ')} (${x.title.name}, ${x.won})`).join(', ')}${res.filled.length > 5 ? ', …' : ''}.`
                 : '';
             const probs = res.problems.slice(0, 12).map((p) => `⚠️ ${p}`).join('\n');
-            const after = what === 'titles' && apply && res.ok.length ? '\nCheck it with `/championship history`. If you set a history channel (`/admin history`), it updates in a few seconds.' : '';
+            const after = what === 'titles' && apply && res.ok.length ? '\nCheck it with `/championship title:` → 📜 History. If you set a history channel (`/admin panel` → 🏆 History channel), it updates in a few seconds.' : '';
             return respond(interaction, { content: [head + after, sample && `\n${sample}${res.ok.length > 5 ? `\n…and ${res.ok.length - 5} more` : ''}`, filled, skip, probs && `\n${probs}${res.problems.length > 12 ? `\n…and ${res.problems.length - 12} more problems` : ''}`].filter(Boolean).join('\n').slice(0, 1900), allowedMentions: NO_MENTIONS });
         }
         if (sub === 'milestones') {
@@ -329,19 +329,19 @@ module.exports = {
         if (sub === 'settings') {
             const s = await getGuildSettings(guildId);
             const embed = new EmbedBuilder().setTitle('Bot Settings').setColor(0x95A5A6).addFields(
-                { name: 'Approval / prompts channel', value: s.pending_channel_id ? `<#${s.pending_channel_id}>` : 'Not set (use `/admin channels pending:`)' },
+                { name: 'Approval / prompts channel', value: s.pending_channel_id ? `<#${s.pending_channel_id}>` : 'Not set (use `/admin panel` → 📺 Channels)' },
                 { name: 'Match results copied to', value: s.matches_channel_id ? `<#${s.matches_channel_id}>` : 'Off (results appear where the command is used)' },
                 { name: 'Singles cooldown', value: s.singles_cooldown_hours ? `${s.singles_cooldown_hours}h (${s.cooldown_scope === 'character' ? 'same two characters' : 'same two players'})` : 'Off' },
                 { name: 'Win-streak prompt', value: s.streak_threshold ? `Every ${s.streak_threshold} wins in a row` : 'Off' },
-                { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin channels monthly:`)' },
+                { name: 'Wrestler of the Month post', value: s.monthly_channel_id ? `<#${s.monthly_channel_id}>` : 'Off (use `/admin panel` → 📺 Channels)' },
                 { name: 'Milestone shout-outs', value: s.milestones_enabled === false ? 'Off' : 'On' },
-                { name: 'Staff reminders channel', value: s.admin_channel_id ? `<#${s.admin_channel_id}>` : 'Off (use `/admin channels staff:`)' },
-                { name: 'Weekly newsletter', value: s.newsletter_channel_id ? `<#${s.newsletter_channel_id}>` : 'Off (use `/admin channels newsletter:`)' },
+                { name: 'Staff reminders channel', value: s.admin_channel_id ? `<#${s.admin_channel_id}>` : 'Off (use `/admin panel` → 📺 Channels)' },
+                { name: 'Weekly newsletter', value: s.newsletter_channel_id ? `<#${s.newsletter_channel_id}>` : 'Off (use `/admin panel` → 📺 Channels)' },
                 { name: 'Title deadlines', value: `${s.defense_days ? `Warn after ${s.defense_days}d without a defense` : 'No defense warnings'} · ${s.vacate_days ? `auto-vacate after ${s.vacate_days}d of champion inactivity` : 'no auto-vacate'}` },
                 { name: 'Rematch clause', value: s.rematch_enabled ? `On (${s.rematch_days} days)` : 'Off' },
                 { name: 'Time zone', value: s.tz || 'UTC' },
                 { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin data action:Backup: weekly to me`)' },
-                { name: 'Championship history channel', value: s.history_channel_id ? `<#${s.history_channel_id}> (${s.history_auto === false ? 'manual updates' : 'updates by itself'})` : 'Off (use `/admin history`)' }
+                { name: 'Championship history channel', value: s.history_channel_id ? `<#${s.history_channel_id}> (${s.history_auto === false ? 'manual updates' : 'updates by itself'})` : 'Off (use `/admin panel` → 🏆 History channel)' }
             );
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
         }
@@ -367,7 +367,7 @@ module.exports = {
                 const msg = await buildPendingMessage(r);
                 if (r.request_type === 'streak_contender') {
                     const jump = r.message_id && r.channel_id ? `\nUse the prompt posted in <#${r.channel_id}> to pick the title.` : '';
-                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/championship contender-award` to pick a title, or ignore it.'}`);
+                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/title contender` to pick a title, or ignore it.'}`);
                 }
                 await interaction.followUp({ ...msg, flags: EPHEMERAL });
             }
@@ -382,4 +382,21 @@ module.exports = {
         extras: partsOf(require('../modules/report'), { prefix: '' }).map((p) => ({ ...p, json: { ...p.json, name: 'report', description: '[Admin] Staff report: idle wrestlers, thin divisions, stale titles, contracts' } })),
         groups: [{ name: 'newsletter', description: '[Admin] Weekly newsletter: add lines, preview, post', parts: partsOf(require('../modules/newsletter')) }]
     });
+}
+
+// 3.8: Discord only lists /admin pending, /admin panel and /admin data. Everything else is a button
+// in /admin panel (the old subcommands still work inside the bot: the buttons run them).
+{
+    const full = module.exports.data.toJSON();
+    const pick = (n) => (full.options || []).find((o) => o.name === n);
+    const panel = { type: 1, name: 'panel', description: 'Every admin tool as buttons: channels, rules, staff role, newsletter, backups and more', options: [] };
+    const shown = { ...full, options: [pick('pending'), panel, pick('data')] };
+    module.exports.data = { name: full.name, toJSON: () => JSON.parse(JSON.stringify(shown)), full: () => JSON.parse(JSON.stringify(full)) };
+    const inner = module.exports.execute;
+    module.exports.execute = async (interaction) => {
+        let sub = null;
+        try { sub = interaction.options.getSubcommand(false); } catch (_) { /* none */ }
+        if (sub === 'panel' && !interaction.options.getSubcommandGroup?.(false)) return require('../modules/staffPanels').adminHome(interaction);
+        return inner(interaction);
+    };
 }

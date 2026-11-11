@@ -450,7 +450,7 @@ module.exports = {
             const text = await withTransaction(async (client) => {
                 const cur = await getCurrentReign(title.id, client, true);
                 if (sub === 'interim') {
-                    if (cur?.is_interim) throw new UserError('There is already an interim champion. Use `/championship unify` or `/championship vacate` first.');
+                    if (cur?.is_interim) throw new UserError('There is already an interim champion. Use `/title unify` or `/title vacate` first.');
                     if (cur) {
                         await client.query(`UPDATE title_reigns SET lost_date = CURRENT_DATE, notes = COALESCE(notes || ' · ', '') || $2 WHERE id = $1`,
                             [cur.id, `Interim champion crowned${reason ? ` (${reason})` : ''}`]);

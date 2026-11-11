@@ -40,7 +40,9 @@ async function viewMessage(guildId, brand, { page = 0, notice = null } = {}) {
     const rows = [];
     rows.push(new ActionRowBuilder().addComponents(
         btn(`cardui:pv:${brand}`, '👁 Preview', ButtonStyle.Primary, !drafts.length),
-        btn(`cardui:po:${brand}`, '📣 Post here', ButtonStyle.Success, !drafts.length)));
+        btn(`cardui:po:${brand}`, '📣 Post here', ButtonStyle.Success, !drafts.length),
+        btn(`ui:ct:h:${brand}`, '🧰 More tools'),
+        btn(`ui:ct:v:${brand === 'raw' ? 'smackdown' : 'raw'}`, brand === 'raw' ? '🔁 SmackDown card' : '🔁 RAW card')));
     const options = [];
     for (const d of drafts) {
         const slots = await svc.getDraftMatches(d.id);
@@ -77,7 +79,8 @@ async function matchPanel(guildId, draftId, position, { notice = null } = {}) {
         btn(`cardui:ed:${draft.id}:${position}`, '✏️ Edit', ButtonStyle.Primary, logged),
         btn(`cardui:rm:${draft.id}:${position}`, '🗑 Remove', ButtonStyle.Danger, logged),
         btn(`cardui:bk:${draft.brand}`, '↩ Back'))];
-    rows.push(new ActionRowBuilder().addComponents(btn(`cardui:rc:${draft.id}:${position}`, logged ? '✅ Recorded' : '🎬 Record result', logged ? ButtonStyle.Secondary : ButtonStyle.Success, logged)));
+    rows.push(new ActionRowBuilder().addComponents(btn(`cardui:rc:${draft.id}:${position}`, logged ? '✅ Recorded' : '🎬 Record result', logged ? ButtonStyle.Secondary : ButtonStyle.Success, logged),
+        btn(`ui:ct:tp:${draft.id}:${position}`, '📼 Tale of the tape')));
     return { content, components: rows, files: [], embeds: [], allowedMentions: { parse: [] } };
 }
 

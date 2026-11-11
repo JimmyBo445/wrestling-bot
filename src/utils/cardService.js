@@ -27,7 +27,7 @@ async function getDraft(guildId, brand, division, client = pool, lock = false) {
 
 async function requireDraft(guildId, brand, division, client = pool, lock = false) {
     const d = await getDraft(guildId, brand, division, client, lock);
-    if (!d) throw new UserError(`There are no ${divisionLabel(division)} matches on the ${brandLabel(brand)} card yet. Add one with \`/card add\`, or start with \`/card auto\`.`);
+    if (!d) throw new UserError(`There are no ${divisionLabel(division)} matches on the ${brandLabel(brand)} card yet. Add one with \`/card add\`, or start with \`/card view\` → 🧰 More tools → ⚡ Auto-build.`);
     return d;
 }
 
@@ -212,7 +212,7 @@ async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId
         await client.query(`SELECT id FROM card_drafts WHERE id = $1 FOR UPDATE`, [draft.id]);
         const matches = await getDraftMatches(draft.id, client);
         if (matches.length >= MAX_CARD_MATCHES) {
-            throw new UserError(`The ${divisionLabel(division)} part of the ${brandLabel(brand)} card already has ${MAX_CARD_MATCHES} matches, which is the max. Remove one with \`/card remove\` first.`);
+            throw new UserError(`The ${divisionLabel(division)} part of the ${brandLabel(brand)} card already has ${MAX_CARD_MATCHES} matches, which is the max. Remove one with the buttons in \`/card view\` first.`);
         }
         const onCard = new Set();
         for (const m of matches) for (const id of m.character_ids) onCard.add(id);
@@ -452,7 +452,7 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     if (signupIds) {
         const signed = pool_.filter((c) => signupIds.has(String(c.id)));
         if (signed.length < 2) {
-            throw new UserError(`Only ${signed.length} healthy ${divisionLabel(division)} wrestler${signed.length === 1 ? '' : 's'} signed up for the current signup, so I can't book a match. Sign more up with \`/booking signup-edit\`, or use \`use_signup:false\` to book from everyone.`);
+            throw new UserError(`Only ${signed.length} healthy ${divisionLabel(division)} wrestler${signed.length === 1 ? '' : 's'} signed up for the current signup, so I can't book a match. Sign more up with \`/booking signups\` → ➕ / ➖ buttons, or answer **no** to "Book from the current signup?" in ⚡ Auto-build to book from everyone.`);
         }
         pool_ = signed; signupMode = 'used';
     }

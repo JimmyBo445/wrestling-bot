@@ -37,9 +37,9 @@ const subsOf = (name) => reg().find((c) => c.name === name).options.map((o) => o
         assert.deepStrictEqual(subsOf('team'), ['create', 'list', 'profile', 'add-member', 'remove-member', 'rename', 'disband']);
         assert.deepStrictEqual(subsOf('standings'), ['leaderboard', 'rankings', 'power', 'season']);
         assert.ok(subsOf('title').includes('contender') && !subsOf('title').some((s) => s.startsWith('contender-')));
-        assert.ok(subsOf('booking').includes('signup-edit') && !subsOf('booking').includes('signup-add'));
+        assert.deepStrictEqual(subsOf('booking'), ['request', 'signups']); // 3.8: the rest are buttons
         const admin = subsOf('admin');
-        assert.ok(admin.includes('data') && !admin.includes('backup') && !admin.includes('import') && !admin.includes('import-template'));
+        assert.deepStrictEqual(admin, ['pending', 'panel', 'data']); // 3.8: everything else is in /admin panel
     });
 
     // ---------------- /team ----------------

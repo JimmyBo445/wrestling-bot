@@ -141,13 +141,13 @@ module.exports = {
         if (sub === 'auto-recap') {
             const on = interaction.options.getBoolean('enabled');
             await pool.query(`UPDATE guilds SET auto_recap = $1 WHERE guild_id = $2`, [on, guildId]);
-            return respond(interaction, { content: on ? '✅ I\'ll post a written recap and results pictures when the last match of a card is logged.' : 'Automatic show recaps are off. You can still use `/card recap`.', flags: 64 });
+            return respond(interaction, { content: on ? '✅ I\'ll post a written recap and results pictures when the last match of a card is logged.' : 'Automatic show recaps are off. You can still use `/card view` → 🧰 More tools → 🧾 Post recap.', flags: 64 });
         }
 
         if (sub === 'new') {
             await interaction.deferReply({ flags: 64 });
             await svc.startShow(guildId, brand, interaction.user.id, interaction.options.getString('name')?.trim() || null);
-            return respond(interaction, { content: `Started a fresh **${BL}** card. Add matches with \`/card add\` (the division is picked from the wrestlers), or use \`/card auto\` to have me book every division.` });
+            return respond(interaction, { content: `Started a fresh **${BL}** card. Add matches with \`/card add\` (the division is picked from the wrestlers), or use \`/card view\` → 🧰 More tools → ⚡ Auto-build to have me book every division.` });
         }
 
         if (sub === 'auto') {
@@ -163,7 +163,7 @@ module.exports = {
             const skipped = out.skipped.map((x) => `⚠️ **${svc.divisionLabel(x.division)}** was skipped: ${x.reason}`);
             const via = out.signupMode === 'used' ? `\n📝 Booked only from the **${signup.title}** signup.` : '';
             const ui = await cardUi.viewMessage(guildId, brand, {
-                notice: `Booked the **${BL}** card from recent matches. ${lines.join(' · ')}${via}${skipped.length ? `\n${skipped.join('\n')}` : ''}\nChange anything with the buttons, or \`/card add\`, \`/card edit\`, \`/card remove\`, \`/card move\`.`
+                notice: `Booked the **${BL}** card from recent matches. ${lines.join(' · ')}${via}${skipped.length ? `\n${skipped.join('\n')}` : ''}\nChange anything with the buttons below, or add a match with \`/card add\`.`
             });
             return respond(interaction, ui);
         }
@@ -239,8 +239,8 @@ module.exports = {
 
         if (sub === 'view') {
             await interaction.deferReply({ flags: 64 });
-            if (!(await svc.brandDrafts(guildId, brand)).length && !(await svc.getShow(guildId, brand))) throw new UserError(`There's no ${BL} card yet. Start one with \`/card new\`, \`/card add\` or \`/card auto\`.`);
-            return respond(interaction, await cardUi.viewMessage(guildId, brand));
+            const none = !(await svc.brandDrafts(guildId, brand)).length && !(await svc.getShow(guildId, brand));
+            return respond(interaction, await cardUi.viewMessage(guildId, brand, { notice: none ? `There's no ${BL} card yet. Press 🧰 **More tools** → 🆕 New card or ⚡ Auto-build, or add a match with \`/card add\`.` : null }));
         }
 
         if (sub === 'post') {
@@ -289,19 +289,19 @@ module.exports = {
                 return respond(interaction, { content: `The ${BL} card is no longer scheduled.` });
             }
             const date = parseDate(raw, 'The show date');
-            if (!(await svc.getShow(guildId, brand)) && !(await svc.brandDrafts(guildId, brand)).length) throw new UserError(`There's no ${BL} card yet. Start one with \`/card new\` or \`/card auto\` first.`);
+            if (!(await svc.getShow(guildId, brand)) && !(await svc.brandDrafts(guildId, brand)).length) throw new UserError(`There's no ${BL} card yet. Start one first: \`/card view\` → 🧰 More tools → 🆕 New card or ⚡ Auto-build.`);
             await pool.query(
                 `INSERT INTO card_shows (guild_id, brand, show_date, created_by) VALUES ($1, $2, $3, $4)
                  ON CONFLICT (guild_id, brand) DO UPDATE SET show_date = EXCLUDED.show_date, reminded_on = NULL, updated_at = now()`, [guildId, brand, date, interaction.user.id]);
             const s = await require('../utils/ensureGuild').getGuildSettings(guildId);
-            return respond(interaction, { content: `📅 The **${BL}** card is set for **${date}**.${s.admin_channel_id ? ` I'll post "tonight's card" in <#${s.admin_channel_id}> from noon that day.` : ' Set a staff channel with `/admin channels staff:` and I\'ll remind you on the day.'}` });
+            return respond(interaction, { content: `📅 The **${BL}** card is set for **${date}**.${s.admin_channel_id ? ` I'll post "tonight's card" in <#${s.admin_channel_id}> from noon that day.` : ' Set a staff channel with `/admin panel` → 📺 Channels and I\'ll remind you on the day.'}` });
         }
 
         if (sub === 'upcoming') {
             const { rows } = await pool.query(
                 `SELECT cs.*, (SELECT COALESCE(SUM((SELECT COUNT(*) FROM card_draft_matches WHERE draft_id = cd.id)), 0)::int FROM card_drafts cd WHERE cd.guild_id = cs.guild_id AND cd.brand = cs.brand) AS n
                  FROM card_shows cs WHERE cs.guild_id = $1 AND cs.show_date IS NOT NULL ORDER BY cs.show_date, cs.brand`, [guildId]);
-            if (!rows.length) return respond(interaction, { content: 'No cards are scheduled. Use `/card schedule` on a card you are building.', flags: 64 });
+            if (!rows.length) return respond(interaction, { content: 'No cards are scheduled. Use `/card view` → 🧰 More tools → 📅 Schedule on a card you are building.', flags: 64 });
             const lines = rows.map((r) => `**${fmtYmd(r.show_date)}** — ${svc.brandLabel(r.brand)}${r.name ? ` “${r.name}”` : ''} · ${r.n} match${r.n === 1 ? '' : 'es'}`);
             return respond(interaction, { content: `📅 **Upcoming cards**\n${lines.join('\n')}`, flags: 64 });
         }
@@ -319,7 +319,7 @@ module.exports = {
                 const channel = await interaction.guild.channels.fetch(target.id).catch(() => null);
                 if (!channel?.isTextBased()) throw new UserError('I can\'t post in that channel.');
                 msg = await channel.send(payload).catch(() => { throw new UserError('I couldn\'t post there. Check that I can view the channel and send messages.'); });
-                await respond(interaction, { content: `Vote opened in <#${target.id}>. Close it with \`/card vote-close\`.` });
+                await respond(interaction, { content: `Vote opened in <#${target.id}>. Close it with \`/card view\` → 🧰 More tools → 🔒 Close MOTN vote.` });
             } else {
                 msg = await interaction.editReply(payload);
             }
@@ -350,3 +350,12 @@ module.exports = {
         }
     }
 };
+
+// 3.8: Discord only lists /card view and /card add. Everything else is a button on the card screen
+// (🧰 More tools); the old subcommands still work inside the bot because the buttons run them.
+{
+    const full = data.toJSON();
+    const opts = full.options || [];
+    const shown = { ...full, options: ['view', 'add'].map((n) => opts.find((o) => o.name === n)) };
+    module.exports.data = { name: full.name, toJSON: () => JSON.parse(JSON.stringify(shown)), full: () => JSON.parse(JSON.stringify(full)) };
+}

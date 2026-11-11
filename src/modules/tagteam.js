@@ -145,7 +145,7 @@ module.exports = {
             if (members.length >= MAX_MEMBERS) throw new UserError(`Teams can have at most ${MAX_MEMBERS} members.`);
             if (character.division !== team.division) throw new UserError(`**${character.name}** is ${DIVISION_LABELS[character.division]} but **${team.name}** is a ${DIVISION_LABELS[team.division]} team.`);
             const held = await getTitlesHeldByTeam(team.id);
-            if (held.length) throw new UserError(`**${team.name}** holds the ${held.map((h) => `**${h.name}**`).join(', ')}. Changing the roster would change who the champions are. Vacate the title first (\`/championship vacate\`) or create a new team.`);
+            if (held.length) throw new UserError(`**${team.name}** holds the ${held.map((h) => `**${h.name}**`).join(', ')}. Changing the roster would change who the champions are. Vacate the title first (\`/title vacate\`) or create a new team.`);
             await assertNoDuplicateRoster(guildId, [...members.map((m) => m.id), character.id], team.id);
             await pool.query(`INSERT INTO team_members (team_id, character_id) VALUES ($1,$2)`, [team.id, character.id]);
             await logAudit(guildId, interaction.user.id, 'team_member_added', { team: team.name, character: character.name });

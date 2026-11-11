@@ -30,7 +30,7 @@ async function t(name, fn) { try { await fn(); passed++; console.log('  ok  ', n
         const p = await run('help', null, { command: 'match' }, { admin: false, user: 'u1' });
         assert.match(text(p), /\/match report/); assert.ok(!/\/match undo/.test(text(p)), 'players only see report');
         const slash = await run('help', null, { command: '/card' }, { admin: true });
-        assert.match(text(slash), /\/card auto/);
+        assert.match(text(slash), /\/card view/); assert.match(text(slash), /\/card add/); assert.doesNotMatch(text(slash), /\/card auto/, "3.8: /card auto is a button now");
     });
     await t('autocomplete suggests command names', async () => {
         const r = await auto('help', null, 'command', 'ma', {}, { admin: true });

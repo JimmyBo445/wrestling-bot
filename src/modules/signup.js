@@ -75,7 +75,7 @@ module.exports = {
             }
             await pool.query(`UPDATE signups SET message_id = $1 WHERE id = $2`, [msg?.id || null, signup.id]);
             await logAudit(guildId, interaction.user.id, 'signup_open', { title });
-            return respond(interaction, { content: `✅ Signup **${title}** is open in <#${channel.id}>. See who joined with \`/booking signup-list\`.${deadline ? ` It closes automatically after ${deadline}.` : ' Close it with `/signup close`.'}` });
+            return respond(interaction, { content: `✅ Signup **${title}** is open in <#${channel.id}>. See who joined with \`/booking signups\` → 📋 Who signed up.${deadline ? ` It closes automatically after ${deadline}.` : ' Close it from `/booking signups`.'}` });
         }
 
         const signup = await su.resolveSignup(guildId, interaction.options.getString('signup'));
@@ -90,7 +90,7 @@ module.exports = {
             if (signup.status === 'done') throw new UserError('That signup is already finished. Booking already uses everyone.');
             await su.markDone(signup.id, guildId);
             await su.refreshSignupPost(interaction.client, { ...signup, status: 'done' });
-            return respond(interaction, { content: `✅ **${signup.title}** is finished. \`/card auto\` and \`/booking suggest\` go back to using everyone until you open another signup.`, flags: 64 });
+            return respond(interaction, { content: `✅ **${signup.title}** is finished. \`/card view\` → 🧰 More tools → ⚡ Auto-build and \`/booking signups\` → 🔎 Suggest opponents go back to using everyone until you open another signup.`, flags: 64 });
         }
 
         if (sub === 'close') {
@@ -99,7 +99,7 @@ module.exports = {
             await su.closeSignup(interaction.client, signup);
             await logAudit(guildId, interaction.user.id, 'signup_close', { title: signup.title });
             const n = (await su.getEntries(signup.id)).length;
-            return respond(interaction, { content: `🔒 Closed **${signup.title}** with ${n} wrestler${n === 1 ? '' : 's'} signed up. \`/card auto\` and \`/booking suggest\` will favor them for the next week.` });
+            return respond(interaction, { content: `🔒 Closed **${signup.title}** with ${n} wrestler${n === 1 ? '' : 's'} signed up. \`/card view\` → 🧰 More tools → ⚡ Auto-build and \`/booking signups\` → 🔎 Suggest opponents will favor them for the next week.` });
         }
 
         const c = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved'], claimed: true });

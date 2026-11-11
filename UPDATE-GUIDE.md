@@ -1,11 +1,20 @@
-# How to install Version 3.7.0 (Mac, step by step)
+# How to install Version 3.8.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.7.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.8.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
+**What changed, in one line:** `/admin`, `/booking`, `/card` and `/championship` show far fewer
+typed options. The rest are buttons now.
+
 **Tell your members** (copy this):
-> Played your card match? Report it yourself: `/fnlw` → My Wrestlers → 📝 Report a result, or `/match report`
-> (you can add a screenshot there). Staff approve it before it counts, and you'll get a DM.
+> The bot got simpler! `/championship` shows every title. Add `title:` to open a belt, then press
+> ⚔️ **Challenge for it** to ask for a title shot. `/booking signups` has 🔎 **Suggest opponents**.
+
+**Cheat sheet for staff** (copy this into your staff room):
+> • Settings, rules, staff role, newsletter, backups → `/admin panel`
+> • Approvals → `/admin pending` · Spreadsheet import → `/admin data`
+> • Cards → `/card view` (🧰 **More tools** has new card, auto-build, schedule, recap, MOTN vote, clear) · one match → `/card add`
+> • Signups → `/booking signups`
 
 ---
 
@@ -21,16 +30,14 @@ already saved in git. Nothing changes on Discord or Railway until you upload it.
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Applying migration 024_match_reports.sql` and `Slash commands registered.`
+The log should say `Slash commands registered.` (there is no database change this time).
 
-## Step 3: Check it (in Discord, press Cmd + R first)
+## Step 3: Check it (in Discord, press Cmd + R first so it loads the new command list)
 
-1. Make sure the staff room is set: `/admin channels staff:#your-staff-room` (reports go there).
-2. **Integrations check:** Server Settings → Integrations → your bot → `/match`. If you limited `/match` to your
-   staff role before, members won't see `/match report`. Either allow @everyone on `/match` (the staff-only
-   parts still refuse players), or have members use the 📝 Report a result button instead.
-3. With a member (or a test account) who's on a card: `/fnlw` → 🙋 My Wrestlers → 📝 Report a result.
-4. Approve it in the staff room and check the result picture appears in your results channel.
+1. Type `/admin` → you should only see **pending**, **panel** and **data**. Run `/admin panel` and press 📜 Rules.
+2. Type `/card` → only **view** and **add**. Run `/card view` → press 🧰 **More tools**.
+3. Type `/championship` and press Enter with nothing else → every title with buttons underneath.
+4. Type `/booking signups` → the signup buttons.
 
 ---
 
@@ -38,8 +45,8 @@ The log should say `Applying migration 024_match_reports.sql` and `Slash command
 
 | What you see | What to do |
 |---|---|
+| Discord still shows the old long lists | Press Cmd + R. If it's still there after a few minutes, fully quit Discord and reopen it. |
 | `Authentication failed` | The token is wrong or expired. Make a new one at https://github.com/settings/tokens (classic, tick **repo**). |
 | `git push` says "rejected" | Tell me the exact message. |
 | Railway deploy shows "Failed" | Copy the last ~20 lines of the log (no tokens or passwords) and send them to me. |
-| New buttons don't show up | Cmd + R in Discord and run `/fnlw` again. |
 | "⚠️ Bot problem" in the staff room | Copy it and send it to me. |

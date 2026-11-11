@@ -108,12 +108,12 @@ const C = {};
         const tx = text(a);
         assert.match(tx, /\/standings/); assert.match(tx, /\/booking/); assert.match(tx, /\/directory/);
         assert.ok(!/\/leaderboard( 🔒)?:/.test(tx) && !/\/injury( 🔒)?:/.test(tx), tx);
-        assert.match(tx, /contender-challenge/); assert.match(tx, /newsletter add/);
+        assert.match(tx, /\/admin panel/); assert.match(tx, /\/championship/); // 3.8: buttons replaced contender-challenge and newsletter add
         const m = await run('help', null, { command: 'injury' }, ADM);
         assert.match(text(m), /merged into a combined command/, text(m)); assert.match(text(m), /\/directory injury-list/, text(m));
         const p = await run('help', null, {}, P('u1'));
         assert.ok(!/signup-open/.test(text(p)), 'players do not see admin-only booking subcommands');
-        assert.match(text(p), /suggest/);
+        assert.match(text(p), /suggest/i);
     });
     await t('every command definition is valid and the new ones are not too big', async () => {
         const { loadCommandData } = require('../src/registerCommands');

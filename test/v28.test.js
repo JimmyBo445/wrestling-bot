@@ -165,7 +165,7 @@ const edits = [];
     });
     await t('help lists signup for admins only', async () => {
         const a = await run('help', null, {}, ADM);
-        assert.match(text(a), /signup-open/, text(a));
+        assert.match(text(a), /`signups`/, text(a)); // 3.8: signups are buttons now
         const pl = await run('help', null, {}, P('u1'));
         assert.ok(!/signup-open/.test(text(pl)), text(pl));
     });
