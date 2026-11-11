@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.5.0 — Fewer commands, more buttons
+**Renamed / merged (what to type now):**
+| Before | Now |
+|---|---|
+| `/match log-singles`, `log-tag2v2`, … (8 commands) | `/match log` (pick the type) |
+| `/faction create / list / profile / add-member / remove-member / disband` | `/team …` (create has **kind: Tag team / Faction**; everything else lets you pick any team or faction from one list) |
+| `/standings season-standings` and `season-recap` | `/standings season` (`picture:True` for the recap picture) |
+| `/title contender-award` and `contender-revoke` | `/title contender action: Give / Take away` |
+| `/booking signup-add` and `signup-remove` | `/booking signup-edit action: Add / Remove` |
+| `/admin backup`, `import`, `import-template` | `/admin data action: …` (Import with no file sends the example files) |
+
+**New staff-only buttons** (everyone sees them; only admins and the staff role can use them):
+- **Signup post:** 🔒 Close while it's open, ✅ Mark done once it's closed.
+- **A wrestler** (🙋 My Wrestlers / roster / `/whois` panels → 🛠 Staff): Retire / Restore, move to another division, give or move to a player (pick from a member list), Unclaim, Delete (asks first, and only works with no history). Each runs the normal `/character` command with all its checks.
+- **Award vote post:** ▶️ Start voting while taking nominations, 🔒 Close vote while voting (asks first; only you see the totals).
+- **Tournament bracket post:** 🏁 Decide a match while the tournament is running.
+
+- 18 commands now (was 19). No database change. Old buttons and anything half-finished keep working. `/card` is unchanged.
+
 ## 3.4.0 — "Don't see your wrestler?" on signups
 When someone presses **Sign up / change**, the private picker now says:
 > **Don't see your wrestler?**

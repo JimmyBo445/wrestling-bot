@@ -69,7 +69,7 @@ module.exports = {
             let pool_ = rows;
             if (signup) {
                 pool_ = rows.filter((r) => r.signed);
-                if (!pool_.length) throw new UserError(`Nobody else has signed up for **${signup.title}**, so there's no one to suggest. Admins can add people with \`/booking signup-add\`, or you can use \`include_everyone:true\`.`);
+                if (!pool_.length) throw new UserError(`Nobody else has signed up for **${signup.title}**, so there's no one to suggest. Admins can add people with \`/booking signup-edit\`, or you can use \`include_everyone:true\`.`);
             }
 
             for (const r of rows) {

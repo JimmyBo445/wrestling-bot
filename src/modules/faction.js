@@ -94,7 +94,7 @@ module.exports = {
                 return respond(interaction, { content: `**${c.name}** joined **${faction.name}**.` });
             }
             if (!inIt) throw new UserError(`**${c.name}** isn't in **${faction.name}**.`);
-            if (members.length <= MIN_FACTION) throw new UserError(`A faction needs at least ${MIN_FACTION} members. Add someone else first, or use \`/faction disband\`.`);
+            if (members.length <= MIN_FACTION) throw new UserError(`A faction needs at least ${MIN_FACTION} members. Add someone else first, or use \`/team disband\`.`);
             await pool.query(`UPDATE faction_members SET left_at = now() WHERE faction_id = $1 AND character_id = $2`, [faction.id, c.id]);
             await logAudit(guildId, interaction.user.id, 'faction_member_removed', { faction: faction.name, name: c.name });
             return respond(interaction, { content: `**${c.name}** left **${faction.name}**.` });
@@ -111,7 +111,7 @@ module.exports = {
 
         if (sub === 'list') {
             const { rows } = await pool.query(`SELECT * FROM factions WHERE guild_id = $1 AND status = 'active' ORDER BY name`, [guildId]);
-            if (!rows.length) return respond(interaction, { content: 'No factions yet. An admin can start one with `/faction create`.' });
+            if (!rows.length) return respond(interaction, { content: 'No factions yet. An admin can start one with `/team create kind:Faction`.' });
             const lines = [];
             for (const f of rows.slice(0, 25)) {
                 const s = await factionSummary(f.id);

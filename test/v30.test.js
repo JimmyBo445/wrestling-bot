@@ -33,7 +33,8 @@ const C = {};
         const { loadCommandData } = require('../src/registerCommands');
         const names = loadCommandData().map((c) => c.name);
         for (const gone of ['leaderboard', 'rankings', 'season', 'roster', 'halloffame', 'injury', 'contender', 'matchmaking', 'signup', 'newsletter', 'report']) assert.ok(!names.includes(gone), `${gone} should be gone`);
-        assert.strictEqual(names.length, 19, names.join(' ')); // 2.19 /whois, 2.20 /fnlw (/reign merged), 2.21 /legacy
+        assert.strictEqual(names.length, 18, names.join(' ')); // 2.19 /whois, 2.20 /fnlw (/reign merged), 2.21 /legacy, 3.5 /faction merged into /team
+        assert.ok(!names.includes('faction'));
     });
     await t('directory: roster, injuries and hall of fame, with admin gates kept', async () => {
         let i = await run('directory', 'roster', { division: 'mens' }, P('u1'));

@@ -231,7 +231,9 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
         components.push(row(btn(`ui:w:p:${focus.id}`, `🖼 ${clip(focus.name, 30)}'s card`), btn(`ui:w:s:${focus.id}`, '📊 Stats'), btn(`ui:w:t:${focus.id}`, '🏆 Title history')));
         // 3.1: the owner (or staff) can edit right here. Nobody else ever sees these buttons.
         if (actions && (String(ownerId) === String(interaction.user.id) || isAdmin(interaction))) {
-            components.push(row(btn(`ui:mw:e:${focus.id}`, '✏️ Edit details'), btn(`ui:mw:s:${focus.id}`, '📖 Story & moves'), btn(`ui:mw:p:${focus.id}`, '🖼 Picture'), btn(`ui:k:v:${focus.id}`, '📝 Contract')));
+            const acts = [btn(`ui:mw:e:${focus.id}`, '✏️ Edit details'), btn(`ui:mw:s:${focus.id}`, '📖 Story & moves'), btn(`ui:mw:p:${focus.id}`, '🖼 Picture'), btn(`ui:k:v:${focus.id}`, '📝 Contract')];
+            if (isAdmin(interaction)) acts.push(btn(`ui:ws:v:${focus.id}`, '🛠 Staff', ButtonStyle.Danger)); // 3.5: retire, transfer, division…
+            components.push(row(...acts));
         }
     }
     return { embeds: [embed], components, allowedMentions: NOPING };
@@ -294,7 +296,7 @@ const HELP = {
     staff: { label: 'Staff tools', emoji: '🛠', staff: true, text: [
         '**Shows:** `/card auto` · `/card view` (edit, record results) · `/card post` · `/card schedule`',
         '**Results:** `/match log` (pick the type, wrestlers, winner) · `/match undo` · `/match edit` · `/match ple event:WrestleMania` tags today\'s matches as a PLE',
-        '**Titles:** `/title match` · `vacate` · `contender-award` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
+        '**Titles:** `/title match` · `vacate` · `contender` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
         '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',

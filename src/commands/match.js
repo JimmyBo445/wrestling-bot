@@ -48,7 +48,7 @@ const data = new SlashCommandBuilder()
     .setDMPermission(false)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-// 3.0: one command for every match type. The old log-... commands below still work the same.
+// 3.0: one command for every match type (the old log-... commands were retired in 3.5).
 data.addSubcommand((sub) => {
     sub.setName('log').setDescription('Log any match: pick the type, the wrestlers in order, then who won')
         .addStringOption((o) => o.setName('type').setDescription('Match type').setRequired(true)
@@ -65,9 +65,9 @@ data.addSubcommand((sub) => {
     addDetailOptions(sub, { finishSearch: true });
     return sub.addBooleanOption((o) => o.setName('override_cooldown').setDescription('Singles: book it even if the cooldown is active').setRequired(false));
 });
-for (const [key, config] of Object.entries(MATCH_CONFIG)) {
-    data.addSubcommand((sub) => buildLogSubcommand(sub, key, config));
-}
+// 3.5: the old /match log-singles, log-tag2v2, … were retired (use /match log). They're no longer
+// registered with Discord; the code below still understands them, so nothing half-finished breaks.
+void buildLogSubcommand;
 data.addSubcommand((sub) => sub.setName('ple').setDescription('Mark matches as part of a PLE (by date or one match), or see PLE history')
     .addStringOption((o) => o.setName('event').setDescription('PLE name, e.g. WrestleMania (the year is added for you)').setRequired(false).setMaxLength(40).setAutocomplete(true))
     .addStringOption((o) => o.setName('date').setDescription('Tag every match logged that day, YYYY-MM-DD (default: today)').setRequired(false))

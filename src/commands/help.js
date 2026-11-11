@@ -3,21 +3,22 @@ const { isAdmin, respond, EPHEMERAL } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 
 // Friendly order and one-line purpose for the overview. Anything not listed still appears at the end.
-const ORDER = ['fnlw', 'whois', 'legacy', 'character', 'team', 'stats', 'standings', 'championship', 'title', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'faction', 'admin'];
+const ORDER = ['fnlw', 'whois', 'legacy', 'character', 'team', 'stats', 'standings', 'championship', 'title', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'admin'];
 // Old command names that were merged into combined commands (so `/help command:injury` can point people to the new home).
 const MOVED = {
-    leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season-standings | season-recap', roster: '/directory roster',
+    leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season (picture: for the recap)', roster: '/directory roster',
     halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
-    contender: '/championship contender-challenge | contender-list (admins: /title contender-award | contender-revoke)',
-    matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-add | signup-remove',
+    contender: '/championship contender-challenge | contender-list (admins: /title contender give / take away)',
+    matchmaking: '/booking suggest | request', signup: '/booking signup-open | signup-list | signup-close | signup-done | signup-edit',
     newsletter: '/admin newsletter add | list | remove | preview | post', report: '/admin report',
-    reign: '/title reign-add | reign-edit | reign-remove | add-defense | remove-defense'
+    reign: '/title reign-add | reign-edit | reign-remove | add-defense | remove-defense',
+    faction: '/team (kind: Faction)'
 };
 const BLURB = {
     fnlw: 'Home menu with buttons: champions, next show, results, roster, your wrestlers',
     legacy: 'Career accolades: Money in the Bank, Royal Rumble, Face of FNLW MVP, year-end awards',
     character: 'Your wrestlers: submit, edit, profile cards, story and moves',
-    team: 'Registered tag teams',
+    team: 'Tag teams and factions',
     standings: 'Leaderboards, division rankings and season standings',
     booking: 'Find opponents, request matches, run show signups',
     directory: 'Roster pages and a text roster list, Hall of Fame and the injury report',

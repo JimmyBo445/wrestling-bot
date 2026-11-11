@@ -45,18 +45,18 @@ const data = new SlashCommandBuilder()
         .addBooleanOption((o) => o.setName('remove').setDescription('Turn the staff role off').setRequired(false)))
     .addSubcommand((s) => s.setName('monthly-awards').setDescription('Post Wrestler of the Month now (default: last month)')
         .addStringOption((o) => o.setName('month').setDescription('Month as YYYY-MM, e.g. 2026-09').setRequired(false).setMaxLength(7)))
-    .addSubcommand((s) => s.setName('backup').setDescription('Weekly backup spreadsheets sent to you by DM')
+    // 3.5: backup + import + import-template became one /admin data (the old names still work inside the bot)
+    .addSubcommand((s) => s.setName('data').setDescription('Backups by DM, or bring in a spreadsheet (CSV). Import with no file sends example files.')
         .addStringOption((o) => o.setName('action').setDescription('What to do').setRequired(true)
-            .addChoices({ name: 'Turn on (weekly, to me)', value: 'on' }, { name: 'Turn off', value: 'off' }, { name: 'Send one now', value: 'now' })))
-    .addSubcommand((s) => s.setName('import').setDescription('Bring in characters or past results from a spreadsheet file (CSV). Shows a preview first.')
-        .addStringOption((o) => o.setName('what').setDescription('What the file contains').setRequired(true).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }, { name: 'Title history (old reigns)', value: 'titles' }))
-        .addAttachmentOption((o) => o.setName('file').setDescription('A .csv file (save your spreadsheet as CSV)').setRequired(true))
-        .addBooleanOption((o) => o.setName('apply').setDescription('Leave empty to only preview. Set to true to really import.').setRequired(false)))
+            .addChoices({ name: 'Backup: send one now', value: 'backup-now' }, { name: 'Backup: weekly to me (on)', value: 'backup-on' }, { name: 'Backup: weekly off', value: 'backup-off' },
+                { name: 'Import a spreadsheet (no file = example files)', value: 'import' }))
+        .addStringOption((o) => o.setName('what').setDescription('Import: what the file contains').setRequired(false).addChoices({ name: 'Characters', value: 'characters' }, { name: 'Past results (singles matches)', value: 'results' }, { name: 'Title history (old reigns)', value: 'titles' }))
+        .addAttachmentOption((o) => o.setName('file').setDescription('Import: a .csv file (save your spreadsheet as CSV)').setRequired(false))
+        .addBooleanOption((o) => o.setName('apply').setDescription('Import: leave empty to only preview. Set to true to really import.').setRequired(false)))
     .addSubcommand((s) => s.setName('history').setDescription('Championship history channel the bot keeps up to date. Run with nothing to update it now.')
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (the bot posts its own messages there)').setRequired(false).addChannelTypes(ChannelType.GuildText))
         .addStringOption((o) => o.setName('auto').setDescription('Update it by itself after every title change').setRequired(false)
             .addChoices({ name: 'On', value: 'on' }, { name: 'Off (only when I run /admin history)', value: 'off' })))
-    .addSubcommand((s) => s.setName('import-template').setDescription('Get example CSV files showing the columns to use for /admin import'))
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('unfinished').setDescription('Card matches from past shows with no result yet, with a button to ping the players')
         .addStringOption((o) => o.setName('card').setDescription('Just one card (default: both)').setRequired(false)
@@ -68,6 +68,23 @@ module.exports = {
     data,
 
     async execute(interaction) {
+        if (interaction.options.getSubcommand() === 'data') {
+            // 3.5: /admin data → the old backup / import / import-template code
+            const action = interaction.options.getString('action');
+            const orig = interaction.options;
+            let sub, values = {};
+            if (action.startsWith('backup-')) { sub = 'backup'; values = { action: action.slice(7) }; }
+            else if (orig.getAttachment('file')) {
+                if (!orig.getString('what')) throw new UserError('Pick **what** the file contains (characters, past results or title history).');
+                sub = 'import';
+            } else sub = 'import-template';
+            const options = new Proxy(orig, { get(t, p) {
+                if (p === 'getSubcommand') return () => sub;
+                if (p === 'getString') return (n, r) => (n in values ? values[n] : orig.getString(n, r));
+                const v = Reflect.get(t, p, t); return typeof v === 'function' ? v.bind(t) : v;
+            } });
+            return module.exports.execute(new Proxy(interaction, { get(t, p) { if (p === 'options') return options; const v = Reflect.get(t, p, t); return typeof v === 'function' ? v.bind(t) : v; } }));
+        }
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;
 
@@ -255,7 +272,7 @@ module.exports = {
         }
         if (sub === 'import-template') {
             const files = Object.entries({ ...importer.TEMPLATES, titles: titleImport.TEMPLATE }).map(([k, v]) => new AttachmentBuilder(Buffer.from(v), { name: `import-${k}.csv` }));
-            return respond(interaction, { content: '📄 Three example files. Open them in Excel or Google Sheets, replace the rows with yours, save as **CSV**, then attach to `/admin import`.\n**Characters:** `name, division, owner` (Discord ID or exact username) + optional `alignment, bio, finisher`.\n**Results:** `winner, loser` (character names) + optional `date` (YYYY-MM-DD), `stipulation, notes`, `result` (win or draw). **Titles:** `title, holder, won, lost` + optional `members` (Discord IDs that get credit), `defenses, notes`. Dates like 4/1/23 or 2023-04-01; leave `lost` empty for the current champion.', files, flags: 64 });
+            return respond(interaction, { content: '📄 Three example files. Open them in Excel or Google Sheets, replace the rows with yours, save as **CSV**, then attach to `/admin data action:Import`.\n**Characters:** `name, division, owner` (Discord ID or exact username) + optional `alignment, bio, finisher`.\n**Results:** `winner, loser` (character names) + optional `date` (YYYY-MM-DD), `stipulation, notes`, `result` (win or draw). **Titles:** `title, holder, won, lost` + optional `members` (Discord IDs that get credit), `defenses, notes`. Dates like 4/1/23 or 2023-04-01; leave `lost` empty for the current champion.', files, flags: 64 });
         }
         if (sub === 'import') {
             const what = interaction.options.getString('what');
@@ -323,7 +340,7 @@ module.exports = {
                 { name: 'Title deadlines', value: `${s.defense_days ? `Warn after ${s.defense_days}d without a defense` : 'No defense warnings'} · ${s.vacate_days ? `auto-vacate after ${s.vacate_days}d of champion inactivity` : 'no auto-vacate'}` },
                 { name: 'Rematch clause', value: s.rematch_enabled ? `On (${s.rematch_days} days)` : 'Off' },
                 { name: 'Time zone', value: s.tz || 'UTC' },
-                { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin backup`)' },
+                { name: 'Weekly backup DM', value: s.backup_user_id ? `On, to <@${s.backup_user_id}>` : 'Off (use `/admin data action:Backup: weekly to me`)' },
                 { name: 'Championship history channel', value: s.history_channel_id ? `<#${s.history_channel_id}> (${s.history_auto === false ? 'manual updates' : 'updates by itself'})` : 'Off (use `/admin history`)' }
             );
             return respond(interaction, { embeds: [embed], flags: EPHEMERAL });

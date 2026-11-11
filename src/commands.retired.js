@@ -2,4 +2,6 @@
 // Copying a new version over an old folder leaves the old files behind, so they are skipped here.
 module.exports = new Set(['leaderboard.js', 'rankings.js', 'season.js', 'roster.js', 'halloffame.js', 'injury.js', 'contender.js', 'matchmaking.js', 'signup.js', 'newsletter.js', 'report.js',
     // 2.20: /reign moved into /title
-    'reign.js']);
+    'reign.js',
+    // 3.5: /faction merged into /team
+    'faction.js']);

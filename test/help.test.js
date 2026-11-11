@@ -25,7 +25,7 @@ async function t(name, fn) { try { await fn(); passed++; console.log('  ok  ', n
     });
     await t('/help command:match lists the subcommands', async () => {
         const i = await run('help', null, { command: 'match' }, { admin: true });
-        assert.match(text(i), /\/match log-singles/); assert.match(text(i), /\/match undo/);
+        assert.match(text(i), /\/match log\b/); assert.ok(!/\/match log-singles/.test(text(i)), 'retired in 3.5'); assert.match(text(i), /\/match undo/);
         const p = await run('help', null, { command: 'match' }, { admin: false, user: 'u1' });
         assert.match(text(p), /don't have a `\/match` command/);
         const slash = await run('help', null, { command: '/card' }, { admin: true });

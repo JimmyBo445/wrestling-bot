@@ -11,7 +11,7 @@
 //   ui:fd           feuds                           ui:ch   bot channels (staff)
 //   ui:hi           Hall of Fame + injuries         ui:md   pop-up forms (modals) sent back
 const {
-    StringSelectMenuBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder, ChannelType, ActionRowBuilder, AttachmentBuilder
+    StringSelectMenuBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder, ChannelType, ActionRowBuilder, AttachmentBuilder, UserSelectMenuBuilder
 } = require('discord.js');
 const { pool } = require('../db/pool');
 const { isAdmin, requireAdmin, respond, EPHEMERAL, DIVISION_LABELS } = require('../utils/discordHelpers');
@@ -19,7 +19,7 @@ const { UserError } = require('../utils/errors');
 const { NOPING, btn, row, clip, homeRow, onPrivateMessage, show, capture, open, withNotice, ButtonStyle } = require('../utils/panelKit');
 
 const SECTIONS = ['stand', 'stats', 'legacy', 'teams', 'feuds', 'tourn', 'contract'];
-const KINDS = ['pk', 'pg', 'sx', 'sd', 'lx', 'tf', 'tn', 'm', 'k', 'mw', 'fd', 'ch', 'hi', 'md', 'uf'];
+const KINDS = ['pk', 'pg', 'sx', 'sd', 'lx', 'tf', 'tn', 'm', 'k', 'mw', 'fd', 'ch', 'hi', 'md', 'uf', 'ws', 'vx'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const tab = (id, label, active) => btn(id, label, active ? P : S);
 const thisYear = () => new Date().getFullYear();
@@ -118,7 +118,7 @@ async function onPick(interaction, purpose, arg, id) {
     if (purpose === 'lga') return open(interaction, () => accoladePick(interaction, id), { backRows: [row(btn('ui:lx:r:all:all', '◀ Honor roll'))] });
     if (purpose === 'tm+' || purpose === 'fc+') {
         const t = purpose === 'tm+' ? 't' : 'f';
-        return groupAction(interaction, t, arg, () => capture(interaction, t === 't' ? 'team' : 'faction', 'add-member', { [t === 't' ? 'team' : 'faction']: arg, character: id }));
+        return groupAction(interaction, t, arg, () => capture(interaction, t === 't' ? 'tagteam' : 'faction', 'add-member', { [t === 't' ? 'team' : 'faction']: arg, character: id }));
     }
     if (purpose === 'tn+') return tournamentAction(interaction, arg, () => capture(interaction, 'tournament', 'add', { tournament: arg, wrestler1: id }));
     if (purpose === 'fd1') return show(interaction, await pickerPayload(interaction, 'fd2', id));
@@ -282,7 +282,7 @@ async function accoladePick(interaction, charId) {
 
 // ================================================================== teams & factions
 
-const GROUP = { t: { cmd: 'team', opt: 'team', label: 'Tag Teams', one: 'team', table: 'teams' }, f: { cmd: 'faction', opt: 'faction', label: 'Factions', one: 'faction', table: 'factions' } };
+const GROUP = { t: { cmd: 'tagteam', opt: 'team', label: 'Tag Teams', one: 'team', table: 'teams' }, f: { cmd: 'faction', opt: 'faction', label: 'Factions', one: 'faction', table: 'factions' } };
 
 async function groupList(interaction, t = 't', notice = null) {
     const g = GROUP[t] || GROUP.t;
@@ -291,7 +291,7 @@ async function groupList(interaction, t = 't', notice = null) {
         const { rows } = await pool.query(`SELECT id, name, division FROM ${g.table} WHERE guild_id = $1 AND status = 'active' ORDER BY lower(name) LIMIT 25`, [interaction.guildId]);
         const components = [row(tab('ui:tf:l:t', '👥 Tag Teams', t === 't'), tab('ui:tf:l:f', '🛡 Factions', t === 'f'))];
         if (rows.length) components.push(select(`ui:tf:o:${t}`, `Open a ${g.one}`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: DIVISION_LABELS[r.division] }))));
-        if (isAdmin(interaction)) p.content = [p.content, `_New ${g.one}s: \`/${g.cmd} create\`_`].filter(Boolean).join('\n');
+        if (isAdmin(interaction)) p.content = [p.content, `_New ${g.one}s: \`/team create kind:${g.one === "team" ? "Tag team" : "Faction"}\`_`].filter(Boolean).join('\n');
         return withNotice({ ...p, components: withHome(components) }, notice);
     });
 }
@@ -686,6 +686,39 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
     });
 }
 
+// ================================================================== staff actions for one wrestler (3.5)
+
+async function wrestlerStaffPanel(interaction, charId, notice = null) {
+    requireAdmin(interaction, 'manage wrestlers');
+    return open(interaction, async () => {
+        const { getCharacterById } = require('../utils/characterUtils');
+        const c = await getCharacterById(charId);
+        if (!c || String(c.guild_id) !== String(interaction.guildId)) {
+            return withNotice({ content: 'That wrestler doesn\'t exist anymore.', components: [homeRow()] }, notice);
+        }
+        const embed = new EmbedBuilder().setColor(0xC0392B).setTitle(`🛠 Staff: ${c.name}`)
+            .setDescription([`**Status:** ${c.status}`, `**Division:** ${DIVISION_LABELS[c.division] || c.division}`, `**Player:** ${c.unclaimed ? '_nobody (unclaimed)_' : `<@${c.owner_discord_id}>`}`, '',
+                'Every button runs the normal `/character` command, so its usual checks apply (titles, teams, the wrestler limit…).'].join('\n'));
+        const r1 = [];
+        if (c.status === 'approved') r1.push(btn(`ui:ws:ret:${c.id}`, '📦 Retire'));
+        if (c.status === 'retired') r1.push(btn(`ui:ws:res:${c.id}`, '♻️ Restore', G));
+        if (!c.unclaimed && ['approved', 'retired'].includes(c.status)) r1.push(btn(`ui:ws:unc:${c.id}`, '🙅 Unclaim (take off the player)'));
+        r1.push(btn(`ui:ws:delq:${c.id}`, '🗑 Delete', D));
+        const give = new UserSelectMenuBuilder().setCustomId(`ui:ws:to:${c.id}`).setPlaceholder(c.unclaimed ? 'Give to a player…' : 'Move to another player…');
+        const divs = Object.entries(DIVISION_LABELS).filter(([d]) => d !== c.division).map(([d, l]) => btn(`ui:ws:dv:${c.id}:${d}`, `➡️ ${l}`));
+        return withNotice({ embeds: [embed], components: withHome([row(...r1), new ActionRowBuilder().addComponents(give), row(...divs), row(btn(`ui:ws:back:${c.id}`, '◀ Back to wrestler'))]) }, notice);
+    });
+}
+
+/** Runs a /character staff command for this wrestler; shows its answer (or its own confirm buttons). */
+async function wrestlerStaffRun(interaction, charId, sub, values = {}) {
+    requireAdmin(interaction, 'manage wrestlers');
+    let p;
+    try { p = await capture(interaction, 'character', sub, { character: charId, ...values }); } catch (e) { if (!(e instanceof UserError)) throw e; return wrestlerStaffPanel(interaction, charId, `⚠️ ${e.message}`); }
+    if (p.components?.length) return show(interaction, { ...p, components: [...p.components, row(btn(`ui:ws:v:${charId}`, '◀ Back'))] }); // a "heads up" confirm
+    return wrestlerStaffPanel(interaction, charId, p.content || '✅ Done.');
+}
+
 // ================================================================== home sections
 
 function openSection(interaction, key) {
@@ -780,7 +813,7 @@ async function handle(interaction, parts) {
         if (a === 'post') {
             requireAdmin(interaction, 'post brackets');
             const p = await capture(interaction, 'tournament', 'bracket', { tournament: b });
-            const ch = await postPublic(interaction, { ...p, components: [] });
+            const ch = await postPublic(interaction, p); // keeps the staff-only 🏁 button
             return tournamentView(interaction, b, `📣 Posted the bracket in <#${ch}>.`);
         }
     }
@@ -885,6 +918,42 @@ async function handle(interaction, parts) {
         }
     }
 
+    if (kind === 'ws') {
+        requireAdmin(interaction, 'manage wrestlers');
+        if (a === 'v') return wrestlerStaffPanel(interaction, b);
+        if (a === 'back') return open(interaction, async () => { const p = await require('./menus').whoisPayload(interaction, { characterId: b }); return { ...p, components: withHome(p.components || []) }; });
+        if (a === 'ret') return wrestlerStaffRun(interaction, b, 'retire');
+        if (a === 'res') return wrestlerStaffRun(interaction, b, 'restore');
+        if (a === 'unc') return wrestlerStaffRun(interaction, b, 'unclaim');
+        if (a === 'dv') return wrestlerStaffRun(interaction, b, 'swap-division', { division: c });
+        if (a === 'to') {
+            const uid = v;
+            const u = interaction.users?.get?.(uid) || { id: uid, bot: false };
+            return wrestlerStaffRun(interaction, b, 'transfer', { new_owner: u });
+        }
+        if (a === 'delq') {
+            return show(interaction, { content: 'Delete this wrestler **for good**? This only works if they have no matches, titles or teams; otherwise retire them instead.', embeds: [],
+                components: [row(btn(`ui:ws:dely:${b}`, 'Yes, delete', D), btn(`ui:ws:v:${b}`, 'Cancel'))] });
+        }
+        if (a === 'dely') {
+            try { const p = await capture(interaction, 'character', 'remove', { character: b }); return show(interaction, { content: p.content || '🗑 Deleted.', embeds: [], components: [homeRow()] }); } catch (e) { if (!(e instanceof UserError)) throw e; return wrestlerStaffPanel(interaction, b, `⚠️ ${e.message}`); }
+        }
+    }
+
+    if (kind === 'vx') {
+        // staff buttons on an award vote post (3.5)
+        requireAdmin(interaction, 'run award votes');
+        const legacyCmd = require('../utils/panelKit').command(interaction, 'legacy');
+        const { privately } = require('../utils/panelKit');
+        if (a === 's') return legacyCmd.execute(privately(interaction, 'vote-start', { vote: b }));
+        if (a === 'c') {
+            return show(interaction, { content: 'Close this vote now? The winner is announced and gets it on their Legacy. Only you will see the totals.', embeds: [],
+                components: [row(btn(`ui:vx:cy:${b}`, 'Yes, close it', D), btn(`ui:vx:x:${b}`, 'Not yet'))] });
+        }
+        if (a === 'cy') return legacyCmd.execute(privately(interaction, 'vote-close', { vote: b }));
+        if (a === 'x') return show(interaction, { content: 'OK, the vote stays open.', embeds: [], components: [] });
+    }
+
     if (kind === 'md') return onModal(interaction, a, b, c);
     throw new UserError('That button is from an older version of the bot. Run `/fnlw` again.');
 }
@@ -952,7 +1021,7 @@ async function onModal(interaction, what, a, b) {
         return legacyPanel(interaction, 'all', 'all', notice);
     }
 
-    if (what === 'trn') return groupAction(interaction, 't', a, () => capture(interaction, 'team', 'rename', { team: a, name: field(interaction, 'name') }));
+    if (what === 'trn') return groupAction(interaction, 't', a, () => capture(interaction, 'tagteam', 'rename', { team: a, name: field(interaction, 'name') }));
 
     if (what === 'fds') {
         requireAdmin(interaction, 'start feuds');

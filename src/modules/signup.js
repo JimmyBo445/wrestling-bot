@@ -89,7 +89,7 @@ module.exports = {
         if (sub === 'done') {
             if (signup.status === 'done') throw new UserError('That signup is already finished. Booking already uses everyone.');
             await su.markDone(signup.id, guildId);
-            if (signup.status === 'open') await su.refreshSignupPost(interaction.client, { ...signup, status: 'done' });
+            await su.refreshSignupPost(interaction.client, { ...signup, status: 'done' });
             return respond(interaction, { content: `✅ **${signup.title}** is finished. \`/card auto\` and \`/booking suggest\` go back to using everyone until you open another signup.`, flags: 64 });
         }
 

@@ -290,6 +290,12 @@ async function handleButtonInteraction(interaction) {
         const su = require('../utils/signupUtils');
         const signup = await su.getSignup(signupId, interaction.guildId);
         if (!signup) return respond(interaction, { content: 'That signup no longer exists.', flags: EPHEMERAL });
+        // 3.5: staff buttons on the post. They run the same code as /booking signup-close and signup-done.
+        if (action === 'close' || action === 'done') {
+            if (!isAdmin(interaction)) return respond(interaction, { content: 'Only admins and staff can close or finish a signup.', flags: EPHEMERAL });
+            const { privately } = require('../utils/panelKit');
+            return require('../modules/signup').execute(privately(interaction, action, { signup: String(signup.id) }));
+        }
         if (signup.status !== 'open') return respond(interaction, { content: '🔒 That signup is closed.', flags: EPHEMERAL });
         // 3.4: "don't see your wrestler?" (request a new one / claim one with no player)
         const help = require('../utils/signupHelp');

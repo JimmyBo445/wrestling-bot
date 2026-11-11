@@ -31,7 +31,7 @@ async function nominationsPayload(p) {
             list.length ? list.map((n) => `• ${n.label}`).join('\n') : '_No nominees yet._'
         ].join('\n').slice(0, 4000))
         .setFooter({ text: `Voting starts when an admin opens it · ${p.vote_who === 'everyone' ? 'everyone can vote' : 'admins vote'}` });
-    return { embeds: [embed], components: [], allowedMentions: { parse: [] } };
+    return { embeds: [embed], components: [staffRow(p, 'start')], allowedMentions: { parse: [] } };
 }
 
 /** The public post while voting is open: a dropdown, nothing about who is ahead. */
@@ -46,7 +46,15 @@ async function votingPayload(p) {
         ].join('\n').slice(0, 4000));
     const menu = new StringSelectMenuBuilder().setCustomId(`ui:av:${p.id}`).setPlaceholder('Cast your vote')
         .addOptions(list.slice(0, MAX_NOMINEES).map((n) => ({ label: n.label.slice(0, 100), value: String(n.id) })));
-    return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)], allowedMentions: { parse: [] } };
+    return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu), staffRow(p, 'close')], allowedMentions: { parse: [] } };
+}
+
+/** 3.5: staff-only buttons on the vote post (anyone can see them; only admins/staff can use them). */
+function staffRow(p, what) {
+    const { ButtonBuilder, ButtonStyle } = require('discord.js');
+    return new ActionRowBuilder().addComponents(what === 'start'
+        ? new ButtonBuilder().setCustomId(`ui:vx:s:${p.id}`).setLabel('▶️ Start voting (staff)').setStyle(ButtonStyle.Secondary)
+        : new ButtonBuilder().setCustomId(`ui:vx:c:${p.id}`).setLabel('🔒 Close vote (staff)').setStyle(ButtonStyle.Secondary));
 }
 
 /** Posts (or updates) the vote's message in its channel. Returns the message, or null. */

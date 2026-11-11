@@ -52,13 +52,14 @@ const posts = (ch, from) => sent.slice(from).filter((m) => m.channelId === ch);
         assert.match(text(i), /Only admins and staff/);
     });
 
-    await t('the old /match log-... commands still work, and finish is a search list', async () => {
+    await t('the old /match log-... commands are retired from Discord (3.5) but old clicks still work', async () => {
         const i = await run('match', 'log-singles', { participant1: C, participant2: D, winner: 2, finish: 'dq' }, ADM);
         assert.ok(!isErr(i), text(i));
         const c = await auto('match', 'log-singles', 'finish', 'disq', {}, ADM);
         assert.deepStrictEqual(c.map((x) => x.value), ['dq']);
         const json = require('../src/commands/match').data.toJSON();
-        assert.ok(json.options.some((o) => o.name === 'log-tag2v2'));
+        assert.ok(!json.options.some((o) => o.name.startsWith('log-')));
+        assert.deepStrictEqual(json.options.map((o) => o.name), ['log', 'ple', 'rate', 'undo', 'edit', 'recent']);
     });
 
     // ---------------- PLE ----------------

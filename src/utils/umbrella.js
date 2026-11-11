@@ -60,9 +60,44 @@ async function autocompleteRoute(interaction, route) {
     return route.cmd.autocomplete(proxyFor(interaction, route.orig));
 }
 
-/** A brand-new command made only of other commands. */
-function makeUmbrella({ name, description, parts }) {
-    const routes = new Map(parts.map((p) => [p.json.name, p.route]));
+/**
+ * One subcommand that stands in for several (3.5): a choice option picks which one runs.
+ *   cases = [{ value, label, part }]   (part = one entry from partsOf)
+ *   pick  = optional (interaction) => value, for when the choice isn't a plain string option
+ * The options are the union of the cases' options (required only if every case requires it),
+ * plus `extra` options at the end.
+ */
+function choicePart({ name, description, choice = null, cases, pick = null, extra = [] }) {
+    const union = [];
+    for (const c of cases) {
+        for (const o of c.part.json.options || []) {
+            if (!union.find((u) => u.name === o.name)) union.push({ ...o, required: cases.every((k) => (k.part.json.options || []).some((x) => x.name === o.name && x.required)) });
+        }
+    }
+    const opts = [];
+    if (choice) opts.push({ type: 3, name: choice.name, description: clip(choice.description), required: choice.required !== false, choices: cases.map((c) => ({ name: c.label, value: c.value })) });
+    opts.push(...union.filter((o) => o.required), ...union.filter((o) => !o.required), ...extra);
+    const chosen = (interaction) => {
+        const v = pick ? pick(interaction) : (interaction.options.getString(choice.name) || choice.default || cases[0].value);
+        return cases.find((c) => c.value === v) || cases[0];
+    };
+    const admin = cases.every((c) => c.part.route.admin);
+    const pseudo = {
+        async execute(interaction) {
+            const c = chosen(interaction);
+            return runRoute(interaction, c.part.route);
+        },
+        async autocomplete(interaction) { return autocompleteRoute(interaction, chosen(interaction).part.route); }
+    };
+    return { json: { type: 1, name, description: clip(`${admin && !ADMIN_TAG.test(description) ? '[Admin] ' : ''}${description}`), options: opts }, route: { cmd: pseudo, orig: null, admin } };
+}
+
+/**
+ * A brand-new command made only of other commands.
+ * `hidden` parts still work (for older buttons, panels and tests) but aren't shown in Discord.
+ */
+function makeUmbrella({ name, description, parts, hidden = [] }) {
+    const routes = new Map([...hidden, ...parts].map((p) => [p.json.name, p.route]));
     const json = { name, description: clip(description), dm_permission: false, options: parts.map((p) => p.json) };
     return {
         data: { name, toJSON: () => JSON.parse(JSON.stringify(json)) },
@@ -109,4 +144,4 @@ function extend(mod, { extras = [], groups = [] }) {
     return mod;
 }
 
-module.exports = { partsOf, makeUmbrella, extend, proxyFor };
+module.exports = { partsOf, makeUmbrella, extend, proxyFor, choicePart };

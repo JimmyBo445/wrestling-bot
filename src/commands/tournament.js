@@ -39,7 +39,12 @@ const data = new SlashCommandBuilder()
 
 async function sendBracket(interaction, tour, extra = {}) {
     const buffer = await renderBracketCard(await T.bracketData(interaction.guild, tour));
-    return { files: [new AttachmentBuilder(buffer, { name: 'bracket.png' })], allowedMentions: NO_MENTIONS, ...extra };
+    // 3.5: while it's running, the bracket post has a staff-only button to decide matches
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const components = tour.status === 'active' || extra.active
+        ? [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ui:tn:d:${tour.id}:0`).setLabel('🏁 Decide a match (staff)').setStyle(ButtonStyle.Secondary))] : [];
+    delete extra.active;
+    return { files: [new AttachmentBuilder(buffer, { name: 'bracket.png' })], components, allowedMentions: NO_MENTIONS, ...extra };
 }
 
 module.exports = {
@@ -129,7 +134,7 @@ module.exports = {
             await logAudit(guildId, interaction.user.id, 'tournament_started', { id: tour.id, entrants: res.entrants });
             const fresh = (await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [tour.id])).rows[0];
             return interaction.editReply(await sendBracket(interaction, fresh, {
-                content: `🏟️ **${tour.name}** is on! ${res.entrants} wrestlers, ${res.rounds} round${res.rounds === 1 ? '' : 's'}${res.byes ? `, ${res.byes} bye${res.byes === 1 ? '' : 's'}` : ''}. Log each match with \`/match log-singles\` and the bracket advances by itself.`
+                content: `🏟️ **${tour.name}** is on! ${res.entrants} wrestlers, ${res.rounds} round${res.rounds === 1 ? '' : 's'}${res.byes ? `, ${res.byes} bye${res.byes === 1 ? '' : 's'}` : ''}. Log each match with \`/match log\` (or through your card) and the bracket advances by itself.`
             }));
         }
 

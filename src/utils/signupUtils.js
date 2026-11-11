@@ -119,7 +119,11 @@ async function removeEntry(signup, characterId) {
 
 const buttons = (signup) => [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`signup:join:${signup.id}`).setLabel('Sign up / change').setEmoji('✋').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`signup:leave:${signup.id}`).setLabel('Withdraw').setStyle(ButtonStyle.Secondary))];
+    new ButtonBuilder().setCustomId(`signup:leave:${signup.id}`).setLabel('Withdraw').setStyle(ButtonStyle.Secondary),
+    // 3.5: staff-only (anyone sees them; only admins/staff can use them)
+    new ButtonBuilder().setCustomId(`signup:close:${signup.id}`).setLabel('🔒 Close (staff)').setStyle(ButtonStyle.Secondary))];
+const closedButtons = (signup) => [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`signup:done:${signup.id}`).setLabel('✅ Mark done (staff)').setStyle(ButtonStyle.Secondary))];
 
 /** The public post: counts and names per division. */
 async function buildSignupMessage(signup) {
@@ -145,7 +149,7 @@ async function buildSignupMessage(signup) {
         .setTitle(`${open ? '✋' : '🔒'} ${signup.title}`)
         .setDescription(`${open ? 'Press **Sign up / change** and pick the wrestler(s) you want on this show. You can change your picks any time until it closes.' : 'Signups are closed.'}${dl}\n\n${lines.join('\n')}`)
         .setFooter({ text: `${entries.length} wrestler${entries.length === 1 ? '' : 's'} signed up${booked.size ? ` · ${booked.size} booked · 🔴 = already on a card` : ''}` });
-    return { embeds: [embed], components: open ? buttons(signup) : [], allowedMentions: NO_MENTIONS };
+    return { embeds: [embed], components: open ? buttons(signup) : signup.status === 'closed' ? closedButtons(signup) : [], allowedMentions: NO_MENTIONS };
 }
 
 /** Re-draws the public post (best effort). */

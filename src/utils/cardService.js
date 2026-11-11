@@ -452,7 +452,7 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     if (signupIds) {
         const signed = pool_.filter((c) => signupIds.has(String(c.id)));
         if (signed.length < 2) {
-            throw new UserError(`Only ${signed.length} healthy ${divisionLabel(division)} wrestler${signed.length === 1 ? '' : 's'} signed up for the current signup, so I can't book a match. Sign more up with \`/booking signup-add\`, or use \`use_signup:false\` to book from everyone.`);
+            throw new UserError(`Only ${signed.length} healthy ${divisionLabel(division)} wrestler${signed.length === 1 ? '' : 's'} signed up for the current signup, so I can't book a match. Sign more up with \`/booking signup-edit\`, or use \`use_signup:false\` to book from everyone.`);
         }
         pool_ = signed; signupMode = 'used';
     }

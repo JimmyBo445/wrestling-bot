@@ -1,10 +1,13 @@
-# How to install Version 3.4.0 (Mac, step by step)
+# How to install Version 3.5.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.4.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.5.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**Tell your admins:** the signup picker now has **Request a new wrestler** and **Claim a wrestler**
-buttons. Claim requests show up in the staff room with Approve / Deny.
+**Tell your admins** (copy this):
+> Bot update: fewer commands. `/match log` replaces the old log-singles etc. `/faction` is now part of `/team`
+> (pick Faction when creating). `/standings season`, `/title contender`, `/booking signup-edit` and `/admin data`
+> replace pairs of old commands. Staff also get buttons on the signup post (Close / Mark done), on vote posts
+> (Start / Close), on bracket posts (Decide a match) and a 🛠 Staff button on any wrestler.
 
 ---
 
@@ -20,14 +23,16 @@ buttons. Claim requests show up in the staff room with Approve / Deny.
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Applying migration 023_claims.sql` and `Slash commands registered.`
+The log should say `Slash commands registered.` (no database change this time).
 
-## Step 3: Try it (in Discord, press Cmd + R first)
+## Step 3: Check it (in Discord, press Cmd + R first)
 
-1. Make sure the staff room is set (`/admin channels staff:#staff-room`); claim requests go there.
-2. Open signups the usual way, press **Sign up / change**: you'll see the new message and buttons.
-3. Try **Claim a wrestler** with a test account (or ask a member) and approve it in the staff room.
-   The wrestler moves to them and lands on the signup.
+1. Type `/match`: you should only see log, ple, rate, undo, edit, recent.
+2. Type `/faction`: it's gone. `/team create` now has a **kind** choice.
+3. Open `/fnlw` → 🙋 My Wrestlers (or look up anyone with the roster) → **🛠 Staff** on a wrestler.
+4. Your next signup post shows **🔒 Close (staff)**. Ask a regular member to tap it: they should be told no.
+
+If Discord still shows an old command after a few minutes, fully quit and reopen Discord.
 
 ---
 
