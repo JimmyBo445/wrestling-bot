@@ -47,7 +47,7 @@ function describePlan(character, p) {
     if (p.signups.length) lines.push(`✋ They are taken off the signup${p.signups.length > 1 ? 's' : ''}: ${p.signups.join(', ')}.`);
     if (p.contract) lines.push('📝 Their contract ends today (earnings so far are kept).');
     if (p.offers) lines.push('📝 A waiting contract offer/request is withdrawn.');
-    if (p.tournaments.length) lines.push(`🏟️ They are entered in **${p.tournaments.join(', ')}**. The bracket can't advance their matches until you transfer them (or use \`/tournament advance\`).`);
+    if (p.tournaments.length) lines.push(`🏟️ They are entered in **${p.tournaments.join(', ')}**. The bracket can't advance their matches until you transfer them (or use \`/tournament view\`).`);
     return lines;
 }
 

@@ -73,7 +73,12 @@ const PURPOSES = {
     inj: { title: '🤕 Who is injured?', statuses: ['approved'], staff: true, back: () => 'ui:hi:i' },
     ko: { title: '📨 Offer a contract to…', statuses: ['approved'], staff: true, back: () => 'ui:k:h' },
     sga: { title: '➕ Sign a wrestler up', statuses: ['approved'], staff: true, back: () => 'ui:bk:h' },
-    sug: { title: '🔎 Suggest opponents for…', statuses: ['approved'], back: () => 'ui:bk:h' }
+    sug: { title: '🔎 Suggest opponents for…', statuses: ['approved'], back: () => 'ui:bk:h' },
+    // 3.9
+    nom: { title: '🙋 Who are you nominating?', statuses: ALL, back: () => 'ui:lx:v' },
+    nom2: { title: '🙋 Pick the other wrestler (rivalry / match)', statuses: ALL, back: (a) => `ui:pg:nom:${String(a).split('.')[0]}:all:0` },
+    tin: { title: '🩹 Who is the interim champion?', statuses: ['approved'], staff: true, lock: true, back: (a) => `ui:tt:t:${a}` },
+    tun: { title: '🔗 Who is the undisputed champion?', statuses: ['approved'], staff: true, lock: true, back: (a) => `ui:tt:t:${a}` }
 };
 
 async function pickerPayload(interaction, purpose, arg = '0', div = 'all', page = 0) {
@@ -114,9 +119,7 @@ async function onPick(interaction, purpose, arg, id) {
     if (cfg.staff) requireAdmin(interaction, 'do that');
     if (purpose === 'st') return statsPanel(interaction, id, 'ov');
     if (purpose === 'hh' || purpose === 'tp') return statsPanel(interaction, arg, purpose, id);
-    if (purpose === 'lg') {
-        return open(interaction, async () => ({ ...await capture(interaction, 'legacy', 'view', { character: id }), components: withHome([row(btn('ui:pg:lg:0:all:0', '🔎 Another wrestler'), btn('ui:lx:r:all:all', '◀ Honor roll'))]) }));
-    }
+    if (purpose === 'lg') return require('./screens').legacyWrestler(interaction, id);
     if (purpose === 'lga') return open(interaction, () => accoladePick(interaction, id), { backRows: [row(btn('ui:lx:r:all:all', '◀ Honor roll'))] });
     if (purpose === 'tm+' || purpose === 'fc+') {
         const t = purpose === 'tm+' ? 't' : 'f';
@@ -141,6 +144,9 @@ async function onPick(interaction, purpose, arg, id) {
     if (purpose === 'ko') return interaction.showModal(contractModal(`ui:md:ko:${id}`, 'Offer a contract'));
     if (purpose === 'sga') return require('./staffPanels').signupAdd(interaction, arg, id);
     if (purpose === 'sug') return require('./staffPanels').suggestFor(interaction, id);
+    if (purpose === 'nom') return require('./screens').nominatePick(interaction, arg, id);
+    if (purpose === 'nom2') { const [poll, first] = String(arg).split('.'); if (first === String(id)) throw new UserError('Pick two different wrestlers.'); return require('./screens').nominate(interaction, poll, first, id); }
+    if (purpose === 'tin' || purpose === 'tun') return require('./screens').crownFromPicker(interaction, purpose, arg, id);
     throw new UserError('That button is from an older version. Run `/fnlw` again.');
 }
 
@@ -242,6 +248,7 @@ async function legacyPanel(interaction, kind = 'all', year = 'all', notice = nul
         const actions = [btn('ui:pg:lg:0:all:0', '🔎 Look up a wrestler'), btn('ui:lx:v', `🗳 Votes (${polls[0].n} open)`)];
         if (isAdmin(interaction)) actions.push(btn('ui:pg:lga:0:all:0', '🎖 Give accolade', G));
         components.push(row(...actions));
+        if (isAdmin(interaction)) components.push(row(btn('ui:lz:vo', '🗳 Open a vote'), btn('ui:lz:an', '🏷 Award names')));
         return withNotice({ ...p, components: withHome(components) }, notice);
     });
 }
@@ -421,7 +428,7 @@ async function matchStaffPanel(interaction, matchId, msgId, notice = null) {
     const m = rows[0];
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`🛠 Match #${matchId}`)
         .setDescription([m.stipulation ? `Stipulation: ${m.stipulation}` : null, m.score ? `Score: ${m.score}` : null, m.notes ? `Notes: ${m.notes}` : null,
-            '', 'To change the winner or the finish use `/match edit`. Title matches can only be undone and logged again.'].filter((x) => x !== null).join('\n'));
+            '', 'To change the winner or the finish use the buttons under the result. Title matches can only be undone and logged again.'].filter((x) => x !== null).join('\n'));
     return show(interaction, withNotice({ embeds: [embed], components: [row(btn(`ui:m:e:${matchId}`, '✏️ Edit notes / stipulation / score'), btn(`ui:m:u:${matchId}:${msgId || '0'}`, '↩️ Undo match', D))] }, notice));
 }
 
@@ -465,7 +472,7 @@ async function contractHome(interaction, view = 'h', notice = null) {
         } else {
             p = await asError(() => capture(interaction, 'contract', view))();
         }
-        if (isAdmin(interaction)) components.push(row(btn('ui:pg:ko:0:all:0', '📨 Offer a contract', G)));
+        if (isAdmin(interaction)) components.push(row(btn('ui:pg:ko:0:all:0', '📨 Offer a contract', G), btn('ui:kb', '💵 Win bonuses')));
         return withNotice({ ...p, components: withHome(components) }, notice);
     });
 }
@@ -616,6 +623,7 @@ async function hofPanel(interaction, notice = null) {
         if (rows.length) components.push(select('ui:hi:hv', 'See a legend\'s Hall of Fame graphic', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id) }))));
         const nav = [btn('ui:h:roster', '◀ Roster'), btn('ui:hi:i', '🤕 Injuries')];
         if (isAdmin(interaction)) nav.push(btn('ui:pg:hof:0:all:0', '🏛 Induct someone', G));
+        if (isAdmin(interaction) && rows.length) components.push(select('ui:hi:hx', '🗑 Take someone out of the Hall of Fame (staff)', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id) }))));
         components.push(row(...nav));
         return withNotice({ ...p, components: withHome(components) }, notice);
     });
@@ -902,6 +910,11 @@ async function handle(interaction, parts) {
         if (a === 'hv') {
             return open(interaction, async () => ({ ...await capture(interaction, 'directory', 'hof-view', { character: v }), components: withHome([row(btn('ui:hi:h', '◀ Hall of Fame'))]) }));
         }
+        if (a === 'hx') {
+            requireAdmin(interaction, 'change the Hall of Fame');
+            const r = await asError(() => capture(interaction, 'directory', 'hof-remove', { character: v }))();
+            return hofPanel(interaction, r.content);
+        }
         if (a === 'ic') {
             requireAdmin(interaction, 'clear injuries');
             const r = await asError(() => capture(interaction, 'directory', 'injury-clear', { character: v }))();
@@ -1065,4 +1078,4 @@ async function onModal(interaction, what, a, b) {
     throw new UserError('That form is from an older version of the bot. Run `/fnlw` again.');
 }
 
-module.exports = { SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload, unfinishedPanel };
+module.exports = { SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload, unfinishedPanel, legacyPanel, votesPanel, groupList, groupView, tournamentList, tournamentView, feudList, feudView, contractHome, contractView, hofPanel, injuryPanel };

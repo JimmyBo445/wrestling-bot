@@ -21,3 +21,11 @@ module.exports = makeUmbrella({
     ],
     hidden: season
 });
+
+// 3.9: one command. /standings opens the boards with tabs.
+require('../utils/slim').asScreen(module.exports, {
+    description: 'Leaderboards, rankings, power rankings, season standings and rivalries, as tabs',
+    options: [{ type: 3, name: 'board', description: 'Which board to open first (default: power rankings)', required: false,
+        choices: [{ name: 'Power rankings', value: 'pw' }, { name: 'Leaderboards', value: 'lb' }, { name: 'Division rankings', value: 'rk' }, { name: 'Season standings', value: 'ss' }, { name: 'Rivalries', value: 'rv' }] }],
+    screen: (i) => require('../modules/screens').standingsScreen(i)
+});

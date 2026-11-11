@@ -50,14 +50,14 @@ module.exports = {
             if (a.id === b.id) throw new UserError('Pick two different wrestlers.');
             const { rows: dupe } = await pool.query(
                 `SELECT id FROM feuds WHERE guild_id = $1 AND status = 'active' AND ((char_a = $2 AND char_b = $3) OR (char_a = $3 AND char_b = $2))`, [guildId, a.id, b.id]);
-            if (dupe.length) throw new UserError('Those two already have an active feud. Add to it with `/feud log`.');
+            if (dupe.length) throw new UserError('Those two already have an active feud. Add to it with `/feud`.');
             const name = interaction.options.getString('name')?.trim() || `${a.name} vs ${b.name}`;
             const { rows } = await pool.query(
                 `INSERT INTO feuds (guild_id, name, char_a, char_b, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [guildId, name, a.id, b.id, interaction.user.id]);
             const story = interaction.options.getString('story')?.trim();
             if (story) await pool.query(`INSERT INTO feud_entries (feud_id, body, created_by) VALUES ($1,$2,$3)`, [rows[0].id, story, interaction.user.id]);
             await logAudit(guildId, interaction.user.id, 'feud_started', { name });
-            return respond(interaction, { content: `🔥 Feud started: **${name}**. Add moments with \`/feud log\`; every match between them heats it up.`, allowedMentions: NO_MENTIONS });
+            return respond(interaction, { content: `🔥 Feud started: **${name}**. Add moments with \`/feud\`; every match between them heats it up.`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'log') {
@@ -85,14 +85,14 @@ module.exports = {
             if (text) await pool.query(`INSERT INTO feud_entries (feud_id, body, created_by) VALUES ($1,$2,$3)`, [feud.id, `Ended: ${text}`, interaction.user.id]);
             await pool.query(`UPDATE feuds SET status = 'ended', ended_at = now() WHERE id = $1`, [feud.id]);
             await logAudit(guildId, interaction.user.id, 'feud_ended', { name: feud.name });
-            return respond(interaction, { content: `🏁 **${feud.name}** is over. \`/feud view\` still shows the full timeline.`, allowedMentions: NO_MENTIONS });
+            return respond(interaction, { content: `🏁 **${feud.name}** is over. \`/feud\` still shows the full timeline.`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'list') {
             const { rows } = await pool.query(
                 `SELECT f.*, a.name AS a_name, b.name AS b_name FROM feuds f JOIN characters a ON a.id = f.char_a JOIN characters b ON b.id = f.char_b
                  WHERE f.guild_id = $1 AND f.status = 'active'`, [guildId]);
-            if (!rows.length) return respond(interaction, { content: 'No active feuds. An admin can start one with `/feud start`.', flags: 64 });
+            if (!rows.length) return respond(interaction, { content: 'No active feuds. An admin can start one with `/feud`.', flags: 64 });
             const withHeat = await Promise.all(rows.map(async (f) => ({ f, heat: await feudHeat(f) })));
             withHeat.sort((x, y) => y.heat.score - x.heat.score);
             const lines = withHeat.map(({ f, heat }) => `${heat.bar} **${heat.score}** · **${f.name}** (${f.a_name} vs ${f.b_name}) · ${heat.label}`);
@@ -119,3 +119,11 @@ module.exports = {
         }
     }
 };
+
+// 3.9: one command. /feud lists the feuds; /feud feud: opens one (staff buttons: log a moment, heat, end, start).
+require('../utils/slim').asScreen(module.exports, {
+    description: 'Rivalries and storylines: a timeline and heat meter for each feud',
+    options: [{ type: 3, name: 'feud', description: 'Open one feud (leave empty for the list)', required: false, autocomplete: true }],
+    screen: (i) => require('../modules/screens').feudScreen(i),
+    autocomplete: async (i) => i.respond(await require('../utils/feudUtils').autocompleteFeuds(i, i.options.getFocused(), {}))
+});

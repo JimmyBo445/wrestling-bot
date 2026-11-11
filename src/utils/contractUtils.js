@@ -100,8 +100,8 @@ async function runContractWatch(client, g) {
     const { rows: who } = await pool.query(`SELECT c.id, c.name, u.discord_id FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [ids]);
     const by = new Map(who.map((w) => [String(w.id), w]));
     const lines = [];
-    for (const r of expired) lines.push(`⏰ **${by.get(String(r.character_id))?.name}**'s contract has expired (<@${by.get(String(r.character_id))?.discord_id}>). Renew it with \`/contract offer\`, or leave them as a free agent.`);
-    for (const r of soon) lines.push(`📝 **${by.get(String(r.character_id))?.name}**'s contract ends ${prettyDate(r.end_date)} (<@${by.get(String(r.character_id))?.discord_id}> can ask for a renewal with \`/contract request\`).`);
+    for (const r of expired) lines.push(`⏰ **${by.get(String(r.character_id))?.name}**'s contract has expired (<@${by.get(String(r.character_id))?.discord_id}>). Renew it with \`/contract\` → 📨 Offer a contract, or leave them as a free agent.`);
+    for (const r of soon) lines.push(`📝 **${by.get(String(r.character_id))?.name}**'s contract ends ${prettyDate(r.end_date)} (<@${by.get(String(r.character_id))?.discord_id}> can ask for a renewal with \`/contract wrestler:\`).`);
     const id = g.admin_channel_id;
     if (!id) return;
     const ch = await client.channels.fetch(id).catch(() => null);

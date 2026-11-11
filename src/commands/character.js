@@ -295,7 +295,7 @@ module.exports = {
                  WHERE tr.lost_date IS NULL AND ((tr.team_id IS NULL AND tr.character_id = $1)
                    OR EXISTS (SELECT 1 FROM title_reign_members m WHERE m.reign_id = tr.id AND m.character_id = $1))`, [character.id]);
             if (held.rows.length) {
-                throw new UserError(`**${character.name}** currently holds the ${held.rows.map((r) => `**${r.name}**`).join(', ')}. Vacate it first with \`/title vacate\`.`);
+                throw new UserError(`**${character.name}** currently holds the ${held.rows.map((r) => `**${r.name}**`).join(', ')}. Vacate it first with \`/title manage\`.`);
             }
             const teams = await withTransaction(async (client) => {
                 await client.query(`UPDATE characters SET status = 'retired', retired_at = now() WHERE id = $1`, [character.id]);
@@ -348,7 +348,7 @@ module.exports = {
                 if (reigns) bits.push(`${reigns} title reign record${reigns > 1 ? 's' : ''}`);
                 if (contenders) bits.push(`${contenders} #1 contender record${contenders > 1 ? 's' : ''}`);
                 if (teams) bits.push(`${teams} team membership${teams > 1 ? 's' : ''}`);
-                throw new UserError(`**${character.name}** has history (${bits.join(', ')}), so deleting would break stats. Use \`/character retire\` to hide them, or \`/character transfer\` to give them to the right owner.`);
+                throw new UserError(`**${character.name}** has history (${bits.join(', ')}), so deleting would break stats. Use 🛠 Staff on the wrestler (\`/whois\`) to hide them, or 🛠 Staff on the wrestler (\`/whois\`) to give them to the right owner.`);
             }
             await withTransaction(async (client) => {
                 await client.query(`DELETE FROM pending_requests WHERE character_id = $1 OR challenger_character_id = $1`, [character.id]);
@@ -379,11 +379,11 @@ module.exports = {
         if (sub === 'unclaim') {
             requireAdmin(interaction, 'unclaim characters');
             const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
-            if (character.unclaimed) throw new UserError(`**${character.name}** is already unclaimed. Give them to someone with \`/character transfer\`.`);
+            if (character.unclaimed) throw new UserError(`**${character.name}** is already unclaimed. Give them to someone with 🛠 Staff on the wrestler (\`/whois\`).`);
             const plan = await unclaim.unclaimPlan(guildId, character);
             if (!unclaim.hasConflicts(plan)) {
                 await unclaim.unclaimCharacter(interaction.client, guildId, character, interaction.user.id, interaction.client.user.id);
-                return respond(interaction, { content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history, but can't be booked until you give them to a player with \`/character transfer\`.`, allowedMentions: NO_MENTIONS });
+                return respond(interaction, { content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history, but can't be booked until you give them to a player with 🛠 Staff on the wrestler (\`/whois\`).`, allowedMentions: NO_MENTIONS });
             }
             const embed = new EmbedBuilder().setColor(0xe67e22).setTitle(`Unclaim ${character.name}?`)
                 .setDescription(`This will take **${character.name}** off <@${character.owner_discord_id}>. Heads up:\n\n${unclaim.describePlan(character, plan).join('\n')}`);
@@ -410,3 +410,8 @@ module.exports = {
     }
 };
 void reply; void DIVISION_THEME;
+
+// 3.9: Discord lists submit, profile, picture and assign. Edit, story, retire, transfer… are buttons
+// on the wrestler's screen (/whois or /fnlw → My Wrestlers); the old subcommands still work inside the bot.
+require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign'],
+    description: 'Your wrestlers. Edit/story: /fnlw → My Wrestlers. Staff (retire, transfer, unclaim): /whois' });

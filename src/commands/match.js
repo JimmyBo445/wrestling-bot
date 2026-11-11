@@ -246,7 +246,7 @@ module.exports = {
                 // no options: show PLE history
                 const [list, leaders] = await Promise.all([P.pleList(guildId), P.pleLeaders(guildId, 10)]);
                 const embed = new EmbedBuilder().setTitle('🎆 Premium Live Events').setColor(0x9B59B6)
-                    .setDescription(list.length ? list.map((r) => `**${r.ple} ${r.year}** · ${r.matches} match${r.matches === 1 ? '' : 'es'}`).join('\n').slice(0, 2000) : 'No PLEs tagged yet. After a show: `/match ple event:WrestleMania` tags every match logged today.');
+                    .setDescription(list.length ? list.map((r) => `**${r.ple} ${r.year}** · ${r.matches} match${r.matches === 1 ? '' : 'es'}`).join('\n').slice(0, 2000) : 'No PLEs tagged yet. After a show: `/fnlw` → Results → 🎟 PLE tags every match logged today.');
                 if (leaders.length) embed.addFields({ name: 'Most PLE wins', value: leaders.map((r, i) => `${i + 1}. **${r.name}**${r.discord_id ? ` (<@${r.discord_id}>)` : ''}: ${r.w}-${r.l}`).join('\n').slice(0, 1024) });
                 return respond(interaction, { embeds: [embed], allowedMentions: NO_MENTIONS });
             }
@@ -324,3 +324,7 @@ module.exports = {
         }
     }
 };
+
+// 3.9: Discord lists log and report. Undo, edit and rate are buttons under every result; recent and PLEs
+// are on /fnlw → Results. The old subcommands still work inside the bot.
+require('../utils/slim').keepSubs(module.exports, { show: ['log', 'report'] });

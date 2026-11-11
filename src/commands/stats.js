@@ -232,3 +232,15 @@ function h2hEmbed(title, nameA, nameB, h, periodNote) {
     embed.setFooter({ text: `${h.total} meeting${h.total === 1 ? '' : 's'}${periodNote ? ` · ${periodNote}` : ''}` });
     return embed;
 }
+
+// 3.9: one command. /stats wrestler: (or player:) opens the stats screen with tabs. The old
+// subcommands still work inside the bot (the tabs run them).
+require('../utils/slim').asScreen(module.exports, {
+    description: 'Stats for a wrestler (or a player) with tabs: record, history, opponents, badges, head-to-head…',
+    options: [
+        { type: 3, name: 'wrestler', description: 'A wrestler (leave empty to pick from a list)', required: false, autocomplete: true },
+        { type: 6, name: 'player', description: 'Or a player: their card and record, and compare them with another player', required: false }
+    ],
+    screen: (i) => require('../modules/screens').statsScreen(i),
+    autocomplete: async (i) => i.respond(await require('../utils/characterUtils').autocompleteCharacters(i, i.options.getFocused(), { statuses: ['approved', 'retired'] }))
+});

@@ -76,7 +76,7 @@ const profileReigns = async (charId) => (await q(
         const names = require('../src/registerCommands').loadCommandData();
         assert.ok(!names.some((c) => c.name === 'reign'));
         const title = names.find((c) => c.name === 'title').options.map((o) => o.name);
-        for (const n of ['reign-add', 'reign-edit', 'reign-remove', 'add-defense', 'remove-defense', 'match', 'vacate']) assert.ok(title.includes(n), n);
+        assert.deepStrictEqual(title, ['manage', 'belt-image']); // 3.9: the reign tools are forms in /title manage
     });
 
     await t('/admin channels sets several at once, turns one off, and shows them all', async () => {

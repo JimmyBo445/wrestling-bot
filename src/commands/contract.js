@@ -88,7 +88,7 @@ module.exports = {
             const existing = await cu.getActive(c.id);
             const embed = new EmbedBuilder().setColor(0xE8BF4A)
                 .setTitle(offer ? `📝 Contract offer for ${c.name}` : `🙋 ${c.name} is asking for a new deal`)
-                .setDescription(`${termText(k)}\n\n${offer ? `<@${c.owner_discord_id}>, press **Accept & sign** to take the deal, or **Decline**.` : 'An admin can **Approve** it, or answer with a different `/contract offer`.'}${existing ? `\n_This would replace their current deal (${cu.money(existing.salary)}/month, ends ${cu.prettyDate(existing.end_date)})._` : ''}`);
+                .setDescription(`${termText(k)}\n\n${offer ? `<@${c.owner_discord_id}>, press **Accept & sign** to take the deal, or **Decline**.` : 'An admin can **Approve** it, or answer with a different `/contract` → 📨 Offer a contract.'}${existing ? `\n_This would replace their current deal (${cu.money(existing.salary)}/month, ends ${cu.prettyDate(existing.end_date)})._` : ''}`);
             await logAudit(guildId, interaction.user.id, offer ? 'contract_offer' : 'contract_request', { character: c.name, months, salary });
             return respond(interaction, {
                 content: offer ? `<@${c.owner_discord_id}>` : undefined, embeds: [embed], components: offerButtons(k.id, offer ? 'offered' : 'requested'),
@@ -102,7 +102,7 @@ module.exports = {
             const { rows } = await pool.query(`SELECT id FROM contracts WHERE character_id = $1 AND status IN ('active','expired') ORDER BY (status = 'active') DESC, id DESC LIMIT 1`, [c.id]);
             const earn = (await cu.earningsMap(guildId, { characterId: c.id })).get(String(c.id));
             if (!rows.length) {
-                return respond(interaction, { content: `**${c.name}** has no contract${earn ? '' : ' and has never had one'}. Contracts are just for fun, so that's perfectly fine. An admin can offer one with \`/contract offer\`.${earn ? `\nCareer earnings: **${cu.money(earn.total)}**` : ''}` });
+                return respond(interaction, { content: `**${c.name}** has no contract${earn ? '' : ' and has never had one'}. Contracts are just for fun, so that's perfectly fine. An admin can offer one with \`/contract\` → 📨 Offer a contract.${earn ? `\nCareer earnings: **${cu.money(earn.total)}**` : ''}` });
             }
             const k = await cu.getContract(rows[0].id, guildId);
             const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`📝 ${c.name}'s contract${k.status === 'expired' ? ' (expired)' : ''}`)
@@ -143,7 +143,7 @@ module.exports = {
                      WHERE k.guild_id = $1 AND k.status = 'active' AND ($2::text IS NULL OR c.division = $2)
                        AND (NOT $3::boolean OR k.end_date <= $4::date + 30)
                      ORDER BY k.salary DESC, c.name LIMIT 40`, [guildId, division, Boolean(soon), today]);
-                if (!rows.length) return respond(interaction, { content: soon ? 'No contracts end in the next 30 days.' : 'Nobody is under contract yet. Admins can start with `/contract offer`.' });
+                if (!rows.length) return respond(interaction, { content: soon ? 'No contracts end in the next 30 days.' : 'Nobody is under contract yet. Admins can start with `/contract` → 📨 Offer a contract.' });
                 const lines = rows.map((r) => `**${r.name}** (<@${r.discord_id}>) · ${cu.money(r.salary)}/mo · ends ${cu.prettyDate(r.end_date)}`);
                 return respond(interaction, { embeds: [new EmbedBuilder().setColor(0xE8BF4A).setTitle(soon ? '📝 Contracts ending soon' : '📝 Under contract').setDescription(lines.join('\n').slice(0, 4000))], allowedMentions: NO_MENTIONS });
             }
@@ -159,7 +159,7 @@ module.exports = {
             }
             const map = await cu.earningsMap(guildId);
             const ids = [...map.keys()];
-            if (!ids.length) return respond(interaction, { content: 'Nobody has earned anything yet. Sign someone with `/contract offer`.' });
+            if (!ids.length) return respond(interaction, { content: 'Nobody has earned anything yet. Sign someone with `/contract` → 📨 Offer a contract.' });
             const { rows } = await pool.query(`SELECT c.id, c.name, c.division, u.discord_id FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[]) AND ($2::text IS NULL OR c.division = $2)`, [ids, division]);
             const ranked = rows.map((r) => ({ ...r, total: map.get(String(r.id)).total })).sort((a, b) => b.total - a.total).slice(0, 15);
             if (!ranked.length) return respond(interaction, { content: 'Nobody in that division has earned anything yet.' });
@@ -169,3 +169,11 @@ module.exports = {
         }
     }
 };
+
+// 3.9: one command. /contract shows your wrestlers' contracts with tabs; /contract wrestler: opens one.
+require('../utils/slim').asScreen(module.exports, {
+    description: 'Contracts and career earnings (just for fun): yours, who\'s signed, free agents, earnings',
+    options: [{ type: 3, name: 'wrestler', description: 'Open one wrestler\'s contract (leave empty for yours)', required: false, autocomplete: true }],
+    screen: (i) => require('../modules/screens').contractScreen(i),
+    autocomplete: async (i) => i.respond(await require('../utils/characterUtils').autocompleteCharacters(i, i.options.getFocused()))
+});

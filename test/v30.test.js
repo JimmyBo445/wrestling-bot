@@ -110,7 +110,7 @@ const C = {};
         assert.ok(!/\/leaderboard( 🔒)?:/.test(tx) && !/\/injury( 🔒)?:/.test(tx), tx);
         assert.match(tx, /\/admin panel/); assert.match(tx, /\/championship/); // 3.8: buttons replaced contender-challenge and newsletter add
         const m = await run('help', null, { command: 'injury' }, ADM);
-        assert.match(text(m), /merged into a combined command/, text(m)); assert.match(text(m), /\/directory injury-list/, text(m));
+        assert.match(text(m), /merged into a combined command/, text(m)); assert.match(text(m), /\/directory page:Injury report/, text(m));
         const p = await run('help', null, {}, P('u1'));
         assert.ok(!/signup-open/.test(text(p)), 'players do not see admin-only booking subcommands');
         assert.match(text(p), /suggest/i);

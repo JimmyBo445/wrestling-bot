@@ -215,7 +215,7 @@ async function handleButtonInteraction(interaction) {
                 const { payload } = await presentMatch(interaction, result);
                 const channel = await postToResultsChannel(interaction, payload);
                 await require('../utils/showRecap').maybeAutoRecap(interaction, result);
-                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `✅ Recorded ${svc.divisionLabel(draft.division)} match ${pos} (#${result.matchId}). The result picture was posted in <#${channel.id}>. Undo it with \`/match undo ${result.matchId}\`.` }));
+                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `✅ Recorded ${svc.divisionLabel(draft.division)} match ${pos} (#${result.matchId}). The result picture was posted in <#${channel.id}>. Undo it with the buttons under the result.` }));
             }
             if (act === 'ed') return await show(await cardUi.editPanel(guildId, draftId, pos));
             if (act === 'sl') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(interaction.values[0]) }));
@@ -254,7 +254,7 @@ async function handleButtonInteraction(interaction) {
             const character = await requireCharacter(interaction.guildId, charId);
             await unclaim.unclaimCharacter(interaction.client, interaction.guildId, character, interaction.user.id, interaction.client.user.id);
             return await interaction.editReply({
-                content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history. Give them to a player any time with \`/character transfer\`.`,
+                content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history. Give them to a player any time with 🛠 Staff on the wrestler (\`/whois\`).`,
                 embeds: [], components: [], allowedMentions: NO_MENTIONS
             });
         } catch (err) {
@@ -341,7 +341,7 @@ async function handleButtonInteraction(interaction) {
         if (c.catchphrase) embed.addFields({ name: 'Catchphrase', value: `“${c.catchphrase}”` });
         if (c.finisher) embed.addFields({ name: 'Finisher', value: c.finisher, inline: true });
         if (c.signatures) embed.addFields({ name: 'Signature moves', value: c.signatures.split(',').map((x) => x.trim()).filter(Boolean).map((x) => `• ${x}`).join('\n').slice(0, 1000), inline: true });
-        embed.setDescription((c.lore || '_No story written yet. Owners can add one with `/character story`._').slice(0, 4000));
+        embed.setDescription((c.lore || '_No story written yet. Owners can add one with ✏️ Edit / 📖 Story in `/fnlw` → 🙋 My Wrestlers._').slice(0, 4000));
         return respond(interaction, { embeds: [embed], flags: EPHEMERAL });
     }
 
@@ -349,7 +349,7 @@ async function handleButtonInteraction(interaction) {
     if (interaction.isButton() && id.startsWith('roster:')) {
         const [, division, index, retired, ownerId] = id.split(':');
         if (interaction.user.id !== ownerId) {
-            return respond(interaction, { content: 'This roster belongs to someone else. Use `/directory roster` to open your own.', flags: EPHEMERAL });
+            return respond(interaction, { content: 'This roster belongs to someone else. Use `/directory` to open your own.', flags: EPHEMERAL });
         }
         await interaction.deferUpdate();
         try {

@@ -67,7 +67,7 @@ async function startTournament(guildId, tournamentId) {
         if (tour.status !== 'signup') throw new UserError('That tournament has already started.');
         const { rows: ents } = await client.query(
             `SELECT te.character_id FROM tournament_entrants te JOIN characters c ON c.id = te.character_id WHERE te.tournament_id = $1 AND c.status = 'approved'`, [tour.id]);
-        if (ents.length < MIN_ENTRANTS) throw new UserError(`A tournament needs at least ${MIN_ENTRANTS} wrestlers. Add more with \`/tournament add\`.`);
+        if (ents.length < MIN_ENTRANTS) throw new UserError(`A tournament needs at least ${MIN_ENTRANTS} wrestlers. Add more with \`/tournament view\`.`);
         const order = ents.map((e) => String(e.character_id));
         for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
         const P = nextPow2(order.length);
@@ -119,7 +119,7 @@ async function revertTournamentMatch(client, matchId) {
     if (!tm) return;
     const { rows: mx } = await client.query(`SELECT MAX(round)::int AS r FROM tournament_matches WHERE tournament_id = $1`, [tm.tournament_id]);
     if (tm.round === mx[0].r) {
-        if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/title vacate` or `edit-reign`), then undo the match.');
+        if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/title manage`), then undo the match.');
         await client.query(`UPDATE tournaments SET status = 'active', winner_id = NULL, winner_name = NULL WHERE id = $1`, [tm.tournament_id]);
     } else {
         const nextSlot = Math.ceil(tm.slot / 2);

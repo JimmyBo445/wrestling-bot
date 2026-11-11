@@ -75,7 +75,7 @@ module.exports = {
             const { rows } = await pool.query(
                 `SELECT c.name, c.division, h.inducted_at, u.discord_id FROM hall_of_fame h JOIN characters c ON c.id = h.character_id JOIN users u ON u.id = c.owner_id
                  WHERE h.guild_id = $1 ORDER BY h.inducted_at DESC, c.name LIMIT 40`, [guildId]);
-            if (!rows.length) return respond(interaction, { content: 'The Hall of Fame is empty. An admin can induct a legend with `/directory hof-induct`.' });
+            if (!rows.length) return respond(interaction, { content: 'The Hall of Fame is empty. An admin can induct a legend with `/directory page:Hall of Fame` (staff buttons).' });
             const lines = rows.map((r) => `🏛️ **${r.name}** (<@${r.discord_id}>) · ${DIVISION_LABELS[r.division]} · class of ${new Date(r.inducted_at).getFullYear()}`);
             return respond(interaction, { embeds: [new EmbedBuilder().setTitle('Hall of Fame').setColor(0xE8BF4A).setDescription(lines.join('\n'))], allowedMentions: NO_MENTIONS });
         }

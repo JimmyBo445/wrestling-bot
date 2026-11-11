@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.9.0 — Every other command is mostly buttons too
+| Command | What you type now | What became buttons |
+|---|---|---|
+| `/character` | `submit` · `profile` · `picture` · `assign` (staff) | Edit and story: `/fnlw` → 🙋 My Wrestlers. Retire, restore, move division, transfer, unclaim, delete: 🛠 Staff on a wrestler (`/whois`) |
+| `/stats` | `/stats wrestler:` or `/stats player:` | All the stats tabs; a player's card has a 🆚 menu to compare with another player. Most decorated and rivalries are tabs in `/standings` |
+| `/standings` | `/standings board:` (optional) | Power, leaderboards, rankings, season, rivalries tabs |
+| `/legacy` | `/legacy`, `/legacy wrestler:` or `player:` | Staff: 🎖 Give accolade, 🗑 Take back (on a wrestler), 🗳 Open a vote (pick the award, then a short form), 🏷 Award names (add, rename, remove). Vote posts got **🙋 Nominate someone** (anyone when the vote allows it, with ➕ a second wrestler for rivalries/matches) |
+| `/directory` | `/directory page: division:` | Roster list, 🗂 roster cards, Hall of Fame (staff: induct, 🗑 take out), injuries |
+| `/feud` | `/feud`, `/feud feud:` | Log a moment, heat, end, start a feud |
+| `/contract` | `/contract`, `/contract wrestler:` | Offer, request, release, tabs; staff 💵 Win bonuses form |
+| `/team` | `create` · `view` | Add/remove members, rename, disband |
+| `/tournament` | `create` · `view` | Add/remove wrestlers, start, decide matches, post bracket, cancel |
+| `/match` | `log` (staff) · `report` | Edit, undo, rate: buttons under each result. `/fnlw` → Results got 🎆 PLEs (everyone) and 🎟 Tag today's matches as a PLE (staff) |
+| `/title` | `manage` · `belt-image` | `/title manage` → a belt: 🎬 log match, 🎯/✖ contender, 🚫 vacate, 🩹 interim, 🔗 unify, 🔁 waive a rematch, ⏱ title watch, **📜 fix any reign** (dates, defenses, notes, interim, change the champion, add/remove written-down defenses, delete) and **➕ add an old reign**. Type a champion's name: if it matches a wrestler or team in the bot it gets linked, otherwise the name is saved as text |
+- New screens are **private by default**. Add `show_everyone:True` to post the first screen in the channel (button presses still only answer the person pressing).
+- You can type a wrestler's name instead of picking from the list for `/stats`, `/legacy` and `/contract`.
+- A vacant belt's title match is logged with `/match log` + `title:`.
+- Help and every "use `/…`" message now point to the right button.
+- No database change. Still 18 commands. Old subcommands still work inside the bot.
+
 ## 3.8.0 — Fewer commands: /admin, /booking, /card and /championship are mostly buttons now
 What Discord lists now (type `/` to see):
 | Command | Typed parts left | Everything else is a button in… |

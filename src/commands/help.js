@@ -6,42 +6,42 @@ const { UserError } = require('../utils/errors');
 const ORDER = ['fnlw', 'whois', 'legacy', 'character', 'team', 'stats', 'standings', 'championship', 'title', 'booking', 'contract', 'match', 'card', 'directory', 'feud', 'tournament', 'admin'];
 // Old command names that were merged into combined commands (so `/help command:injury` can point people to the new home).
 const MOVED = {
-    leaderboard: '/standings leaderboard', rankings: '/standings rankings', season: '/standings season (picture: for the recap)', roster: '/directory roster',
-    halloffame: '/directory hof-list | hof-view | hof-induct | hof-remove', injury: '/directory injury-list | injury-add | injury-clear',
-    contender: '/championship title: → ⚔️ Challenge for it / 🎯 Contenders (admins: /title contender give / take away)',
+    leaderboard: '/standings (Leaderboards tab)', rankings: '/standings (Rankings tab)', season: '/standings (Season tab)', roster: '/directory',
+    halloffame: '/directory page:Hall of Fame', injury: '/directory page:Injury report',
+    contender: '/championship title: → ⚔️ Challenge for it / 🎯 Contenders (staff: /title manage)',
     matchmaking: '/booking request, and /booking signups → 🔎 Suggest opponents', signup: '/booking signups (buttons: open, list, close, add, remove)',
     newsletter: '/admin panel → 📰 Newsletter', report: '/admin panel → 📊 Staff report',
-    reign: '/title reign-add | reign-edit | reign-remove | add-defense | remove-defense',
+    reign: '/title manage (pick a belt, then 📜 fix a reign)',
     faction: '/team (kind: Faction)'
 };
 const BLURB = {
     fnlw: 'Home menu with buttons: champions, next show, results, roster, your wrestlers',
-    legacy: 'Career accolades: Money in the Bank, Royal Rumble, Face of FNLW MVP, year-end awards',
-    character: 'Your wrestlers: submit, edit, profile cards, story and moves',
-    team: 'Tag teams and factions',
-    standings: 'Leaderboards, division rankings and season standings',
+    legacy: 'MITB, Rumble, Face of FNLW MVP and year-end awards. Add wrestler: for one wrestler',
+    character: 'Your wrestlers: submit, profile card, picture (edit and story: /fnlw → My Wrestlers)',
+    team: 'Tag teams and factions: create one, or view them with buttons',
+    standings: 'Power rankings, leaderboards, rankings, season and rivalries as tabs',
     booking: 'Ask for a match, and show signups with a 🔎 Suggest opponents button',
-    directory: 'Roster pages and a text roster list, Hall of Fame and the injury report',
+    directory: 'The roster, roster cards, Hall of Fame and the injury report',
     whois: 'Who plays a wrestler, and all of that player\'s wrestlers',
-    stats: 'Records, streaks, head-to-head, history, most decorated players',
+    stats: 'Pick a wrestler (or a player) to see every stat as tabs',
     leaderboard: 'Leaderboards with category and time dropdowns',
     rankings: 'Division ladders (last 90 days)',
     championship: 'Every title and champion. Add title: to open one belt with buttons',
-    title: 'Admins: title matches, contenders, vacate, belt pictures, and fixing reigns (add, edit, remove, defenses)',
+    title: 'Staff: `/title manage` runs a belt and fixes its history; `/title belt-image` uploads the belt picture',
     contender: '#1 contender challenges and awards',
     matchmaking: 'Find fresh opponents or request a match',
     signup: 'Show signups: players click to say who is available',
-    contract: 'Contracts and career earnings (just for fun)',
+    contract: 'Contracts and career earnings (just for fun). Add wrestler: for one contract',
     report: 'Staff report: idle wrestlers, thin divisions, stale titles',
-    match: 'Report your card match result (staff: log, undo and edit results)',
+    match: 'Report your card match result (staff: log results; edit and undo are buttons under each result)',
     card: 'Staff: `/card view` shows a card with every tool as buttons; `/card add` adds one match',
     season: 'Yearly standings and a season recap picture',
     injury: 'Injury report: who is out and until when',
     roster: 'Flip through a division A to Z with profile cards',
     faction: 'Factions: groups of 3-8 with a shared record',
     halloffame: 'Hall of Fame: retired legends',
-    feud: 'Rivalries: a timeline and heat meter for each feud',
-    tournament: 'Tournaments with a bracket picture',
+    feud: 'Rivalries: a timeline and heat meter for each feud. Add feud: to open one',
+    tournament: 'Tournaments: create one, or view brackets with buttons',
     newsletter: 'Weekly newsletter: add lines, preview, post',
     admin: '`/admin pending` approvals · `/admin panel` every setting as buttons · `/admin data` backups and spreadsheet import'
 };
@@ -120,7 +120,7 @@ module.exports = {
         const embed = new EmbedBuilder().setTitle('Wrestling Bot: Help').setColor(0xC0392B)
             .setDescription([
                 '**Players:** `/character submit` to add a wrestler (an admin approves it), then `/character profile` for their card. ' +
-                'Check records with `/stats`, ladders with `/standings rankings`, ask for matches with `/booking request`, and see who plays who with `/whois`.',
+                'Check records with `/stats`, ladders with `/standings`, ask for matches with `/booking request`, and see who plays who with `/whois`.',
                 admin ? '**Admins:** book shows with `/card view` → 🧰 More tools → ⚡ Auto-build or `/card add`, log results with `/match`, and handle approvals with `/admin pending`.' : null,
                 '',
                 'Tip: **`/fnlw`** opens a home menu with buttons for the most-used things.',

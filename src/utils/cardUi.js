@@ -108,7 +108,7 @@ async function recordPanel(guildId, draftId, position) {
     const rows2 = [new ActionRowBuilder().addComponents(buttons.slice(0, 5)),
         new ActionRowBuilder().addComponents(btn(id('d'), 'Draw'), btn(id('n'), 'No contest'), btn(`cardui:mp:${draft.id}:${position}`, '↩ Cancel'))];
     const [name] = await slotNames([slot]);
-    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}**\n${cfg.label}: ${name}${slot.stipulation ? ` _(${slot.stipulation})_` : ''}${slot.title_id ? ' 🏆 title match' : ''}\n\n**Who won?** The result picture goes to the match results channel. Add a finish, score or notes afterwards with \`/match edit\`.`;
+    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}**\n${cfg.label}: ${name}${slot.stipulation ? ` _(${slot.stipulation})_` : ''}${slot.title_id ? ' 🏆 title match' : ''}\n\n**Who won?** The result picture goes to the match results channel. Add a finish, score or notes afterwards with the buttons under the result.`;
     return { content, components: rows2, files: [], embeds: [], allowedMentions: { parse: [] } };
 }
 

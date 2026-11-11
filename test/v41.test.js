@@ -59,7 +59,7 @@ const posts = (ch, from) => sent.slice(from).filter((m) => m.channelId === ch);
         assert.deepStrictEqual(c.map((x) => x.value), ['dq']);
         const json = require('../src/commands/match').data.toJSON();
         assert.ok(!json.options.some((o) => o.name.startsWith('log-')));
-        assert.deepStrictEqual(json.options.map((o) => o.name), ['log', 'ple', 'rate', 'undo', 'edit', 'recent', 'report']);
+        assert.deepStrictEqual(json.options.map((o) => o.name), ['log', 'report']); // 3.9: the rest are buttons
     });
 
     // ---------------- PLE ----------------

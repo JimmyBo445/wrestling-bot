@@ -151,3 +151,17 @@ module.exports = {
         return fac().execute(handOff(interaction, sub, { faction: g.id }));
     }
 };
+
+// 3.9: Discord lists create and view. Adding/removing members, rename and disband are buttons on the team screen.
+{
+    const origAuto = module.exports.autocomplete;
+    require('../utils/slim').keepSubs(module.exports, {
+        show: ['create', {
+            json: { name: 'view', description: 'Tag teams and factions with buttons (staff: add/remove members, rename, disband)', options: [
+                { type: 3, name: 'group', description: 'Open one team or faction (leave empty for the list)', required: false, autocomplete: true },
+                require('../utils/slim').SHOW] },
+            run: (i) => require('../modules/screens').teamScreen(i),
+            autocomplete: origAuto
+        }]
+    });
+}

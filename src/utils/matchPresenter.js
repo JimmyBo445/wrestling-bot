@@ -29,7 +29,7 @@ async function presentMatch(interaction, result) {
         const winner = result.characters.find((c) => String(c.id) === String(t.winnerId))?.name;
         notices.push(t.finished
             ? `🏆 **${winner}** wins **${t.name}**!${t.crowned ? ` They are the new **${t.crowned}** champion.` : ''}`
-            : `🏟️ **${t.name}**: **${winner}** advances to the ${t.nextRound}. See \`/tournament bracket\`.`);
+            : `🏟️ **${t.name}**: **${winner}** advances to the ${t.nextRound}. See \`/tournament view\`.`);
     }
     if (result.rematch) {
         const until = new Date(result.rematch.expires_on).toISOString().slice(0, 10);

@@ -168,7 +168,7 @@ async function defensesEmbed(title, want = null) {
         ...defs.map((d) => ({ at: new Date(d.created_at).getTime(), text: `vs ${d.opponents || 'unknown'} · <t:${Math.floor(new Date(d.created_at).getTime() / 1000)}:D> · match #${d.id}` }))
     ].sort((a, b) => a.at - b.at).map((x, i) => `**${i + 1}.** ${x.text}`);
     const older = reign.defenses - defs.length - manual.length;
-    if (older > 0) lines.push(`_+ ${older} defense${older === 1 ? '' : 's'} counted without details (add them with \`/title add-defense\`)_`);
+    if (older > 0) lines.push(`_+ ${older} defense${older === 1 ? '' : 's'} counted without details (add them with \`/title manage\`)_`);
     return new EmbedBuilder().setTitle(`${holder}: ${title.name}`).setColor(0xE8BF4A)
         .setDescription(`Reign #${reign.n} · ${fmtDate(reign.won_date)} → ${fmtDate(reign.lost_date)} · ${daysBetween(reign.won_date, reign.lost_date)} days · **${reign.defenses}** defense${reign.defenses === 1 ? '' : 's'}\n\n${lines.length ? lines.join('\n') : 'No title defenses yet.'}`.slice(0, 4000));
 }
@@ -450,7 +450,7 @@ module.exports = {
             const text = await withTransaction(async (client) => {
                 const cur = await getCurrentReign(title.id, client, true);
                 if (sub === 'interim') {
-                    if (cur?.is_interim) throw new UserError('There is already an interim champion. Use `/title unify` or `/title vacate` first.');
+                    if (cur?.is_interim) throw new UserError('There is already an interim champion. Unify or vacate it first in `/title manage`.');
                     if (cur) {
                         await client.query(`UPDATE title_reigns SET lost_date = CURRENT_DATE, notes = COALESCE(notes || ' · ', '') || $2 WHERE id = $1`,
                             [cur.id, `Interim champion crowned${reason ? ` (${reason})` : ''}`]);
@@ -488,7 +488,7 @@ module.exports = {
                     await setVacancy(client, title.id);
                 });
                 await logAudit(guildId, interaction.user.id, 'reign_removed', { title: title.name, reignId, botLogged: !reign.is_backfilled });
-                return respond(interaction, { content: `Deleted that reign from the **${title.name}** history.${reign.is_backfilled ? '' : ' It came from a logged match, so that match can no longer be undone with `/match undo` (the match result itself stays in the records).'}` });
+                return respond(interaction, { content: `Deleted that reign from the **${title.name}** history.${reign.is_backfilled ? '' : ' It came from a logged match, so that match can no longer be undone with the buttons under the result (the match result itself stays in the records).'}` });
             }
 
             const wonRaw = interaction.options.getString('won_date');

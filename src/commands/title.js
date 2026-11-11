@@ -25,3 +25,14 @@ module.exports = makeUmbrella({
     ], { 'backfill-reign': 'reign-add', 'edit-reign': 'reign-edit', 'remove-reign': 'reign-remove' }),
     hidden: contenderParts
 });
+
+// 3.9: Discord lists manage and belt-image. Everything else (title match, contender, vacate, interim, unify,
+// rematches, fixing reigns and defenses) is a button or form in /title manage; the old subcommands still work inside the bot.
+require('../utils/slim').keepSubs(module.exports, {
+    show: [{
+        json: { name: 'manage', description: '[Admin] Run a belt: title match, contender, vacate, interim, and fix its history', options: [
+            { type: 3, name: 'title', description: 'The belt (leave empty to pick from a list)', required: false, autocomplete: true }] },
+        run: (i) => { const t = i.options.getString('title'); const s = require('../modules/screens'); return t ? s.titleScreen(i, t) : s.titleHome(i); },
+        autocomplete: async (i) => i.respond(await require('../utils/titleLogic').autocompleteTitles(i, i.options.getFocused()))
+    }, 'belt-image']
+});

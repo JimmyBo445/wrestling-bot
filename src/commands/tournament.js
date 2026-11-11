@@ -100,7 +100,7 @@ module.exports = {
                 `INSERT INTO tournaments (guild_id, name, division, title_id, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
                 [guildId, interaction.options.getString('name').trim(), division, title?.id || null, interaction.user.id]);
             await logAudit(guildId, interaction.user.id, 'tournament_created', { id: rows[0].id });
-            return respond(interaction, { content: `🏟️ Tournament **${interaction.options.getString('name').trim()}** created${title ? ` (the winner becomes ${title.name} champion)` : ''}. Add ${T.MIN_ENTRANTS} to ${T.MAX_ENTRANTS} wrestlers with \`/tournament add\`, then \`/tournament start\`.` });
+            return respond(interaction, { content: `🏟️ Tournament **${interaction.options.getString('name').trim()}** created${title ? ` (the winner becomes ${title.name} champion)` : ''}. Add ${T.MIN_ENTRANTS} to ${T.MAX_ENTRANTS} wrestlers and start it from \`/tournament view\`.` });
         }
 
         if (sub === 'add' || sub === 'remove') {
@@ -182,3 +182,17 @@ module.exports = {
         }
     }
 };
+
+// 3.9: Discord lists create and view. Adding wrestlers, start, deciding matches and cancel are buttons on the tournament screen.
+{
+    const origAuto = module.exports.autocomplete;
+    require('../utils/slim').keepSubs(module.exports, {
+        show: ['create', {
+            json: { name: 'view', description: 'Tournaments and brackets with buttons (staff: add wrestlers, start, decide matches)', options: [
+                { type: 3, name: 'tournament', description: 'Open one tournament (leave empty for the list)', required: false, autocomplete: true },
+                require('../utils/slim').SHOW] },
+            run: (i) => require('../modules/screens').tournamentScreen(i),
+            autocomplete: origAuto
+        }]
+    });
+}

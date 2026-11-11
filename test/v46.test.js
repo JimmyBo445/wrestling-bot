@@ -33,10 +33,10 @@ const subsOf = (name) => reg().find((c) => c.name === name).options.map((o) => o
         const names = reg().map((c) => c.name);
         assert.strictEqual(names.length, 18);
         assert.ok(!names.includes('faction'));
-        assert.deepStrictEqual(subsOf('match'), ['log', 'ple', 'rate', 'undo', 'edit', 'recent', 'report']);
-        assert.deepStrictEqual(subsOf('team'), ['create', 'list', 'profile', 'add-member', 'remove-member', 'rename', 'disband']);
-        assert.deepStrictEqual(subsOf('standings'), ['leaderboard', 'rankings', 'power', 'season']);
-        assert.ok(subsOf('title').includes('contender') && !subsOf('title').some((s) => s.startsWith('contender-')));
+        assert.deepStrictEqual(subsOf('match'), ['log', 'report']); // 3.9
+        assert.deepStrictEqual(subsOf('team'), ['create', 'view']);
+        assert.deepStrictEqual(subsOf('standings'), ['board', 'show_everyone']);
+        assert.deepStrictEqual(subsOf('title'), ['manage', 'belt-image']);
         assert.deepStrictEqual(subsOf('booking'), ['request', 'signups']); // 3.8: the rest are buttons
         const admin = subsOf('admin');
         assert.deepStrictEqual(admin, ['pending', 'panel', 'data']); // 3.8: everything else is in /admin panel

@@ -26,7 +26,7 @@ async function nominationsPayload(p) {
     const list = await nominees(p.id);
     const embed = new EmbedBuilder().setColor(GOLD).setTitle(`🗳 ${pollName(p)}: nominations`)
         .setDescription([
-            p.nominate_who === 'everyone' ? 'Nominations are **open to everyone**: `/legacy nominate`.' : 'Admins are picking the nominees.',
+            p.nominate_who === 'everyone' ? 'Nominations are **open to everyone**: press 🙋 Nominate someone below.' : 'Admins are picking the nominees.',
             '',
             list.length ? list.map((n) => `• ${n.label}`).join('\n') : '_No nominees yet._'
         ].join('\n').slice(0, 4000))
@@ -52,9 +52,13 @@ async function votingPayload(p) {
 /** 3.5: staff-only buttons on the vote post (anyone can see them; only admins/staff can use them). */
 function staffRow(p, what) {
     const { ButtonBuilder, ButtonStyle } = require('discord.js');
-    return new ActionRowBuilder().addComponents(what === 'start'
-        ? new ButtonBuilder().setCustomId(`ui:vx:s:${p.id}`).setLabel('▶️ Start voting (staff)').setStyle(ButtonStyle.Secondary)
-        : new ButtonBuilder().setCustomId(`ui:vx:c:${p.id}`).setLabel('🔒 Close vote (staff)').setStyle(ButtonStyle.Secondary));
+    if (what === 'start') {
+        // 3.9: nominating is a button (the vote decides whether everyone or only staff can use it)
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ui:pg:nom:${p.id}:all:0`).setLabel(p.nominate_who === 'everyone' ? '🙋 Nominate someone' : '🙋 Nominate someone (staff)').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`ui:vx:s:${p.id}`).setLabel('▶️ Start voting (staff)').setStyle(ButtonStyle.Secondary));
+    }
+    return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ui:vx:c:${p.id}`).setLabel('🔒 Close vote (staff)').setStyle(ButtonStyle.Secondary));
 }
 
 /** Posts (or updates) the vote's message in its channel. Returns the message, or null. */

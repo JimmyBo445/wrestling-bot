@@ -367,7 +367,7 @@ module.exports = {
                 const msg = await buildPendingMessage(r);
                 if (r.request_type === 'streak_contender') {
                     const jump = r.message_id && r.channel_id ? `\nUse the prompt posted in <#${r.channel_id}> to pick the title.` : '';
-                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/title contender` to pick a title, or ignore it.'}`);
+                    msg.embeds[0].setDescription(`${msg.embeds[0].data.description}${jump || '\nUse `/title manage` to pick a title, or ignore it.'}`);
                 }
                 await interaction.followUp({ ...msg, flags: EPHEMERAL });
             }

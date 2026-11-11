@@ -63,7 +63,7 @@ async function requireCharacter(guildId, value, { statuses = null, client = pool
     const c = await getCharacterById(value, client);
     if (!c || c.guild_id !== guildId) throw new UserError('I could not find that character. Pick one from the dropdown list that appears as you type.');
     if (statuses && !statuses.includes(c.status)) throw new UserError(`**${c.name}** is ${c.status}, so that isn't possible.`);
-    if (claimed && c.unclaimed) throw new UserError(`**${c.name}** is unclaimed (no player owns them right now). Give them to a player with \`/character transfer\` first.`);
+    if (claimed && c.unclaimed) throw new UserError(`**${c.name}** is unclaimed (no player owns them right now). Give them to a player with 🛠 Staff on the wrestler (\`/whois\`) first.`);
     return c;
 }
 
@@ -79,7 +79,7 @@ async function assertNameFree(guildId, name, excludeId = null, client = pool) {
     const hit = rows.find((r) => normName(r.name) === key && (excludeId === null || String(r.id) !== String(excludeId)));
     if (!hit) return;
     const who = hit.is_placeholder ? 'nobody (unclaimed)' : `<@${hit.discord_id}>`;
-    const hint = hit.status === 'retired' ? ' They are retired, so an admin can bring them back with `/character restore`.' : hit.status === 'pending' ? ' They are waiting for approval.' : '';
+    const hint = hit.status === 'retired' ? ' They are retired, so an admin can bring them back with 🛠 Staff on the wrestler (`/whois`).' : hit.status === 'pending' ? ' They are waiting for approval.' : '';
     throw new UserError(`A character called **${hit.name}** already exists (owned by ${who}).${hint} Pick a different name.`);
 }
 

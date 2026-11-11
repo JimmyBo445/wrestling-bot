@@ -262,7 +262,7 @@ async function validateTitleMatch({ title, characters, matchType, teamMode, side
             : characters.some((c) => reignMatchesSubject(current, { type: 'character', id: c.id }));
         if (!champIn) {
             const holder = current.team_name || current.character_name || current.reign_char_name || 'the champion';
-            throw new UserError(`**${holder}** holds the **${title.name}** but isn't in this match. Add them, or vacate the title first with \`/title vacate\`.`);
+            throw new UserError(`**${holder}** holds the **${title.name}** but isn't in this match. Add them, or vacate the title first with \`/title manage\`.`);
         }
     }
     void resultType;
@@ -321,7 +321,7 @@ async function editMatch(guildId, matchId, actor, { notes, winnerIndex = null, w
 
         if (wantsResultChange) {
             if (match.is_title_match || match.is_contender_match) {
-                throw new UserError('Title and #1 contender matches affect belts, so the result can\'t be edited. Use `/match undo` and log it again. (Notes can still be edited.)');
+                throw new UserError('Title and #1 contender matches affect belts, so the result can\'t be edited. Press 🛠 under the result to undo it, then log it again. (Notes can still be edited.)');
             }
             const config = MATCH_CONFIG[match.match_type];
             const newResult = resultType || match.result_type;

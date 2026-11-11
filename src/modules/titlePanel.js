@@ -137,7 +137,7 @@ async function handleComponent(interaction) {
             await interaction.deferReply({ flags: EPHEMERAL });
             if (act === 'log') {
                 const reign = await getCurrentReign(title.id);
-                if (!reign) return await interaction.editReply({ content: `The **${title.name}** is vacant. Use \`/title match\` and fill in the \`opponent\` too.` });
+                if (!reign) return await interaction.editReply({ content: `The **${title.name}** is vacant. Log it with \`/match log\` and pick the belt in \`title:\`.` });
                 return await interaction.editReply(await picker(title, 'log', 0, `Who is challenging **${reignHolderName(reign)}** for the **${title.name}**?`));
             }
             return await interaction.editReply(await picker(title, 'sc', 0, `Who is the new #1 contender for the **${title.name}**?`));

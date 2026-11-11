@@ -120,10 +120,10 @@ async function staffPayload(interaction) {
         '',
         '**Shows:** `/card view` → the card with buttons. 🧰 More tools there: auto-build, schedule, recap, MOTN vote, clear',
         '**Signups:** `/booking signups` · **Settings and more:** `/admin panel` (🛠 Admin panel below)',
-        '**Results:** `/match log` (any match type) or the 🎬 Record result button in `/card view` · `/match ple` tags a PLE',
-        '**Legacy:** `/legacy award` · votes: `/legacy vote-open` → `nominate` → `vote-start` → `vote-close`',
-        '**Titles:** `/title match` · `/title vacate` · fix history with `/title reign-add` / `reign-edit`',
-        '**People:** `/character assign` · `/character transfer` · `/team create`'
+        '**Results:** `/match log` (any match type) or the 🎬 Record result button in `/card view` · `/fnlw` → Results → 🎟 tags a PLE',
+        '**Legacy:** `/legacy` → 🎖 Give accolade · 🗳 Open a vote · 🏷 Award names',
+        '**Titles:** `/title manage` → pick a belt: log match, contender, vacate, interim, fix reigns',
+        '**People:** `/character assign` · 🛠 Staff on a wrestler (`/whois`) · `/team create`'
     ].join('\n'));
     return {
         embeds: [embed],
@@ -151,7 +151,7 @@ async function handleHome(interaction, section, arg) {
     if (section === 'home') payload = homePayload(interaction, interaction.guild?.name);
     else if (section === 'champs') payload = await championsPayload(guildId);
     else if (section === 'show') payload = await nextShowPayload(guildId);
-    else if (section === 'results') payload = await resultsPayload(guildId);
+    else if (section === 'results') { payload = await resultsPayload(guildId); payload.components = [...(payload.components || []), require('./screens').resultsStaffRow(interaction)]; }
     else if (section === 'roster') payload = await rosterListPayload(guildId, { division: 'all', sort: 'wrestler', page: 0, extras: true });
     else if (section === 'mine') payload = await whoisPayload(interaction, { ownerId: interaction.user.id, mine: true });
     else if (section === 'help') payload = helpPayload(interaction, 'start');
@@ -175,7 +175,7 @@ async function rosterListPayload(guildId, { division = 'all', sort = 'wrestler',
         nav.push(btn(id(division, sort, p - 1), '◀', ButtonStyle.Secondary, p === 0), btn(`ui:x:${p}`, `${p + 1} / ${pages.length}`, ButtonStyle.Secondary, true), btn(id(division, sort, p + 1), '▶', ButtonStyle.Secondary, p >= pages.length - 1));
     }
     const components = [divRow, row(...nav)];
-    if (extras) components.push(row(btn('ui:hi:h', '🏛 Hall of Fame'), btn('ui:hi:i', '🤕 Injuries')));
+    if (extras) components.push(row(btn('ui:dr:p', '🗂 Roster cards'), btn('ui:hi:h', '🏛 Hall of Fame'), btn('ui:hi:i', '🤕 Injuries')));
     return { embeds: pages[p], components, allowedMentions: NOPING };
 }
 
@@ -278,36 +278,36 @@ const HELP = {
         '**Everything in one place:** `/fnlw` opens the home menu with buttons. `/fnlw go:` jumps to one section.',
         '**Played your card match?** `/fnlw` → 🙋 My Wrestlers → 📝 Report a result, or `/match report` (add a screenshot there). Staff approve it.',
         '**Your wrestlers:** `/fnlw` → 🙋 My Wrestlers has ✏️ Edit, 📖 Story, 🖼 Picture and 📝 Contract buttons.',
-        '**Who plays who:** `/whois` a wrestler, or `/directory list` for the whole roster.'] },
+        '**Who plays who:** `/whois` a wrestler, or `/directory` for the whole roster.'] },
     players: { label: 'Wrestlers & stats', emoji: '🤼', text: [
-        '`/character submit` · `edit` · `picture` · `story` for your wrestlers',
-        '`/character profile` the wrestler\'s card · `/stats user` your player card',
-        '`/stats character` detailed stats · `/stats head-to-head` two wrestlers',
-        '`/fnlw go:Stats` every stat for a wrestler with buttons · `/fnlw go:Standings` leaderboards, rankings, power, season, rivalries',
-        '`/standings power` power rankings · `/standings rankings` division ladders · `/standings leaderboard` top lists',
-        '`/legacy nominate` nominate someone when an award vote is open to everyone',
+        '`/character submit` a new wrestler · `/character picture` change the picture · `/character profile` the card',
+        'Edit your wrestler or their story: `/fnlw` → 🙋 My Wrestlers → ✏️ Edit / 📖 Story',
+        '`/stats wrestler:` every stat as tabs (record, recent, opponents, badges, timeline, titles, 🥊 head-to-head, 📐 tape)',
+        '`/stats player:` a player\'s card, with 🆚 to compare two players',
+        '`/standings` power rankings, leaderboards, division rankings, season and rivalries as tabs',
         '`/booking request` ask for a match · `/booking signups` signups and 🔎 Suggest opponents',
-        '`/whois` who plays a wrestler · `/directory list` the whole roster'] },
+        '`/whois` who plays a wrestler · `/directory` the whole roster',
+        'Add `show_everyone:True` to share a screen with the channel (otherwise only you see it).'] },
     titles: { label: 'Titles', emoji: '🏆', text: [
         '`/championship` every title and champion, with 🏅 Grand slam, 🎯 #1 contenders and 🔁 Rematches buttons',
         '`/championship title:` one belt with buttons: 📜 History · 🛡 Defenses · 🕰 Lineage · 📚 Records · 🎯 Contenders',
         '⚔️ **Challenge for it** on a belt asks staff to make you the #1 contender',
-        '`/legacy list` the honor roll · `/legacy view` one wrestler\'s accolades',
-        '`/stats champions` players with the most reigns'] },
+        '`/legacy` the honor roll and award votes · `/legacy wrestler:` one wrestler\'s accolades',
+        '**Award votes:** press 🙋 Nominate someone on the vote post (when it\'s open to everyone), then pick from the menu to vote'] },
     shows: { label: 'Shows & results', emoji: '📅', text: [
         '`/fnlw` → **Next Show** for the RAW and SmackDown cards',
-        '`/fnlw` → **Results** for the latest matches',
+        '`/fnlw` → **Results** for the latest matches and 🎆 PLEs',
         '`/booking signups` signups: tap the button on a signup post to say you\'re available',
-        '`/tournament bracket` · `/feud list` · `/directory injury-list`',
+        '`/tournament view` brackets · `/feud` storylines · `/directory page:Injury report` who is hurt · `/contract` contracts',
         '**Rate matches:** tap ⭐ under any result. Only the average is shown.'] },
     staff: { label: 'Staff tools', emoji: '🛠', staff: true, text: [
         '**Shows:** `/card view` shows the card with 📣 Post here and match buttons (edit, move, remove, 🎬 record, 📼 tape). 🧰 **More tools**: 🆕 New card · ⚡ Auto-build · 📨 Match requests · 📅 Schedule · 🧾 Recap · ⭐ MOTN vote · 🗑 Clear',
         '**Signups:** `/booking signups` → open, list, close, add or remove wrestlers',
-        '**Results:** `/match log` (pick the type, wrestlers, winner) · `/match undo` · `/match edit` · `/match ple event:WrestleMania` tags today\'s matches as a PLE',
-        '**Titles:** `/title match` · `vacate` · `contender` · fix history: `/title reign-add` · `reign-edit` · `reign-remove` · `add-defense`',
-        '**People:** `/character assign` · `transfer` · `unclaim` · `/team create` · `/directory injury-add`',
-        '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
-        '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
+        '**Results:** `/match log` (pick the type, wrestlers, winner; add `title:` for a title match) · 🛠 under a result = edit or undo · `/fnlw` → Results → 🎟 tags a PLE',
+        '**Titles:** `/title manage` → a belt: 🎬 log match, 🎯 contender, 🚫 vacate, 🩹 interim, 🔗 unify, 🔁 rematches, 📜 fix any reign or defense, ➕ add an old reign · `/title belt-image`',
+        '**People:** `/character assign` · 🛠 Staff on a wrestler (`/whois`): retire, restore, move division, transfer, unclaim · `/team create` · `/team view`',
+        '**Legacy:** `/legacy` → 🎖 Give accolade · 🗳 Open a vote · 🏷 Award names · `/legacy wrestler:` → 🗑 Take back',
+        '**Award votes:** `/legacy` → 🗳 Open a vote → 🙋 Nominate on the vote post → ▶️ Start voting → 🔒 Close vote (only the winner is announced)',
         '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
         '**Reported results:** players report their card matches; approve, fix or deny them in the staff room or 🛠 Staff Tools → 📝 Reported results.',
         '**Unfinished matches:** `/admin panel` → ⏳ Unfinished lists matches from past cards with no result, with a 📣 ping button. Daily pings: 📺 Channels.',
@@ -395,6 +395,8 @@ async function handle(interaction) {
     if (reports.KINDS.includes(kind)) return reports.handle(interaction, parts);
     const panels = require('./staffPanels');
     if (panels.KINDS.includes(kind)) return panels.handle(interaction, parts);
+    const screens = require('./screens');
+    if (screens.KINDS.includes(kind)) return screens.handle(interaction, parts);
     throw new UserError('That button is from an older version of the bot. Run the command again.');
 }
 

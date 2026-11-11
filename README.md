@@ -1,4 +1,4 @@
-# Wrestling Bot 3.7.0
+# Wrestling Bot 3.9.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -8,32 +8,23 @@ servers at once. Everything is saved permanently in Postgres.
 
 **Buttons (3.1):** `/fnlw` opens a home menu with a panel for every area (stats, standings, legacy, teams, tournaments, feuds, contracts, Hall of Fame, injuries, channels). Everyone can look; edit buttons only appear for admins and the staff role (and a wrestler's own player). Every result has ⭐ fan ratings and a 🛠 Staff button.
 
-**Combined commands:** `/standings` (leaderboard, rankings, season), `/directory` (roster, Hall of Fame, injuries), `/booking` (matchmaking and signups), `/championship` (look), `/title` and `/reign` (admins), `/admin newsletter` and `/admin report`. The older separate names were removed in 2.11.
+**Fewer typed commands (3.8–3.9):** most commands are one screen with buttons now. The old subcommands still exist inside the bot (the buttons run them), Discord just doesn't list them.
 
-| Area | Commands |
+| Area | Commands (since 3.9 most things are buttons; add `show_everyone:True` to share a screen) |
 |---|---|
-| **Characters** | `/character submit` `assign` `picture` `story` `list` `profile` `edit` `retire` `restore` `remove` `transfer` `unclaim` `swap-division` (picture, division, alignment, bio, finisher, signatures, catchphrase, story, entrance theme) |
-| **Tag teams** | `/team create` `list` `profile` `add-member` `remove-member` `rename` `disband` |
-| **Matches** (admins) | `/match log-singles` `log-tag2v2` `log-tag3v3` `log-triple-threat` `log-fatal4way` `log-fiveway` `log-sixman` `log-eightman` (each takes `stipulation`, `finish`, `score`), plus `undo` `edit` `rate` `recent` |
-| **Championships (everyone)** | `/championship` every title (buttons: 🏅 Grand slam, 🎯 #1 contenders, 🔁 Rematches; a menu opens a belt) · `/championship title:` one belt with 📜 History, 🛡 Defenses, 🕰 Lineage, 📚 Records, 🎯 Contenders, ⚔️ Challenge for it |
-| **Run belts (admin)** | `/title match` `belt-image` `vacate` `interim` `unify` `watch` `waive-rematch` `contender-award` `contender-revoke` |
-| **Fix the record (admin)** | `/reign add` `edit` `remove` `add-defense` `remove-defense` |
-| **Stats** | `/stats character` `user` `head-to-head` `versus` `opponents` `rivalries` `tape` `timeline` `badges` `history` |
-| **Boards** | `/standings leaderboard` (category + time period dropdowns), `/standings rankings`, `/standings season-standings` `season-recap` |
-| **Booking** | `/booking request` (players) · `/booking signups` (buttons: 🔎 Suggest opponents for everyone; staff: open, list, close, finish, add, remove) |
-| **Contracts** | `/contract offer` `view` `request` `release` `list` `free-agents` `earnings` `bonuses` (fun only: salary + win bonuses = career earnings) |
-| **Admin** | `/admin pending` · `/admin panel` (buttons: channels, rules, staff role, history channel, newsletter, staff report, monthly awards, audit log, settings, backups) · `/admin data` (spreadsheet import) |
-| **Match cards** (admins) | `/card view` (the card with buttons; 🧰 More tools: new, auto-build, match requests, schedule, upcoming, recap, MOTN vote, auto recap, clear) · `/card add` (RAW red / SmackDown blue; one card per brand, up to 15 matches per division) |
-| **Injuries** | `/directory injury-add` `injury-clear` `injury-list` (out until a return date; auto cards skip them) |
-| **Seasons** | `/standings season-recap` `season-standings` (calendar-year view; nothing resets) |
-| **Roster** | `/directory roster` flip through a division A to Z with profile cards (Prev / Next buttons) |
-| **Feuds** | `/feud start` `log` `view` `list` `heat` `end` (timeline + heat meter) |
-| **Tournaments** | `/tournament create` `add` `remove` `start` `bracket` `list` `advance` `cancel` |
-| **Newsletter** (admins) | `/admin newsletter add` `list` `remove` `preview` `post` |
-| **Factions** | `/faction create` `add-member` `remove-member` `disband` `list` `profile` (3 to 8 wrestlers, shared record, separate from tag teams) |
-| **Hall of Fame** | `/directory hof-induct` `hof-remove` `hof-list` `hof-view` |
-| **Help** | `/help` (everyone) and `/help command:<name>` |
-| **Admin** | `/admin pending` `import` `import-template` `set-admin-channel` `set-newsletter-channel` `deadlines` `rematches` `set-timezone` `set-monthly-channel` `monthly-awards` `backup` `milestones` `set-pending-channel` `set-matches-channel` `set-cooldown` `set-streak-threshold` `settings` `audit` |
+| **Home** | `/fnlw` home menu · `/whois` who plays who · `/help` |
+| **Characters** | `/character submit` `profile` `picture` `assign` (staff). Edit and story: `/fnlw` → 🙋 My Wrestlers. Retire, restore, move division, transfer, unclaim, delete: 🛠 Staff on a wrestler (`/whois`) |
+| **Stats & boards** | `/stats wrestler:` (tabs: record, recent, opponents, badges, timeline, titles, head-to-head, tape) or `/stats player:` (🆚 compare) · `/standings board:` power, leaderboards, rankings, season, rivalries |
+| **Championships** | `/championship` every title (🏅 Grand slam, 🎯 contenders, 🔁 rematches) · `/championship title:` one belt (history, defenses, lineage, records, ⚔️ challenge for it) |
+| **Run belts** (staff) | `/title manage` (log match, contender, vacate, interim, unify, rematches, 📜 fix reigns and defenses with forms, ➕ add old reigns) · `/title belt-image` |
+| **Legacy** | `/legacy` honor roll and votes (staff: 🎖 give, 🗳 open a vote, 🏷 award names) · `/legacy wrestler:` (staff: 🗑 take back). Vote posts have 🙋 Nominate, ▶️ Start voting, 🔒 Close |
+| **Matches** | `/match report` (players) · `/match log` (staff). Edit / undo / rate: buttons under each result. PLEs: `/fnlw` → Results |
+| **Match cards** (staff) | `/card view` (🧰 More tools: new, auto-build, match requests, schedule, upcoming, recap, MOTN vote, clear) · `/card add` |
+| **Booking** | `/booking request` · `/booking signups` (🔎 Suggest opponents; staff: open, list, close, finish, add, remove) |
+| **Teams & tournaments** | `/team create` · `/team view` · `/tournament create` · `/tournament view` (staff buttons on each screen) |
+| **Feuds & contracts** | `/feud` (`feud:` to open one) · `/contract` (`wrestler:` to open one; staff: 📨 offer, 💵 bonuses) |
+| **Directory** | `/directory page:` roster list, roster cards, Hall of Fame, injury report |
+| **Admin** | `/admin pending` · `/admin panel` (channels, rules, staff role, history channel, newsletter, staff report, monthly awards, audit log, settings, backups) · `/admin data` (spreadsheet import) |
 
 ### How the rules work
 - **Stipulations & finishes**: optional on every match. They only decorate and record; they don't change who wins or the belts.
