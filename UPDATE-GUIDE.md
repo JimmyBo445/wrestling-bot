@@ -1,13 +1,10 @@
-# How to install Version 3.5.0 (Mac, step by step)
+# How to install Version 3.6.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.5.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.6.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**Tell your admins** (copy this):
-> Bot update: fewer commands. `/match log` replaces the old log-singles etc. `/faction` is now part of `/team`
-> (pick Faction when creating). `/standings season`, `/title contender`, `/booking signup-edit` and `/admin data`
-> replace pairs of old commands. Staff also get buttons on the signup post (Close / Mark done), on vote posts
-> (Start / Close), on bracket posts (Decide a match) and a 🛠 Staff button on any wrestler.
+**What changes:** unfinished match pings go out around 1 pm instead of noon, and timed posts now land
+right at the top of the hour.
 
 ---
 
@@ -25,14 +22,15 @@ already saved in git. Nothing changes on Discord or Railway until you upload it.
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
 The log should say `Slash commands registered.` (no database change this time).
 
-## Step 3: Check it (in Discord, press Cmd + R first)
+## Step 3: Set your time zone (once, in Discord)
 
-1. Type `/match`: you should only see log, ple, rate, undo, edit, recent.
-2. Type `/faction`: it's gone. `/team create` now has a **kind** choice.
-3. Open `/fnlw` → 🙋 My Wrestlers (or look up anyone with the roster) → **🛠 Staff** on a wrestler.
-4. Your next signup post shows **🔒 Close (staff)**. Ask a regular member to tap it: they should be told no.
+`/admin rules timezone:America/Chicago`
 
-If Discord still shows an old command after a few minutes, fully quit and reopen Discord.
+The bot was still on UTC, which is why noon showed up as 6:40 am for you. After this, the pings come
+around 1 pm Central. Your other timed posts move to Central time too: the tonight's-card reminder at noon,
+the newsletter and staff report Monday 9 am, power rankings Monday 10 am.
+
+Check it with `/admin settings` (Time zone should say America/Chicago).
 
 ---
 

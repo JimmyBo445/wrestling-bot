@@ -82,8 +82,8 @@ const guildRow = async () => (await q(`select * from guilds where guild_id=$1`, 
         assert.strictEqual((await guildRow()).reminders_channel_id, 'remch');
 
         before = sent.length;
-        await U.runUnfinishedReminders(client, await guildRow(), day(0, 9));
-        assert.strictEqual(sent.length, before, 'not before noon');
+        await U.runUnfinishedReminders(client, await guildRow(), day(0, 12));
+        assert.strictEqual(sent.length, before, 'not before 1 pm');
         const counts = [];
         for (let n = 0; n < 8; n++) {
             const b = sent.length;

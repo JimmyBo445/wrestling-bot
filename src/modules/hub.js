@@ -661,7 +661,7 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
                 `Oldest: **${late(Math.max(...list.map((m) => m.days_late)))}** · players to ping: **${new Set(list.flatMap((m) => m.players)).size}**`].join('\n')
             : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
         const embed = new EmbedBuilder().setColor(list.length ? 0xE67E22 : 0x2ECC71).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(summary)
-            .setFooter({ text: `${auto ? `Daily pings: on (from noon, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (/card schedule) counts from the day it was made.` });
+            .setFooter({ text: `${auto ? `Daily pings: on (around 1 pm, up to ${U.MAX_PINGS} days in a row per match)` : 'Daily pings: off. Turn them on in 📺 Channels → Unfinished match pings.'} · A card with no show date (/card schedule) counts from the day it was made.` });
         // one field per card; a long card continues in the next field
         let fields = 0;
         for (const sec of secs) {

@@ -1,6 +1,6 @@
 // Unfinished matches (3.2): matches on a RAW / SmackDown card whose show date has passed
 // but that have no result recorded yet. A card with no show date (/card schedule) counts from the day it was made. Staff can list them and ping the players any time;
-// with a reminders channel set, the bot also pings them once a day from noon (server time),
+// with a reminders channel set, the bot also pings them once a day from 1 pm (server time),
 // starting the day after the show, for up to MAX_PINGS days in a row.
 const { pool } = require('../db/pool');
 const { MATCH_CONFIG, matchLabel } = require('./constants');
@@ -8,6 +8,7 @@ const { DIVISION_LABELS } = require('./discordHelpers');
 const { localNow } = require('./titleWatch');
 
 const MAX_PINGS = 6;
+const PING_HOUR = 13; // 1 pm in the server's time zone (/admin rules timezone:)
 const BRAND = { raw: 'RAW', smackdown: 'SmackDown' };
 const mdy = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return `${m}/${d}/${String(y).slice(-2)}`; };
 
@@ -125,7 +126,7 @@ async function pingNow(channel, list) {
 async function runUnfinishedReminders(client, g, now = new Date()) {
     if (!g.reminders_channel_id) return;
     const { date, hour } = localNow(g.tz, now);
-    if (hour < 12 || g.unfinished_last === date || String(g.unfinished_last || '').slice(0, 10) === date) return;
+    if (hour < PING_HOUR || g.unfinished_last === date || String(g.unfinished_last || '').slice(0, 10) === date) return;
     const { rowCount } = await pool.query(`UPDATE guilds SET unfinished_last = $1::date WHERE guild_id = $2 AND unfinished_last IS DISTINCT FROM $1::date`, [date, g.guild_id]);
     if (!rowCount) return; // another tick already did today
     const list = (await listUnfinished(g.guild_id, date)).filter((m) => m.players.length);

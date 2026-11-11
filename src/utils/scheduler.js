@@ -120,8 +120,12 @@ async function tick(client) {
 }
 
 function start(client) {
-    setTimeout(() => tick(client), 60 * 1000);
-    setInterval(() => tick(client), 60 * 60 * 1000);
+    setTimeout(() => tick(client), 60 * 1000); // catch up shortly after a restart
+    // 3.6: then run right after the top of every hour (1:00, 2:00 …) instead of whenever the bot
+    // happened to start, so timed posts land close to their hour
+    const HOUR = 60 * 60 * 1000;
+    const wait = HOUR - (Date.now() % HOUR) + 30 * 1000;
+    setTimeout(() => { tick(client); setInterval(() => tick(client), HOUR); }, wait);
 }
 
 module.exports = { tick, start };

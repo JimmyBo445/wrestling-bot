@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.6.0 — Unfinished match pings at 1 pm
+- The daily unfinished match pings now go out around **1 pm** (was noon) in the server's time zone.
+- The bot's timed jobs now run just after the top of every hour (1:00, 2:00 …) instead of whenever the bot last restarted, so posts land close to their hour (the 6:40 was from a restart at :40).
+- The server's time zone was still **UTC**, which is why noon showed up as 6 am in Chicago. Set it once with `/admin rules timezone:America/Chicago`. That also puts the other timed posts on Central time: tonight's-card reminder (noon), newsletter and staff report (Monday 9 am), power rankings (Monday 10 am), and the date the bot counts as "today".
+- No database change. Still 18 commands.
+
 ## 3.5.0 — Fewer commands, more buttons
 **Renamed / merged (what to type now):**
 | Before | Now |
