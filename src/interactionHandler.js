@@ -41,6 +41,7 @@ async function handleInteraction(client, interaction) {
         // staff role members get the same bot powers as admins (checked on every interaction)
         try { if (!interaction.isAutocomplete() && await memberIsStaff(interaction)) interaction.isStaff = true; } catch (_) { /* no staff role */ }
 
+        require('./utils/usage').record(interaction); // 3.10: counts only, for the staff usage report
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;

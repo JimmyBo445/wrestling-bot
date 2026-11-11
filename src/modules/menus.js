@@ -234,7 +234,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             .addOptions(chars.slice(0, 25).map((c) => ({ label: clip(c.name, 100), value: String(c.id), description: clip(`${DIVISION_LABELS[c.division]}${c.status === 'retired' ? ' · retired' : ''}`, 100), default: String(c.id) === String(picked?.id) })))));
         const focus = picked || chars[0];
         const charBtns = [btn(`ui:w:p:${focus.id}`, `🖼 ${clip(focus.name, 30)}'s card`), btn(`ui:w:s:${focus.id}`, '📊 Stats'), btn(`ui:w:t:${focus.id}`, '🏆 Title history')];
-        if (mine) charBtns.push(btn('ui:rp:h', `📝 Report a result${reportable ? ` (${reportable})` : ''}`, reportable ? ButtonStyle.Primary : ButtonStyle.Secondary)); // 3.7
+        if (mine) charBtns.push(btn('ui:rp:h', `📝 Report a result${reportable ? ` (${reportable})` : ''}`, reportable ? ButtonStyle.Primary : ButtonStyle.Secondary), btn('ui:mr:h', '📨 My requests')); // 3.7, 3.10
         components.push(row(...charBtns));
         // 3.1: the owner (or staff) can edit right here. Nobody else ever sees these buttons.
         if (actions && (String(ownerId) === String(interaction.user.id) || isAdmin(interaction))) {
@@ -243,6 +243,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             components.push(row(...acts));
         }
     }
+    if (mine && !chars.length) components.push(row(btn('ui:mk:h', '🆕 Make a wrestler', ButtonStyle.Success), btn('ui:mr:h', '📨 My requests')));
     return { embeds: [embed], components, allowedMentions: NOPING };
 }
 
@@ -278,6 +279,7 @@ const HELP = {
         '**Everything in one place:** `/fnlw` opens the home menu with buttons. `/fnlw go:` jumps to one section.',
         '**Played your card match?** `/fnlw` → 🙋 My Wrestlers → 📝 Report a result, or `/match report` (add a screenshot there). Staff approve it.',
         '**Your wrestlers:** `/fnlw` → 🙋 My Wrestlers has ✏️ Edit, 📖 Story, 🖼 Picture and 📝 Contract buttons.',
+        '**Waiting on staff?** 🙋 My Wrestlers → 📨 My requests shows every request you sent, and lets you cancel one.',
         '**Who plays who:** `/whois` a wrestler, or `/directory` for the whole roster.'] },
     players: { label: 'Wrestlers & stats', emoji: '🤼', text: [
         '`/character submit` a new wrestler · `/character picture` change the picture · `/character profile` the card',
@@ -312,6 +314,7 @@ const HELP = {
         '**Reported results:** players report their card matches; approve, fix or deny them in the staff room or 🛠 Staff Tools → 📝 Reported results.',
         '**Unfinished matches:** `/admin panel` → ⏳ Unfinished lists matches from past cards with no result, with a 📣 ping button. Daily pings: 📺 Channels.',
         '**Approvals:** `/admin pending`',
+        '**Menu post:** `/admin panel` → 📌 Menu post puts a button menu for everyone in a channel (it stays at the bottom). **📈 Bot usage** shows what people use (counts only; also in the Monday staff report).',
         '**Everything else:** `/admin panel` → 📺 Channels · 📜 Rules · 👮 Staff role · 🏆 History channel · 📰 Newsletter · 📊 Staff report · 🏅 Monthly awards · 📒 Audit log · 💾 Backups. Spreadsheet import: `/admin data`.'] }
 };
 
@@ -397,6 +400,8 @@ async function handle(interaction) {
     if (panels.KINDS.includes(kind)) return panels.handle(interaction, parts);
     const screens = require('./screens');
     if (screens.KINDS.includes(kind)) return screens.handle(interaction, parts);
+    const community = require('./community');
+    if (community.KINDS.includes(kind)) return community.handle(interaction, parts);
     throw new UserError('That button is from an older version of the bot. Run the command again.');
 }
 

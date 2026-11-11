@@ -7,7 +7,8 @@ const { ensureGuild } = require('./utils/ensureGuild');
 const { handleInteraction } = require('./interactionHandler');
 const { registerCommands } = require('./registerCommands');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+// GuildMessages (3.10): lets the menu post move back to the bottom when people chat. It never reads message text.
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages] });
 client.commands = new Collection();
 
 const commandsPath = path.join(__dirname, 'commands');
@@ -21,6 +22,7 @@ client.once(Events.ClientReady, async (c) => {
     require('./utils/scheduler').start(c);
     require('./utils/historyChannel').setClient(c);
     require('./utils/signupBooked').setClient(c);
+    require('./utils/menuPost').load(c).catch((err) => console.error('Menu post startup failed:', err.message));
     if (process.env.AUTO_DEPLOY_COMMANDS !== 'false') {
         try {
             await registerCommands({
@@ -45,6 +47,8 @@ client.on(Events.GuildCreate, async (guild) => {
 });
 
 client.on(Events.InteractionCreate, (interaction) => handleInteraction(client, interaction));
+client.on(Events.MessageCreate, (message) => { try { require('./utils/menuPost').onMessage(client, message); } catch (_) { /* never matters */ } });
+client.on(Events.MessageDelete, (message) => { try { require('./utils/menuPost').onDelete(client, message); } catch (_) { /* never matters */ } });
 
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 

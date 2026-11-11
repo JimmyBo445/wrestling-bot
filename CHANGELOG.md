@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.10.0 — Menu post, My requests, bot usage
+- **📌 Menu post** (`/admin panel` → 📌 Menu post → pick a channel): one post with big buttons for everyone — 🆕 Make a wrestler, 🙋 My wrestlers, 📝 Report a result, 📨 My requests, 🏆 Champions, 📅 Next show, 📰 Results, 📋 Roster, 📊 Stats, 📈 Standings, 🎖 Legacy, ❓ Help. Every button answers only the person who pressed it. It **stays at the bottom**: about 10 seconds after anyone posts in that channel, the bot moves it back down. If it's deleted (or went missing while the bot was offline), it comes back. 🔄 Post it again, 🔕 Turn it off and 👁 Preview buttons too.
+- **🆕 Make a wrestler** from the menu: pick a division, fill a short form, it goes to staff like `/character submit` (picture by link; file uploads still need `/character submit`).
+- **📨 My requests** (menu post, or 🙋 My Wrestlers): new wrestlers and claims, match requests (and whether they're on a card), title challenges and reported results, each with its status. Waiting ones always show; finished ones for 30 days. **✖ Cancel** a waiting one: its staff card says "Cancelled by …" and loses its buttons, so staff can't approve it by accident. A cancelled new wrestler is marked denied.
+- **📈 Bot usage** (`/admin panel` → 📈 Bot usage, 7 / 30 / 90 days, and a section in the Monday staff report): uses per command, button screen and menu button, with how many different people. It also lists commands nobody used. Counts only, it never shows who used what. Kept for about four months.
+- The bot now asks Discord to tell it when messages are posted (so the menu can move down). It never reads what people write.
+- Database change: migration 025. Still 18 commands.
+
 ## 3.9.0 — Every other command is mostly buttons too
 | Command | What you type now | What became buttons |
 |---|---|---|

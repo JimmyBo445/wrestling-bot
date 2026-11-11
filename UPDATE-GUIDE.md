@@ -1,25 +1,12 @@
-# How to install Versions 3.8.0 + 3.9.0 (Mac, step by step)
+# How to install Versions 3.8 → 3.10 (Mac, step by step)
 
-Both versions are already saved in git in your **wrestling-bot** folder in Downloads.
-Nothing changes on Discord or Railway until you upload them (one `git push` uploads both,
-plus 3.7 if you haven't pushed that yet).
-
-**What changed, in one line:** almost every command now shows only one or two typed parts.
-Everything else is a button on the screen it opens.
+One `git push` uploads everything that's waiting (3.7 report results, 3.8 + 3.9 fewer commands,
+3.10 menu post / My requests / bot usage).
 
 **Tell your members** (copy this):
-> The bot got simpler! Try `/stats wrestler:`, `/standings`, `/legacy`, `/championship`, `/directory`,
-> `/feud` and `/contract`. Each one opens a screen with buttons. Only you see it, unless you add
-> `show_everyone:True`. Edit your wrestler in `/fnlw` → 🙋 My Wrestlers. Award votes now have a
-> 🙋 Nominate button right on the post.
-
-**Cheat sheet for staff** (copy this into your staff room):
-> • Settings, rules, staff role, newsletter, backups → `/admin panel` · approvals → `/admin pending`
-> • Cards → `/card view` (🧰 More tools) · one match → `/card add` · results → `/match log`
-> • Belts → `/title manage` (log match, contender, vacate, interim, fix any reign, add old reigns)
-> • Retire / transfer / unclaim a wrestler → `/whois` → 🛠 Staff
-> • Accolades and votes → `/legacy` · Hall of Fame and injuries → `/directory`
-> • Teams and tournaments → `/team view`, `/tournament view` · PLE tags → `/fnlw` → Results
+> New: check out #start-here (or wherever you put the menu). Every button there answers only you:
+> make a wrestler, see your wrestlers, report a result, and **📨 My requests** to see what's waiting
+> for staff (you can cancel a request there too).
 
 ---
 
@@ -35,15 +22,20 @@ Everything else is a button on the screen it opens.
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Slash commands registered.` (if you're also uploading 3.7, it says
-`Applying migration 024_match_reports.sql` first).
+The log should say `Applying migration 025_menu_usage.sql` (and `024_match_reports.sql` if 3.7 wasn't
+uploaded yet) and `Slash commands registered.`
 
-## Step 3: Check it (in Discord, press Cmd + R first so it loads the new command lists)
+Nothing to change in the Discord Developer Portal: the bot now listens for "a message was posted"
+(so the menu can move down), which doesn't need any special switch, and it never reads what people write.
 
-1. Type `/stats` → you should only see **wrestler**, **player** and **show_everyone**. Pick a wrestler.
-2. Type `/title` → only **manage** and **belt-image**. Run `/title manage`, pick a belt, open 📜 Fix a reign.
-3. Type `/admin panel` and `/card view` → 🧰 More tools.
-4. Run `/legacy` → staff see 🗳 Open a vote and 🏷 Award names.
+## Step 3: Set up the menu post (in Discord, press Cmd + R first)
+
+1. Make a channel for it, e.g. **#start-here**. The bot needs to be able to **see** the channel,
+   **send messages**, **embed links** and **read message history** there.
+2. `/admin panel` → **📌 Menu post** → pick the channel. The menu appears there.
+3. Press a few of its buttons yourself to check them.
+4. Optional: `/admin panel` → **📈 Bot usage** shows what people use. It starts counting from now,
+   so give it a week. It's also added to the Monday staff report.
 
 ---
 
@@ -51,8 +43,8 @@ The log should say `Slash commands registered.` (if you're also uploading 3.7, i
 
 | What you see | What to do |
 |---|---|
-| Discord still shows the old long lists | Press Cmd + R. If it's still there after a few minutes, fully quit Discord and reopen it. |
+| "I couldn't post in #channel" | Channel settings → Permissions → the bot's role: allow View Channel, Send Messages, Embed Links, Read Message History. |
+| The menu doesn't move to the bottom | Same permissions as above, then 📌 Menu post → 🔄 Post it again now. |
+| Discord still shows the old long command lists | Press Cmd + R. If it's still there after a few minutes, fully quit Discord and reopen it. |
 | `Authentication failed` | The token is wrong or expired. Make a new one at https://github.com/settings/tokens (classic, tick **repo**). |
-| `git push` says "rejected" | Tell me the exact message. |
 | Railway deploy shows "Failed" | Copy the last ~20 lines of the log (no tokens or passwords) and send them to me. |
-| "⚠️ Bot problem" in the staff room | Copy it and send it to me. |

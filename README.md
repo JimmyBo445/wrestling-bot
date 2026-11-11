@@ -1,4 +1,4 @@
-# Wrestling Bot 3.9.0
+# Wrestling Bot 3.10.0
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many
@@ -24,7 +24,8 @@ servers at once. Everything is saved permanently in Postgres.
 | **Teams & tournaments** | `/team create` · `/team view` · `/tournament create` · `/tournament view` (staff buttons on each screen) |
 | **Feuds & contracts** | `/feud` (`feud:` to open one) · `/contract` (`wrestler:` to open one; staff: 📨 offer, 💵 bonuses) |
 | **Directory** | `/directory page:` roster list, roster cards, Hall of Fame, injury report |
-| **Admin** | `/admin pending` · `/admin panel` (channels, rules, staff role, history channel, newsletter, staff report, monthly awards, audit log, settings, backups) · `/admin data` (spreadsheet import) |
+| **Admin** | `/admin pending` · `/admin panel` (channels, rules, staff role, history channel, newsletter, staff report, monthly awards, audit log, settings, backups, 📌 menu post, 📈 bot usage) · `/admin data` (spreadsheet import) |
+| **For members** | 📌 Menu post (buttons for everything, stays at the bottom of its channel) · 📨 My requests (see and cancel what's waiting for staff) |
 
 ### How the rules work
 - **Stipulations & finishes**: optional on every match. They only decorate and record; they don't change who wins or the belts.

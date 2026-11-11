@@ -84,7 +84,7 @@ async function adminHome(interaction, notice = null) {
                 btn('ui:uf:h', `⏳ Unfinished (${unfinished})`, unfinished ? D : S)),
             row(btn('ui:ch:h', '📺 Channels'), btn('ui:ad:ru', '📜 Rules'), btn('ui:ad:sr', '👮 Staff role'), btn('ui:ad:hi', '🏆 History channel'), btn('ui:ad:st', '⚙️ All settings')),
             row(btn('ui:ad:nl', '📰 Newsletter'), btn('ui:ad:rp', '📊 Staff report'), btn('ui:ad:ma', '🏅 Monthly awards'), btn('ui:ad:au', '📒 Audit log'), btn('ui:ad:dt', '💾 Backup & import')),
-            row(btn('ui:h:staff', '🛠 Staff Tools'), btn('ui:h:home', '🏠 Home'))
+            row(btn('ui:mp:h', '📌 Menu post'), btn('ui:us:7', '📈 Bot usage'), btn('ui:h:staff', '🛠 Staff Tools'), btn('ui:h:home', '🏠 Home'))
         ] }, notice);
     });
 }

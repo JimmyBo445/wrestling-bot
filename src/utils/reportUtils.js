@@ -64,6 +64,7 @@ async function buildReport(guildId, guildName) {
     if (pend[0].n) todo.push(`${pend[0].n} request${pend[0].n === 1 ? '' : 's'} waiting in \`/admin pending\``);
     if (open[0]) todo.push(open[0].status === 'open' ? `signup **${open[0].title}** is still open` : `signup **${open[0].title}** is closed but still guiding booking (run \`/booking signups\` → ✅ Mark it finished when you've finished booking)`);
     if (todo.length) embed.addFields({ name: '📌 To do', value: todo.map((t) => `• ${t}`).join('\n') });
+    try { embed.addFields(await require('./usage').reportField(guildId)); } catch (_) { /* usage is optional */ }
     return embed;
 }
 
@@ -75,6 +76,7 @@ async function runWeeklyReport(client, g) {
     const key = weekKey();
     const { rowCount } = await pool.query(`UPDATE guilds SET report_last = $1 WHERE guild_id = $2 AND report_last IS DISTINCT FROM $1`, [key, g.guild_id]);
     if (!rowCount) return;
+    await require('./usage').prune();
     const ch = await client.channels.fetch(g.admin_channel_id).catch(() => null);
     if (!ch?.isTextBased()) return;
     const guild = client.guilds?.cache?.get(g.guild_id);

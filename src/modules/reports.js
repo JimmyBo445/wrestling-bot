@@ -433,4 +433,4 @@ async function handle(interaction, parts) {
     throw new UserError('That button is from an older version of the bot. Run `/fnlw` again.');
 }
 
-module.exports = { KINDS, handle, reportable, outcomes, vsText, where, submitReport, parseFinish, playerPanel, staffList, pendingCount, approve, deny };
+module.exports = { refreshPost, KINDS, handle, reportable, outcomes, vsText, where, submitReport, parseFinish, playerPanel, staffList, pendingCount, approve, deny };
