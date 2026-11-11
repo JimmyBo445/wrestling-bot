@@ -33,7 +33,7 @@ const BLURB = {
     signup: 'Show signups: players click to say who is available',
     contract: 'Contracts and career earnings (just for fun)',
     report: 'Staff report: idle wrestlers, thin divisions, stale titles',
-    match: 'Log, undo and edit match results',
+    match: 'Report your card match result (staff: log, undo and edit results)',
     card: 'Build and post the RAW / SmackDown show cards, one picture per division',
     season: 'Yearly standings and a season recap picture',
     injury: 'Injury report: who is out and until when',

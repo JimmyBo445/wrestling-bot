@@ -113,6 +113,7 @@ async function staffPayload(interaction) {
     const guildId = interaction.guildId;
     const { rows: p } = await pool.query(`SELECT COUNT(*)::int AS n FROM pending_requests WHERE guild_id = $1 AND status = 'pending'`, [guildId]);
     const { rows: tzr } = await pool.query(`SELECT tz FROM guilds WHERE guild_id = $1`, [guildId]);
+    const reported = await require('./reports').pendingCount(guildId);
     const unfinished = (await require('../utils/unfinished').listUnfinished(guildId, require('../utils/titleWatch').localNow(tzr[0]?.tz).date)).length;
     const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle('🛠 Staff Tools').setDescription([
         `**Waiting for approval:** ${p[0].n}`,
@@ -129,7 +130,8 @@ async function staffPayload(interaction) {
         components: [row(
             btn('ui:h:pending', `📥 Approvals (${p[0].n})`, ButtonStyle.Primary, p[0].n === 0),
             btn('ui:h:card:raw', '🟥 RAW card'), btn('ui:h:card:smackdown', '🟦 SmackDown card'), btn('ui:h:watch', '⏱ Title watch'), btn('ui:ch:h', '📺 Channels')),
-            row(btn('ui:uf:h', `⏳ Unfinished matches (${unfinished})`, unfinished ? ButtonStyle.Danger : ButtonStyle.Secondary))]
+            row(btn('ui:uf:h', `⏳ Unfinished matches (${unfinished})`, unfinished ? ButtonStyle.Danger : ButtonStyle.Secondary),
+                btn('ui:rr:list', `📝 Reported results (${reported})`, reported ? ButtonStyle.Danger : ButtonStyle.Secondary))]
     };
 }
 
@@ -183,6 +185,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
     const { requireCharacter } = require('../utils/characterUtils');
     const { characterSummary } = require('../utils/statsQueries');
     const guildId = interaction.guildId;
+    let reportable = 0; // 3.7: card matches this player can report
     let picked = null;
     if (characterId) {
         picked = await requireCharacter(guildId, characterId, { statuses: ['approved', 'retired'] });
@@ -219,7 +222,8 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
         const { rows: tzr } = await pool.query(`SELECT tz FROM guilds WHERE guild_id = $1`, [guildId]);
         const U = require('../utils/unfinished');
         const owed = await U.unfinishedFor(guildId, require('../utils/titleWatch').localNow(tzr[0]?.tz).date, interaction.user.id);
-        if (owed.length) embed.addFields({ name: `⏳ You have ${owed.length} unfinished match${owed.length === 1 ? '' : 'es'}`, value: clip(`${owed.map((m) => U.matchLine(m)).join('\n')}\nPlay ${owed.length === 1 ? 'it' : 'them'}, then tell staff so the result gets recorded.`, 1024) });
+        if (owed.length) embed.addFields({ name: `⏳ You have ${owed.length} unfinished match${owed.length === 1 ? '' : 'es'}`, value: clip(`${owed.map((m) => U.matchLine(m)).join('\n')}\nPlay ${owed.length === 1 ? 'it' : 'them'}, then tap **📝 Report a result** below.`, 1024) });
+        reportable = (await require('./reports').reportable(guildId, interaction.user.id)).length;
     }
     embed.setFooter({ text: 'Record is with this player · pick a wrestler below for their card, stats and titles' });
 
@@ -228,7 +232,9 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
         components.push(row(new StringSelectMenuBuilder().setCustomId('ui:w:c').setPlaceholder('Pick a wrestler')
             .addOptions(chars.slice(0, 25).map((c) => ({ label: clip(c.name, 100), value: String(c.id), description: clip(`${DIVISION_LABELS[c.division]}${c.status === 'retired' ? ' · retired' : ''}`, 100), default: String(c.id) === String(picked?.id) })))));
         const focus = picked || chars[0];
-        components.push(row(btn(`ui:w:p:${focus.id}`, `🖼 ${clip(focus.name, 30)}'s card`), btn(`ui:w:s:${focus.id}`, '📊 Stats'), btn(`ui:w:t:${focus.id}`, '🏆 Title history')));
+        const charBtns = [btn(`ui:w:p:${focus.id}`, `🖼 ${clip(focus.name, 30)}'s card`), btn(`ui:w:s:${focus.id}`, '📊 Stats'), btn(`ui:w:t:${focus.id}`, '🏆 Title history')];
+        if (mine) charBtns.push(btn('ui:rp:h', `📝 Report a result${reportable ? ` (${reportable})` : ''}`, reportable ? ButtonStyle.Primary : ButtonStyle.Secondary)); // 3.7
+        components.push(row(...charBtns));
         // 3.1: the owner (or staff) can edit right here. Nobody else ever sees these buttons.
         if (actions && (String(ownerId) === String(interaction.user.id) || isAdmin(interaction))) {
             const acts = [btn(`ui:mw:e:${focus.id}`, '✏️ Edit details'), btn(`ui:mw:s:${focus.id}`, '📖 Story & moves'), btn(`ui:mw:p:${focus.id}`, '🖼 Picture'), btn(`ui:k:v:${focus.id}`, '📝 Contract')];
@@ -269,6 +275,7 @@ const HELP = {
         '**New here?** Submit a wrestler with `/character submit`. An admin approves it.',
         '**Your card:** `/character profile` shows your wrestler\'s card.',
         '**Everything in one place:** `/fnlw` opens the home menu with buttons. `/fnlw go:` jumps to one section.',
+        '**Played your card match?** `/fnlw` → 🙋 My Wrestlers → 📝 Report a result, or `/match report` (add a screenshot there). Staff approve it.',
         '**Your wrestlers:** `/fnlw` → 🙋 My Wrestlers has ✏️ Edit, 📖 Story, 🖼 Picture and 📝 Contract buttons.',
         '**Who plays who:** `/whois` a wrestler, or `/directory list` for the whole roster.'] },
     players: { label: 'Wrestlers & stats', emoji: '🤼', text: [
@@ -301,6 +308,7 @@ const HELP = {
         '**Legacy:** `/legacy award` (MITB, Rumble, MVP, year-end) · `/legacy remove` · `/legacy award-names`',
         '**Award votes:** `/legacy vote-open` → `/legacy nominate` → `/legacy vote-start` → `/legacy vote-close` (only the winner is announced)',
         '**Buttons:** every `/fnlw` section shows staff-only edit buttons (add/remove members, decide bracket matches, give accolades, injuries, Hall of Fame, feud moments, contracts). 🛠 under a result = edit or undo it.',
+        '**Reported results:** players report their card matches; approve, fix or deny them in the staff room or 🛠 Staff Tools → 📝 Reported results.',
         '**Unfinished matches:** `/admin unfinished` (or 🛠 Staff Tools → ⏳) lists matches from past cards with no result, with a 📣 ping button. Daily pings: `/admin channels reminders:`.',
         '**Approvals:** `/admin pending`',
         '**Settings:** `/admin channels` (or 🛠 Staff Tools → 📺 Channels) · `/admin rules` · `/admin staff-role` · `/admin history` · `/admin settings`'] }
@@ -382,6 +390,8 @@ async function handle(interaction) {
     }
     const hub = require('./hub');
     if (hub.KINDS.includes(kind)) return hub.handle(interaction, parts);
+    const reports = require('./reports');
+    if (reports.KINDS.includes(kind)) return reports.handle(interaction, parts);
     throw new UserError('That button is from an older version of the bot. Run the command again.');
 }
 

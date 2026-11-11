@@ -224,7 +224,7 @@ const log = (a, b, extra = {}) => run('match', 'log-singles', { participant1: C[
         const a = await run('help', null, {}, ADM);
         assert.match(text(a), /`report`/); assert.match(text(a), /\/contract:/);
         const p = await run('help', null, {}, P('u1'));
-        assert.match(text(p), /\/contract:/); assert.ok(!/`report`/.test(text(p)), text(p));
+        assert.match(text(p), /\/contract:/); assert.ok(!/\/admin/.test(text(p)), text(p)); // (players do see /match `report` since 3.7)
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);

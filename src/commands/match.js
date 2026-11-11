@@ -44,13 +44,15 @@ function buildLogSubcommand(sub, key, config) {
 
 const data = new SlashCommandBuilder()
     .setName('match')
-    .setDescription('Log match results (admins)')
-    .setDMPermission(false)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+    .setDescription('Match results: players report theirs, staff log, edit and undo')
+    .setDMPermission(false);
+// 3.7: /match is visible to everyone so players can use /match report. Every other subcommand is
+// [Admin] and still checks for admin / staff role before doing anything.
+void PermissionFlagsBits;
 
 // 3.0: one command for every match type (the old log-... commands were retired in 3.5).
 data.addSubcommand((sub) => {
-    sub.setName('log').setDescription('Log any match: pick the type, the wrestlers in order, then who won')
+    sub.setName('log').setDescription('[Admin] Log any match: pick the type, the wrestlers in order, then who won')
         .addStringOption((o) => o.setName('type').setDescription('Match type').setRequired(true)
             .addChoices(...Object.entries(MATCH_CONFIG).map(([value, c]) => ({ name: c.label, value }))))
         .addStringOption((o) => o.setName('wrestler1').setDescription('Wrestler 1 (tag: Team 1 first, then Team 2)').setRequired(true).setAutocomplete(true))
@@ -68,17 +70,17 @@ data.addSubcommand((sub) => {
 // 3.5: the old /match log-singles, log-tag2v2, … were retired (use /match log). They're no longer
 // registered with Discord; the code below still understands them, so nothing half-finished breaks.
 void buildLogSubcommand;
-data.addSubcommand((sub) => sub.setName('ple').setDescription('Mark matches as part of a PLE (by date or one match), or see PLE history')
+data.addSubcommand((sub) => sub.setName('ple').setDescription('[Admin] Mark matches as part of a PLE (by date or one match), or see PLE history')
     .addStringOption((o) => o.setName('event').setDescription('PLE name, e.g. WrestleMania (the year is added for you)').setRequired(false).setMaxLength(40).setAutocomplete(true))
     .addStringOption((o) => o.setName('date').setDescription('Tag every match logged that day, YYYY-MM-DD (default: today)').setRequired(false))
     .addIntegerOption((o) => o.setName('match_id').setDescription('Or tag just this match').setRequired(false).setAutocomplete(true))
     .addBooleanOption((o) => o.setName('clear').setDescription('Remove the PLE tag instead').setRequired(false)));
-data.addSubcommand((sub) => sub.setName('rate').setDescription('Give a logged match 1 to 5 stars (used for Wrestler of the Month "best match")')
+data.addSubcommand((sub) => sub.setName('rate').setDescription('[Admin] Give a logged match 1 to 5 stars (used for Wrestler of the Month "best match")')
     .addIntegerOption((o) => o.setName('match_id').setDescription('Match to rate').setRequired(true).setAutocomplete(true))
     .addIntegerOption((o) => o.setName('stars').setDescription('1 to 5 stars').setRequired(true).setMinValue(1).setMaxValue(5)));
-data.addSubcommand((sub) => sub.setName('undo').setDescription('Delete a logged match and reverse its title/contender changes')
+data.addSubcommand((sub) => sub.setName('undo').setDescription('[Admin] Delete a logged match and reverse its title/contender changes')
     .addIntegerOption((o) => o.setName('match_id').setDescription('Match to undo').setRequired(true).setAutocomplete(true)));
-data.addSubcommand((sub) => sub.setName('edit').setDescription('Fix the notes, winner or result of a plain match')
+data.addSubcommand((sub) => sub.setName('edit').setDescription('[Admin] Fix the notes, winner or result of a plain match')
     .addIntegerOption((o) => o.setName('match_id').setDescription('Match to edit').setRequired(true).setAutocomplete(true))
     .addStringOption((o) => o.setName('notes').setDescription('New notes (type a single - to clear)').setRequired(false).setMaxLength(300))
     .addIntegerOption((o) => o.setName('winner').setDescription('New winner by slot number (non-team matches)').setRequired(false).setMinValue(1).setMaxValue(8))
@@ -87,8 +89,50 @@ data.addSubcommand((sub) => sub.setName('edit').setDescription('Fix the notes, w
     .addStringOption((o) => o.setName('stipulation').setDescription('New stipulation (type a single - to clear)').setRequired(false).setMaxLength(40).setAutocomplete(true))
     .addStringOption((o) => o.setName('finish').setDescription('How it ended').setRequired(false).addChoices(...FINISHES))
     .addStringOption((o) => o.setName('score').setDescription('Falls or score (type a single - to clear)').setRequired(false).setMaxLength(20)));
-data.addSubcommand((sub) => sub.setName('recent').setDescription('Show the latest matches with their IDs')
+data.addSubcommand((sub) => sub.setName('recent').setDescription('[Admin] Show the latest matches with their IDs')
     .addIntegerOption((o) => o.setName('count').setDescription('How many (default 10, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
+data.addSubcommand((sub) => sub.setName('report').setDescription('Report the result of your card match. Staff approve it before it counts.')
+    .addStringOption((o) => o.setName('match').setDescription('Your match on the card').setRequired(true).setAutocomplete(true))
+    .addStringOption((o) => o.setName('winner').setDescription('How it ended (pick the match first)').setRequired(true).setAutocomplete(true))
+    .addStringOption((o) => o.setName('finish').setDescription('How it ended (optional)').setRequired(false).addChoices(...FINISHES))
+    .addStringOption((o) => o.setName('score').setDescription('Score, e.g. 2-1 (optional)').setRequired(false).setMaxLength(20))
+    .addStringOption((o) => o.setName('notes').setDescription('Anything staff should know (optional)').setRequired(false).setMaxLength(300))
+    .addAttachmentOption((o) => o.setName('screenshot').setDescription('A picture of the result (optional)').setRequired(false)));
+
+// ---- 3.7: players report their own card match result (see src/modules/reports.js)
+async function reportAutocomplete(interaction) {
+    const R = require('../modules/reports');
+    const focused = interaction.options.getFocused(true);
+    const mine = await R.reportable(interaction.guildId, interaction.user.id);
+    if (focused.name === 'match') {
+        const q = String(focused.value || '').toLowerCase();
+        return interaction.respond(mine.filter((m) => `${R.vsText(m)} ${R.where(m)}`.toLowerCase().includes(q)).slice(0, 25)
+            .map((m) => ({ name: `${R.where(m)}: ${R.vsText(m)}`.slice(0, 100), value: `${m.draft_id}:${m.position}` })));
+    }
+    if (focused.name === 'winner') {
+        const picked = mine.find((m) => `${m.draft_id}:${m.position}` === interaction.options.getString('match'));
+        if (!picked) return interaction.respond([{ name: 'Pick your match first', value: 'x' }]);
+        return interaction.respond(R.outcomes(picked).map((o) => ({ name: o.label.slice(0, 100), value: o.code })));
+    }
+    return interaction.respond([]);
+}
+
+async function reportExecute(interaction) {
+    const R = require('../modules/reports');
+    const [draftId, pos] = String(interaction.options.getString('match') || '').split(':');
+    if (!draftId || !pos) throw new UserError('Pick your match from the list that appears as you type.');
+    const code = interaction.options.getString('winner');
+    if (!code || code === 'x') throw new UserError('Pick who won from the list (pick the match first).');
+    const att = interaction.options.getAttachment('screenshot');
+    if (att && !/^image\//.test(att.contentType || '') && !/\.(png|jpe?g|gif|webp)$/i.test(att.name || '')) throw new UserError('The screenshot has to be a picture (PNG, JPG, GIF or WEBP).');
+    await interaction.deferReply({ flags: 64 });
+    const msg = await R.submitReport(interaction, {
+        draftId, position: Number(pos), code, finish: interaction.options.getString('finish'),
+        score: interaction.options.getString('score')?.trim() || null, notes: interaction.options.getString('notes')?.trim() || null,
+        proof: att ? { url: att.url, name: att.name } : null
+    });
+    return interaction.editReply({ content: msg });
+}
 
 async function matchIdAutocomplete(interaction, focused) {
     const num = String(focused).replace(/\D/g, '');
@@ -110,6 +154,7 @@ module.exports = {
     data,
 
     async autocomplete(interaction) {
+        if (interaction.options.getSubcommand(false) === 'report') return reportAutocomplete(interaction);
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'match_id') return interaction.respond(await matchIdAutocomplete(interaction, focused.value));
         if (focused.name === 'stipulation') return interaction.respond(stipulationChoices(focused.value));
@@ -126,6 +171,7 @@ module.exports = {
     },
 
     async execute(interaction) {
+        if (interaction.options.getSubcommand() === 'report') return reportExecute(interaction);
         requireAdmin(interaction, 'log or change matches');
         const sub = interaction.options.getSubcommand();
         const guildId = interaction.guildId;

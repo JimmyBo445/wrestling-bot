@@ -1,10 +1,11 @@
-# How to install Version 3.6.0 (Mac, step by step)
+# How to install Version 3.7.0 (Mac, step by step)
 
-The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.6.0 is
+The new files are already in your **wrestling-bot** folder in Downloads, and Version 3.7.0 is
 already saved in git. Nothing changes on Discord or Railway until you upload it.
 
-**What changes:** unfinished match pings go out around 1 pm instead of noon, and timed posts now land
-right at the top of the hour.
+**Tell your members** (copy this):
+> Played your card match? Report it yourself: `/fnlw` → My Wrestlers → 📝 Report a result, or `/match report`
+> (you can add a screenshot there). Staff approve it before it counts, and you'll get a DM.
 
 ---
 
@@ -20,17 +21,16 @@ right at the top of the hour.
 ## Step 2: Let Railway deploy
 
 Railway → **wrestling-bot** → **Deployments**. Wait for **Active/Success** (about 2 minutes).
-The log should say `Slash commands registered.` (no database change this time).
+The log should say `Applying migration 024_match_reports.sql` and `Slash commands registered.`
 
-## Step 3: Set your time zone (once, in Discord)
+## Step 3: Check it (in Discord, press Cmd + R first)
 
-`/admin rules timezone:America/Chicago`
-
-The bot was still on UTC, which is why noon showed up as 6:40 am for you. After this, the pings come
-around 1 pm Central. Your other timed posts move to Central time too: the tonight's-card reminder at noon,
-the newsletter and staff report Monday 9 am, power rankings Monday 10 am.
-
-Check it with `/admin settings` (Time zone should say America/Chicago).
+1. Make sure the staff room is set: `/admin channels staff:#your-staff-room` (reports go there).
+2. **Integrations check:** Server Settings → Integrations → your bot → `/match`. If you limited `/match` to your
+   staff role before, members won't see `/match report`. Either allow @everyone on `/match` (the staff-only
+   parts still refuse players), or have members use the 📝 Report a result button instead.
+3. With a member (or a test account) who's on a card: `/fnlw` → 🙋 My Wrestlers → 📝 Report a result.
+4. Approve it in the staff room and check the result picture appears in your results channel.
 
 ---
 

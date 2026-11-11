@@ -33,7 +33,7 @@ const subsOf = (name) => reg().find((c) => c.name === name).options.map((o) => o
         const names = reg().map((c) => c.name);
         assert.strictEqual(names.length, 18);
         assert.ok(!names.includes('faction'));
-        assert.deepStrictEqual(subsOf('match'), ['log', 'ple', 'rate', 'undo', 'edit', 'recent']);
+        assert.deepStrictEqual(subsOf('match'), ['log', 'ple', 'rate', 'undo', 'edit', 'recent', 'report']);
         assert.deepStrictEqual(subsOf('team'), ['create', 'list', 'profile', 'add-member', 'remove-member', 'rename', 'disband']);
         assert.deepStrictEqual(subsOf('standings'), ['leaderboard', 'rankings', 'power', 'season']);
         assert.ok(subsOf('title').includes('contender') && !subsOf('title').some((s) => s.startsWith('contender-')));

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.7.0 — Players report their own results (staff approve)
+- **Players:** `/fnlw` → 🙋 My Wrestlers → **📝 Report a result** (shows how many of their card matches still need one), or **`/match report`**. Pick the match and how it ended (who won / draw / no contest). Finish, score, notes and a **screenshot** are optional (the screenshot only works with `/match report`). Only players whose wrestler is in the match can report it, and only unrecorded matches on the current cards. Reporting the same match again replaces your earlier report.
+- **Staff:** each report is posted in the **staff room** with **✅ Approve · ✏️ Fix & approve · ❌ Deny**. Approving records it exactly like recording it in `/card view` (result picture in the results channel, title changes, contenders, tournaments). Fix lets you change the winner, finish, score and notes first. Deny asks for an optional reason. The player gets a DM either way.
+- **Two players report different results?** Both are kept and both posts say ⚠️ *Different reports for this match*. Approve the right one; the others close by themselves (and those players are told).
+- **🛠 Staff Tools → 📝 Reported results (n)** lists everything waiting (works even without a staff room set).
+- `/match` is now visible to everyone so players can use `report`. Every other `/match` subcommand still only works for admins and the staff role.
+- Database change: migration 024. Still 18 commands. `/card` works the same.
+
 ## 3.6.0 — Unfinished match pings at 1 pm
 - The daily unfinished match pings now go out around **1 pm** (was noon) in the server's time zone.
 - The bot's timed jobs now run just after the top of every hour (1:00, 2:00 …) instead of whenever the bot last restarted, so posts land close to their hour (the 6:40 was from a restart at :40).
