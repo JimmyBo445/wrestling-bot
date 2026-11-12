@@ -47,7 +47,7 @@ async function presentMatch(interaction, result) {
 
     const embed = new EmbedBuilder()
         .setColor(result.title ? 0xE8BF4A : result.contenderTitle ? 0xF08C32 : result.resultType === 'decisive' ? 0x27AE60 : 0x95A5A6)
-        .setFooter({ text: `Logged by ${interaction.user.username} · Match #${result.matchId} · /match undo ${result.matchId} to reverse` });
+        .setFooter({ text: `Logged by ${interaction.user.username} · Match #${result.matchId} · 🛠 below to edit or undo` });
     if (file) embed.setImage('attachment://match.png');
     else embed.setTitle(`${result.label}${result.stipulation ? ` • ${result.stipulation}` : ''} Result`).setDescription([textSummary(result), result.finish ? `Finish: ${FINISH_LABEL[result.finish] || result.finish}${result.score ? ` (${result.score})` : ''}` : null, outcomeText(result)].filter(Boolean).join('\n'));
 

@@ -55,7 +55,7 @@ function staffRow(p, what) {
     if (what === 'start') {
         // 3.9: nominating is a button (the vote decides whether everyone or only staff can use it)
         return new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`ui:pg:nom:${p.id}:all:0`).setLabel(p.nominate_who === 'everyone' ? '🙋 Nominate someone' : '🙋 Nominate someone (staff)').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(p.nominate_who === 'everyone' ? `ui:pg:nom:${p.id}:all:0` : `ui:nm:o:${p.id}`).setLabel(p.nominate_who === 'everyone' ? '🙋 Nominate someone' : '🙋 Nominate someone (staff)').setStyle(ButtonStyle.Primary),
             new ButtonBuilder().setCustomId(`ui:vx:s:${p.id}`).setLabel('▶️ Start voting (staff)').setStyle(ButtonStyle.Secondary));
     }
     return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ui:vx:c:${p.id}`).setLabel('🔒 Close vote (staff)').setStyle(ButtonStyle.Secondary));

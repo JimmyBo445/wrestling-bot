@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.10.1 — Checkup
+A new checkup tool (`npm run checkup`, file `test/crawl.js`) builds a league that looks like a real one (12 wrestlers in every division, teams, a faction, title history, both cards, a signup, requests, a reported result, a feud, a tournament, contracts, Legacy, a vote, an injury, the Hall of Fame, the menu post) and then presses every button, menu and form it can reach from every command, as staff, as a player and as a brand-new member. It checks for errors, buttons that lead nowhere, and messages Discord would refuse (too long, too many buttons, repeated button ids, broken menus). About 2,300 presses per run.
+Fixed what it found:
+- **🏅 Grand slam** and **🔁 Rematches owed** buttons on `/championship` told players "only staff". Everyone can see them now.
+- **🆚 Compare players** (`/stats player:`) could fail to show the names.
+- On a vote where only staff nominate, the button now says so right away instead of after picking a wrestler.
+- A few old hints still named removed commands (result footer, roster footer, Legacy footer, rules footer).
+
 ## 3.10.0 — Menu post, My requests, bot usage
 - **📌 Menu post** (`/admin panel` → 📌 Menu post → pick a channel): one post with big buttons for everyone — 🆕 Make a wrestler, 🙋 My wrestlers, 📝 Report a result, 📨 My requests, 🏆 Champions, 📅 Next show, 📰 Results, 📋 Roster, 📊 Stats, 📈 Standings, 🎖 Legacy, ❓ Help. Every button answers only the person who pressed it. It **stays at the bottom**: about 10 seconds after anyone posts in that channel, the bot moves it back down. If it's deleted (or went missing while the bot was offline), it comes back. 🔄 Post it again, 🔕 Turn it off and 👁 Preview buttons too.
 - **🆕 Make a wrestler** from the menu: pick a division, fill a short form, it goes to staff like `/character submit` (picture by link; file uploads still need `/character submit`).

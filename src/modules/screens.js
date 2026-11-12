@@ -54,6 +54,15 @@ async function findChar(guildId, value, statuses = ALL) {
 
 // ================================================================== /stats
 
+/** A player as the stats commands expect it, named the way the server shows them. */
+async function playerUser(interaction, id) {
+    let member = null, user = null;
+    try { member = (await interaction.guild.members.fetch({ user: id })); member = member?.get ? member.get(id) : member; } catch (_) { member = null; }
+    try { user = await interaction.client.users.fetch(id); } catch (_) { user = null; }
+    const name = member?.displayName || user?.globalName || user?.displayName || user?.username || 'Player';
+    return { id, username: user?.username || name, displayName: name, globalName: user?.globalName || null, bot: false };
+}
+
 async function statsScreen(interaction) {
     const w = interaction.options.getString('wrestler');
     const player = interaction.options.getUser('player');
@@ -65,7 +74,7 @@ async function statsScreen(interaction) {
 async function playerScreen(interaction, uid) {
     const back = [row(btn('ui:pg:st:0:all:0', '🔎 A wrestler\'s stats'))];
     return open(interaction, async () => {
-        const user = await interaction.client.users.fetch(uid).catch(() => ({ id: uid, username: 'player', bot: false }));
+        const user = await playerUser(interaction, uid);
         const p = await capture(interaction, 'stats', 'user', { user });
         const menu = new UserSelectMenuBuilder().setCustomId(`ui:sv:${uid}`).setPlaceholder('🆚 Compare with another player');
         return { ...p, components: withHome([new ActionRowBuilder().addComponents(menu), ...back]) };
@@ -78,7 +87,7 @@ async function handleVersus(interaction, uid) {
     if (!other) return playerScreen(interaction, uid);
     if (other === 'b') return playerScreen(interaction, uid);
     return open(interaction, async () => {
-        const fetchU = (id) => interaction.client.users.fetch(id).catch(() => ({ id, username: 'player', bot: false }));
+        const fetchU = (id) => playerUser(interaction, id);
         const p = await capture(interaction, 'stats', 'versus', { player1: await fetchU(uid), player2: await fetchU(other) });
         return { ...p, components: withHome(back) };
     }, { backRows: back });
@@ -581,6 +590,11 @@ async function handle(interaction, parts) {
     if (kind === 'sv') return handleVersus(interaction, a);
     if (kind === 'lz') return handleLegacy(interaction, a, b);
     if (kind === 'lzm') return handleLegacyForm(interaction, a, b);
+    if (kind === 'nm' && a === 'o') {
+        // a staff-only vote: say so before showing the wrestler list
+        requireAdmin(interaction, 'add nominees to this vote');
+        return open(interaction, () => hub().pickerPayload(interaction, 'nom', b));
+    }
     if (kind === 'nm') return nominate(interaction, b, c);
     if (kind === 'dr') return handleRoster(interaction, a);
     if (kind === 'kb') return handleBonuses(interaction);

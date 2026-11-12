@@ -103,7 +103,7 @@ async function announceAccolade(client, guildId, row, character, extra = '') {
         const ch = await client.channels.fetch(chId);
         const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`🎖 ${accoladeName(row)}`)
             .setDescription(`**${character.name}**${row.user_discord ? ` (<@${row.user_discord}>)` : ''} is the **${accoladeName(row)}**${KINDS[row.kind].perDivision || row.kind === 'mvp' ? ' winner' : ''}!${extra ? `\n${extra}` : ''}${row.notes ? `\n_${row.notes}_` : ''}`)
-            .setFooter({ text: '/legacy list for the honor roll' });
+            .setFooter({ text: '/legacy for the honor roll' });
         if (character.image_url) embed.setThumbnail(character.image_url);
         await ch.send({ embeds: [embed], allowedMentions: { parse: [] } });
         return ch.id;

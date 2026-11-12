@@ -334,7 +334,8 @@ module.exports = {
             return respond(interaction, { embeds: [embed] });
         }
 
-        requireAdmin(interaction, 'change championships');
+        // 3.10.1: grand slam and rematches owed are for everyone to look at (buttons on /championship)
+        if (!['grand-slam', 'rematches'].includes(sub)) requireAdmin(interaction, 'change championships');
 
         if (sub === 'log-singles-title-match') {
             return runTitleMatch(interaction, 'singles',
@@ -393,7 +394,7 @@ module.exports = {
                 return `**${s.title_name}**${s.is_interim ? ' _(interim)_' : ''}: ${s.holder}${s.injured ? ' 🤕' : ''}\nlast defense **${s.daysSinceDefense}d** ago${warnD} · champion last wrestled **${s.daysSinceActive}d** ago${warnA}`;
             });
             const embed = new EmbedBuilder().setTitle('Title Watch').setColor(0xE8BF4A).setDescription(lines.join('\n\n').slice(0, 4000))
-                .setFooter({ text: `Warn after ${settings.defense_days || '—'}d without a defense · auto-vacate after ${settings.vacate_days || '—'}d inactive (/admin rules)` });
+                .setFooter({ text: `Warn after ${settings.defense_days || '—'}d without a defense · auto-vacate after ${settings.vacate_days || '—'}d inactive (/admin panel → Rules)` });
             return respond(interaction, { embeds: [embed], flags: 64, allowedMentions: NO_MENTIONS });
         }
 

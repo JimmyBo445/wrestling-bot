@@ -69,7 +69,7 @@ async function buildRosterList(guildId, { division = null, sort = 'wrestler', in
         }
     }
     const players = new Set(rows.filter((c) => !c.unclaimed).map((c) => c.discord_id)).size;
-    embeds[embeds.length - 1].setFooter({ text: `${rows.length} wrestler${rows.length === 1 ? '' : 's'} · ${players} player${players === 1 ? '' : 's'} · 🏆 = current champion · /whois for one wrestler · /directory roster for pictures` });
+    embeds[embeds.length - 1].setFooter({ text: `${rows.length} wrestler${rows.length === 1 ? '' : 's'} · ${players} player${players === 1 ? '' : 's'} · 🏆 = current champion · /whois for one wrestler · /directory page:Roster cards for pictures` });
     return embeds;
 }
 

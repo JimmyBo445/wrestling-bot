@@ -1,13 +1,14 @@
 {
   "name": "wrestling-bot",
-  "version": "3.10.0",
+  "version": "3.10.1",
   "description": "Discord wrestling booking & stats bot",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
     "deploy": "node src/deploy-commands.js",
-    "migrate": "node src/db/migrate.js"
+    "migrate": "node src/db/migrate.js",
+    "checkup": "node test/crawl.js"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.53",
