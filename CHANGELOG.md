@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.10.2 — Fix: wrestler lists past page 1
+- Any wrestler list with more than 25 wrestlers (Stats, Suggest opponents, signups, etc.) broke on **page 2**: Discord refused it with "Component custom id cannot be duplicated", because the ◀ button and the "All" tab had the same hidden id. Fixed.
+- The checkup (`npm run checkup`) now builds a roster of almost 100 wrestlers, so every list gets a page 2 and 3. It finds this kind of problem by itself now (it reported 37 places before the fix and none after).
+
 ## 3.10.1 — Checkup
 A new checkup tool (`npm run checkup`, file `test/crawl.js`) builds a league that looks like a real one (12 wrestlers in every division, teams, a faction, title history, both cards, a signup, requests, a reported result, a feud, a tournament, contracts, Legacy, a vote, an injury, the Hall of Fame, the menu post) and then presses every button, menu and form it can reach from every command, as staff, as a player and as a brand-new member. It checks for errors, buttons that lead nowhere, and messages Discord would refuse (too long, too many buttons, repeated button ids, broken menus). About 2,300 presses per run.
 Fixed what it found:

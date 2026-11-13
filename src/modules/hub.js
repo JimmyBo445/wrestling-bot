@@ -98,7 +98,7 @@ async function pickerPayload(interaction, purpose, arg = '0', div = 'all', page 
     const embed = new EmbedBuilder().setColor(0xC0392B).setTitle(cfg.title)
         .setDescription(total ? `${total} wrestler${total === 1 ? '' : 's'}${division ? ` in ${DIVISION_LABELS[division]}` : ''}. Pick one from the list${pages > 1 ? ' (◀ ▶ for more)' : ''}.` : 'There are no wrestlers to pick here.');
     const components = [];
-    if (!cfg.lock) components.push(row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`ui:pg:${purpose}:${arg}:${d}:0`, l, d === div))));
+    if (!cfg.lock) components.push(row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`ui:pg:${purpose}:${arg}:${d}:t`, l, d === div))));
     if (rows.length) {
         components.push(select(`ui:pk:${purpose}:${arg}`, 'Pick a wrestler', rows.map((c) => ({ label: clip(c.name, 100), value: String(c.id),
             description: clip(`${DIVISION_LABELS[c.division] || c.division}${c.status === 'retired' ? ' · retired' : ''}`, 100) }))));

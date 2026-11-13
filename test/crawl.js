@@ -195,6 +195,9 @@ async function seed() {
         hex: await mk('u8', 'Hex', 'custom'), ivy: await mk('u9', 'Ivy Rose', 'custom_womens'),
         jax: await mk('ph1', 'Jax Legend', 'mens'), pend: await f.makeChar(G, 'u10', 'Pending Pete', 'mens', 'pending')
     };
+    // big divisions, so every list gets a page 2 and 3 (more than 25 is where Discord menus run out)
+    for (let k = 0; k < 55; k++) await mk(`r${k % 20}`, `Roster Man ${String(k).padStart(2, '0')}`, 'mens');
+    for (let k = 0; k < 30; k++) await mk(`q${k % 15}`, `Roster Woman ${String(k).padStart(2, '0')}`, 'womens');
     await f.pool.query(`UPDATE users SET is_placeholder = true WHERE discord_id = 'ph1'`).catch(() => {});
     const A = { admin: true, user: 'admin1' };
     await run('admin', 'channels', { staff: 'staffch', matches: 'resultsch', legacy: 'legacych', power: 'powerch', reminders: 'remch', newsletter: 'newsch' }, A);
