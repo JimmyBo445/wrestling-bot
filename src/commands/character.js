@@ -161,7 +161,8 @@ module.exports = {
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused();
         const sub = interaction.options.getSubcommand(false);
-        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'] }));
+        // 3.15.1: one overall per superstar, so the overall search lists each superstar once
+        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: sub !== 'overall' }));
     },
 
     async execute(interaction) {
@@ -231,11 +232,12 @@ module.exports = {
         if (sub === 'overall') {
             // 3.13.2: quick way for staff to set/change an overall (also: 🛠 Staff on the wrestler → 🔢 Set overall)
             requireAdmin(interaction, 'set overall ratings');
-            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            let character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            if (character.division === 'luchaderpy' && character.base_character_id) character = await requireCharacter(guildId, character.base_character_id, { statuses: ['approved', 'retired'] });
             const n = interaction.options.getInteger('overall') || null;
             const before = character.overall;
-            await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2`, [character.id, guildId, n]);
-            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
+            // 3.15.1: one overall per superstar: the 🟣 LuchaDerpy version always gets the same one
+            await pool.query(`UPDATE characters SET overall = $3 WHERE guild_id = $2 AND (id = $1 OR base_character_id = $1)`, [character.id, guildId, n]);
             await logAudit(guildId, interaction.user.id, 'character_overall', { character: Number(character.id), overall: n, before });
             return respond(interaction, {
                 content: n ? `🔢 **${character.name}** is now **${n} Overall**${before ? ` (was ${before})` : ''}. The roster channel updates in a few seconds.` : `🔢 Removed **${character.name}**'s overall.`,

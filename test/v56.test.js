@@ -232,9 +232,20 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         const reyL = (await lucha(REY)).id;
         await run('character', 'overall', { character: REY, overall: 88 }, ADM);
         assert.strictEqual((await q(`select overall from characters where id=$1`, [reyL]))[0].overall, 88);
+        // 3.15.1: one overall per superstar, from either version, and the overall search lists each superstar once
         await run('character', 'overall', { character: reyL, overall: 60 }, ADM);
-        await run('character', 'overall', { character: REY, overall: 90 }, ADM);
-        assert.strictEqual((await q(`select overall from characters where id=$1`, [reyL]))[0].overall, 60, 'own overall kept');
+        assert.deepStrictEqual((await q(`select overall from characters where id = any($1) order by id`, [[REY, reyL]])).map((r) => r.overall), [60, 60]);
+        await click(`ui:ovm:${reyL}`, priv({ ...ADM, fields: { overall: '77' } }));
+        assert.deepStrictEqual((await q(`select overall from characters where id = any($1) order by id`, [[REY, reyL]])).map((r) => r.overall), [77, 77]);
+        const { autocompleteCharacters } = require('../src/utils/characterUtils');
+        const fake = { guildId: G, guild: { members: { fetch: async () => new Map() } } };
+        const ov = await autocompleteCharacters(fake, 'Rey', { lucha: false });
+        assert.strictEqual(ov.length, 1, JSON.stringify(ov));
+        assert.match(ov[0].name, /\(🟣 LuchaDerpy\)/, 'shows who plays it in LuchaDerpy, not "Unclaimed"');
+        const all = await autocompleteCharacters(fake, 'Rey');
+        assert.strictEqual(all.length, 2);
+        assert.ok(all.some((o) => /🟣 LuchaDerpy/.test(o.name)));
+        assert.ok(!(await autocompleteCharacters(fake, 'Seth')).some((o) => /LuchaDerpy/.test(o.name)), 'a 🟣 version nobody plays is hidden');
         let i = await run('character', 'edit', { character: reyL, name: 'Rey Two' }, ADM);
         assert.match(text(i), /always has its superstar's name/);
         await run('character', 'edit', { character: REY, name: 'Rey Mysterio Jr' }, ADM);

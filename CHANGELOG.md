@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.15.1
+- `/character overall`: a superstar used in LuchaDerpy no longer shows up twice. Each superstar is listed once, with whoever plays it (🟢 Men's, 🟣 LuchaDerpy or 🟢🟣 both) instead of "Unclaimed".
+- One overall per superstar: setting it (by command or 🛠 Staff → 🔢 Set overall) always sets the Men's and LuchaDerpy versions together.
+- Other wrestler searches label LuchaDerpy versions 🟣 and hide LuchaDerpy versions nobody plays.
+
 ## 3.15.0 — 🟣 LuchaDerpy
 - **New division: LuchaDerpy.** It uses the **Men's roster**: any Men's superstar can also be used in LuchaDerpy. Every player gets **1 LuchaDerpy slot on top of their normal ones**.
 - **One superstar, one player.** If someone has Roman as 🟢 Men's, nobody else can have Roman as 🟣 LuchaDerpy, and the reverse. The **same player** can have one superstar in both (🟢🟣), but only with staff approval.

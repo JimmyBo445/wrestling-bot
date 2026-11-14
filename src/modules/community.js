@@ -455,10 +455,11 @@ async function overallSave(interaction, charId) {
     if (raw && !/^\d{1,2}$/.test(raw)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
     const n = raw ? Number(raw) : null;
     if (n !== null && (n < 1 || n > 99)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
-    const { rows: before } = await pool.query(`SELECT * FROM characters WHERE id = $1 AND guild_id = $2`, [charId, interaction.guildId]);
-    const { rows } = await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2 RETURNING name`, [charId, interaction.guildId, n]);
+    // 3.15.1: one overall per superstar: setting it on either version sets both
+    const { rows: b } = await pool.query(`SELECT COALESCE(base_character_id, id) AS id FROM characters WHERE id = $1 AND guild_id = $2`, [charId, interaction.guildId]);
+    const baseId = b[0]?.id || charId;
+    const { rows } = await pool.query(`UPDATE characters SET overall = $3 WHERE guild_id = $2 AND (id = $1 OR base_character_id = $1) RETURNING name`, [baseId, interaction.guildId, n]);
     if (!rows[0]) throw new UserError('That wrestler doesn\'t exist anymore.');
-    if (before[0]?.division === 'mens') await require('../utils/lucha').syncFromBase(charId, before[0]); // 3.15: the 🟣 version follows
     await require('../utils/audit').logAudit(interaction.guildId, interaction.user.id, 'character_overall', { character: Number(charId), overall: n });
     return hub.wrestlerStaffPanel(interaction, charId, n ? `✅ **${rows[0].name}** is now **${n} Overall**. The roster channel updates in a few seconds.` : `✅ Removed **${rows[0].name}**'s overall.`);
 }
