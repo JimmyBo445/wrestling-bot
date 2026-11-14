@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.14.0 — Live champions board
+- `/admin panel` → 📺 Channels → **Live champions board** → pick a channel. One plain-text post per division (`🏆 **Men's Champions** · 3 of 4 belts held`), every belt listed with its champion: **Jey Uso** (@boatgawd) · 42 days. Tag champions show the team and both players: **Bloody Widows** (@a, @b). Empty belts say _Vacant_; interim champions are marked.
+- It updates by itself a few seconds after a title changes hands (or a reign is fixed in `/title manage`), and once a day for the day count. Deleted posts come back on the hourly check. Mentions never ping.
+- It can share a channel with the live roster (champions first).
+- Database change: migration 029.
+
 ## 3.13.3
 - **🔎 Search by name** in 🙋 Request a character and 🔄 Switch character: type part of a name (like "seth") instead of paging with ◀ ▶. Shows the matching 🟢 open characters (names starting with what you typed come first); ✖ Clear search goes back to the full list.
 

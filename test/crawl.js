@@ -248,6 +248,7 @@ async function seed() {
     await click('ui:mp:s', { ...A, kind: 'channel', values: ['startch'], private: true });
     await click('ui:ch:s:roster', { ...A, kind: 'channel', values: ['rosterch'], private: true });
     await click('ui:ch:s:roster_womens', { ...A, kind: 'channel', values: ['womensch'], private: true });
+    await click('ui:ch:s:champions', { ...A, kind: 'channel', values: ['champch'], private: true });
     await f.pool.query(`UPDATE characters SET overall = 88 WHERE id = $1`, [W.ace]);
     return W;
 }

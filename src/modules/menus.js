@@ -321,6 +321,7 @@ const HELP = {
         '**Unfinished matches:** `/admin panel` → ⏳ Unfinished lists matches from past cards with no result, with a 📣 ping button. Daily pings: 📺 Channels.',
         '**Approvals:** `/admin pending`',
         '**Menu post:** `/admin panel` → 📌 Menu post puts a button menu for everyone in a channel (it stays at the bottom). **📈 Bot usage** shows what people use (counts only; also in the Monday staff report).',
+        '**Live champions board:** `/admin panel` → 📺 Channels → Live champions board (one post per division, updates itself).',
         '**Live roster channel:** `/admin panel` → 📺 Channels → Live roster (main, or one channel per division). Plain-text lists ("Jey Uso (91 Overall) : @player") that update themselves. Set a wrestler\'s overall with 🛠 Staff on the wrestler (`/whois`) → 🔢 Set overall.',
         '**Everything else:** `/admin panel` → 📺 Channels · 📜 Rules · 👮 Staff role · 🏆 History channel · 📰 Newsletter · 📊 Staff report · 🏅 Monthly awards · 📒 Audit log · 💾 Backups. Spreadsheet import: `/admin data`.'] }
 };

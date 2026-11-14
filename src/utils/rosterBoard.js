@@ -62,12 +62,60 @@ function infoFor(divs) {
     return { slot: 'info', buttons, header: '🙋 **Want a character?**', body: lines.join('\n') };
 }
 
+/** 3.14: champions board posts, one per division that has belts. */
+async function championPosts(guildId) {
+    const { rows } = await pool.query(
+        `SELECT t.id, t.name, t.division, t.is_tag_title, tr.id AS reign_id, tr.is_interim, tr.won_date, tr.team_id, tr.reign_char_name,
+                c.name AS champ_name, u.discord_id, u.is_placeholder, tm.name AS team_name
+         FROM titles t
+         LEFT JOIN title_reigns tr ON tr.title_id = t.id AND tr.lost_date IS NULL
+         LEFT JOIN characters c ON c.id = tr.character_id
+         LEFT JOIN users u ON u.id = c.owner_id
+         LEFT JOIN teams tm ON tm.id = tr.team_id
+         WHERE t.guild_id = $1 ORDER BY t.is_tag_title, t.id`, [guildId]);
+    const members = new Map();
+    const teamReigns = rows.filter((r) => r.reign_id && (r.team_id || r.is_tag_title)).map((r) => r.reign_id);
+    if (teamReigns.length) {
+        const { rows: m } = await pool.query(
+            `SELECT trm.reign_id, c.name, u.discord_id, u.is_placeholder FROM title_reign_members trm
+             JOIN characters c ON c.id = trm.character_id JOIN users u ON u.id = c.owner_id
+             WHERE trm.reign_id = ANY($1::bigint[]) ORDER BY trm.id`, [teamReigns]);
+        for (const x of m) { if (!members.has(String(x.reign_id))) members.set(String(x.reign_id), []); members.get(String(x.reign_id)).push(x); }
+    }
+    const days = (d) => { const n = Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000)); return n === 0 ? 'won today' : `${n} day${n === 1 ? '' : 's'}`; };
+    const who = (r) => {
+        if (!r.reign_id) return '- _Vacant_';
+        const tail = ` · ${days(r.won_date)}${r.is_interim ? ' · _interim_' : ''}`;
+        const mem = members.get(String(r.reign_id)) || [];
+        if (r.team_id || (r.is_tag_title && mem.length)) {
+            const players = [...new Set(mem.filter((x) => !x.is_placeholder).map((x) => `<@${x.discord_id}>`))];
+            const label = r.team_name || mem.map((x) => x.name).join(' & ') || r.reign_char_name || 'Unknown';
+            return `- **${escapeMarkdown(label)}**${players.length ? ` (${players.join(', ')})` : ''}${tail}`;
+        }
+        const label = r.champ_name || r.reign_char_name || 'Unknown';
+        return `- **${escapeMarkdown(label)}**${r.discord_id && !r.is_placeholder ? ` (<@${r.discord_id}>)` : ''}${tail}`;
+    };
+    const posts = [];
+    for (const [div, label] of Object.entries(DIVISION_LABELS)) {
+        const list = rows.filter((r) => r.division === div);
+        if (!list.length) continue;
+        const held = list.filter((r) => r.reign_id).length;
+        posts.push({
+            slot: `champ:${div}`,
+            header: `🏆 **${label} Champions** · ${held} of ${list.length} belt${list.length === 1 ? '' : 's'} held`,
+            body: list.map((r) => `**${escapeMarkdown(r.name)}**\n${who(r)}`).join('\n\n').slice(0, CHUNK)
+        });
+    }
+    return posts;
+}
+
 /** What should be posted: Map channelId → [posts in order]. */
 async function plan(guildId) {
     const { rows: g } = await pool.query(`SELECT * FROM guilds WHERE guild_id = $1`, [guildId]);
     const where = routes(g[0]);
     const out = new Map();
-    if (!Object.values(where).some(Boolean)) return out;
+    const champCh = g[0]?.champions_channel_id || null;
+    if (!Object.values(where).some(Boolean) && !champCh) return out;
     const { rows } = await pool.query(
         `SELECT c.id, c.name, c.division, c.overall, u.discord_id, u.is_placeholder
          FROM characters c JOIN users u ON u.id = c.owner_id
@@ -82,6 +130,8 @@ async function plan(guildId) {
         divsIn.get(ch).push(div);
     }
     for (const [ch, list] of out) list.push(infoFor(divsIn.get(ch)));
+    // 3.14: the champions board goes first in its channel
+    if (champCh) out.set(champCh, [...await championPosts(guildId), ...(out.get(champCh) || [])]);
     return out;
 }
 
@@ -178,7 +228,7 @@ function schedule(client, guildId) {
     timers.set(guildId, t);
 }
 
-const COLUMN_FOR = { roster: 'roster_channel_id', roster_mens: DIV_COLUMN.mens, roster_womens: DIV_COLUMN.womens, roster_custom: DIV_COLUMN.custom, roster_custom_womens: DIV_COLUMN.custom_womens };
+const COLUMN_FOR = { champions: 'champions_channel_id', roster: 'roster_channel_id', roster_mens: DIV_COLUMN.mens, roster_womens: DIV_COLUMN.womens, roster_custom: DIV_COLUMN.custom, roster_custom_womens: DIV_COLUMN.custom_womens };
 
 /**
  * Staff picked a channel for `key` ('roster' = main, 'roster_mens' … = one division), or null to turn it off.
@@ -191,17 +241,17 @@ async function setChannel(client, guildId, key, channelId) {
     await pool.query(`UPDATE guilds SET ${col} = $2 WHERE guild_id = $1`, [guildId, channelId || null]);
     // a pick is a good moment to re-check every post (and to move posts that changed channel)
     const r = await refresh(client, guildId, { verify: true });
-    const what = key === 'roster' ? 'The live roster' : `The ${DIVISION_LABELS[key.replace('roster_', '')]} roster`;
-    if (!channelId) return `${what} is off here${r === 'off' ? ' (I removed its posts)' : ''}.${key !== 'roster' ? ' That division uses the main roster channel again, if one is set.' : ''}`;
+    const what = key === 'champions' ? 'The champions board' : key === 'roster' ? 'The live roster' : `The ${DIVISION_LABELS[key.replace('roster_', '')]} roster`;
+    if (!channelId) return `${what} is off now (I removed its posts).${key.startsWith('roster_') ? ' That division uses the main roster channel again, if one is set.' : ''}`;
     if (r === 'failed') return `⚠️ I couldn't post in <#${channelId}>. Check I can see it, send messages and read message history there.`;
     return `${what} is in <#${channelId}> and will keep itself up to date.`;
 }
 
 /** At startup and every hour: catch anything changed while the bot wasn't watching, and put back deleted posts. */
 async function refreshAll(client) {
-    const cols = ['roster_channel_id', ...Object.values(DIV_COLUMN)].map((c) => `${c} IS NOT NULL`).join(' OR ');
+    const cols = ['roster_channel_id', 'champions_channel_id', ...Object.values(DIV_COLUMN)].map((c) => `${c} IS NOT NULL`).join(' OR ');
     const { rows } = await pool.query(`SELECT guild_id FROM guilds WHERE ${cols} OR guild_id IN (SELECT guild_id FROM roster_board_posts)`);
     for (const r of rows) await refresh(client, r.guild_id, { verify: true });
 }
 
-module.exports = { plan, refresh, schedule, setChannel, refreshAll, routes, DIV_COLUMN };
+module.exports = { championPosts, plan, refresh, schedule, setChannel, refreshAll, routes, DIV_COLUMN };

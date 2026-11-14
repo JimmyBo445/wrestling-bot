@@ -129,6 +129,7 @@ module.exports = {
                 `**Weekly power rankings:** ${ch(st.power_channel_id, 'off')}`,
                 `**Unfinished match pings:** ${ch(st.reminders_channel_id, 'off')}`,
                 `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin panel\` → 🏆 History channel)_`,
+                `**Live champions board:** ${ch(st.champions_channel_id, 'off')}`,
                 `**Live roster (main):** ${ch(st.roster_channel_id, 'off')}`,
                 `**Live roster per division:** Men's ${ch(st.roster_channel_mens, '→ main')} · Women's ${ch(st.roster_channel_womens, '→ main')} · Custom ${ch(st.roster_channel_custom, '→ main')} · Custom Women's ${ch(st.roster_channel_custom_womens, '→ main')}`
             ].join('\n'));
