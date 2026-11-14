@@ -1,4 +1,4 @@
-// 3.11.0: live roster channel ("Wrestler (91 Overall) : @player") and the staff-set overall rating.
+// 3.11.0 / 3.12.0: live roster channel(s) ("Wrestler (91 Overall) : @player") and the staff-set overall rating.
 process.env.ROSTER_DEBOUNCE_MS = '30';
 const assert = require('assert');
 const f = require('./fixtures');
@@ -16,7 +16,7 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
 const priv = (o) => ({ ...o, private: true });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const RB = require('../src/utils/rosterBoard');
-const desc = (m) => { const e = m.payload ? m.payload.embeds[0] : m.p.embeds[0]; return (e.toJSON ? e.toJSON() : e.data || e).description; };
+const desc = (m) => (m.payload ? m.payload.content : m.p.content);
 const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
 
 (async () => {
@@ -35,14 +35,14 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         assert.match(JSON.stringify(i.responses.at(-1).p.components.map((r) => r.toJSON())), /"value":"roster"/);
         const before = sent.length;
         i = await click('ui:ch:s:roster', priv({ ...ADM, kind: 'channel', values: ['rosterch'] }));
-        assert.match(text(i), /live roster is posted in <#rosterch>/, text(i));
+        assert.match(text(i), /live roster is in <#rosterch>/, text(i));
         const posts = sent.slice(before).filter((m) => m.channelId === 'rosterch');
         assert.strictEqual(posts.length, 5, 'mens, womens, custom, custom womens, how-to');
         const mens = desc(posts[0]);
         assert.match(mens, /\*\*Aaron \\\*Star\\\*\*\* : <@u2>/, 'names are escaped');
         assert.match(mens, /\*\*Jey Uso\*\* : <@u1>/);
         assert.ok(mens.indexOf('Aaron') < mens.indexOf('Jey Uso'), 'A to Z');
-        assert.match(mens, /Open — nobody plays them yet \(1\)[\s\S]*\*\*Open Guy\*\* : _open_/);
+        assert.match(mens, /Open — nobody plays them yet[\s\S]*\*\*Open Guy\*\* : _open_/); assert.match(mens, /^📋 \*\*Men's Division\*\* · 2 taken · 1 open/);
         assert.ok(!/Retired Ron|Pending Pat/.test(mens), 'only approved wrestlers');
         assert.match(mens, /Updated <t:\d+:R>/);
         assert.deepStrictEqual(posts[0].payload.allowedMentions, { parse: [] }, 'never pings');
@@ -114,8 +114,38 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         assert.strictEqual(await RB.refresh(client, G), 'posted');
         const posts = sent.slice(s0);
         assert.ok(posts.length >= 6, `got ${posts.length}`);
-        for (const p of posts) assert.ok(desc(p).length <= 4096);
-        assert.match(posts[0].payload.embeds[0].toJSON().title, /\(1\/\d\)/);
+        for (const p of posts) assert.ok(desc(p).length <= 2000, `${desc(p).length} chars`);
+        assert.match(desc(posts[0]), /^📋 \*\*Men's Division\*\* \(1\/\d\)/);
+    });
+
+    await t('3.12: a division can have its own channel; it gets that division + the how-to post', async () => {
+        const s0 = sent.length;
+        let i = await click('ui:ch:s:roster_womens', priv({ ...ADM, kind: 'channel', values: ['womensch'] }));
+        assert.match(text(i), /Women's roster is in <#womensch>/, text(i));
+        const w = sent.slice(s0).filter((m) => m.channelId === 'womensch');
+        assert.strictEqual(w.length, 2);
+        assert.match(desc(w[0]), /^📋 \*\*Women's Division\*\* · 1 taken · 0 open/);
+        assert.match(desc(w[0]), /Liv Morgan\*\* : <@u9>/);
+        assert.match(desc(w[1]), /Want a character/);
+        const main = (await q(`select slot from roster_board_posts where channel_id='rosterch' order by position`)).map((r) => r.slot);
+        assert.ok(!main.some((x) => x.startsWith('womens')), main.join(','));
+        assert.ok(main.includes('info'));
+        // turning the division channel off sends it back to the main channel
+        i = await click('ui:ch:off:roster_womens', priv(ADM));
+        assert.match(text(i), /uses the main roster channel again/, text(i));
+        assert.strictEqual((await q(`select count(*)::int n from roster_board_posts where channel_id='womensch'`))[0].n, 0);
+        const main2 = (await q(`select slot from roster_board_posts where channel_id='rosterch' order by position`)).map((r) => r.slot);
+        assert.ok(main2.includes('womens:0'));
+    });
+
+    await t('only division channels (no main): divisions without a channel are not posted', async () => {
+        await click('ui:ch:off:roster', priv(ADM));
+        await click('ui:ch:s:roster_mens', priv({ ...ADM, kind: 'channel', values: ['mensch'] }));
+        const slots = await q(`select channel_id, slot from roster_board_posts order by channel_id, position`);
+        assert.ok(slots.every((r) => r.channel_id === 'mensch'), JSON.stringify(slots));
+        assert.ok(slots.some((r) => r.slot === 'info'));
+        await click('ui:ch:off:roster_mens', priv(ADM));
+        await click('ui:ch:s:roster', priv({ ...ADM, kind: 'channel', values: ['rosterch'] }));
     });
 
     await t('turn it off removes the posts', async () => {

@@ -578,7 +578,9 @@ const CHANNELS = [
     ['matches', 'Match results copy', 'matches_channel_id'], ['monthly', 'Wrestler of the Month', 'monthly_channel_id'],
     ['newsletter', 'Weekly newsletter', 'newsletter_channel_id'], ['legacy', 'Legacy announcements', 'legacy_channel_id'],
     ['power', 'Weekly power rankings', 'power_channel_id'], ['reminders', 'Unfinished match pings (daily)', 'reminders_channel_id'],
-    ['history', 'Championship history', 'history_channel_id'], ['roster', 'Live roster (who plays who)', 'roster_channel_id']];
+    ['history', 'Championship history', 'history_channel_id'], ['roster', 'Live roster: main channel', 'roster_channel_id'],
+    ['roster_mens', "Live roster: Men's", 'roster_channel_mens'], ['roster_womens', "Live roster: Women's", 'roster_channel_womens'],
+    ['roster_custom', 'Live roster: Custom', 'roster_channel_custom'], ['roster_custom_womens', "Live roster: Custom Women's", 'roster_channel_custom_womens']];
 
 async function channelsPanel(interaction, notice = null) {
     requireAdmin(interaction, 'change bot channels');
@@ -606,7 +608,7 @@ async function setChannel(interaction, key, channelId) {
     let notice;
     try {
         if (key === 'history') notice = (await capture(interaction, 'admin', 'history', { channel: channelId ? { id: channelId } : null })).content;
-        else if (key === 'roster') notice = await require('../utils/rosterBoard').setChannel(interaction.client, interaction.guildId, channelId || null); // 3.11
+        else if (key.startsWith('roster')) notice = await require('../utils/rosterBoard').setChannel(interaction.client, interaction.guildId, key, channelId || null); // 3.11 / 3.12
         else if (channelId) await capture(interaction, 'admin', 'channels', { [key]: { id: channelId } });
         else await capture(interaction, 'admin', 'channels', { turn_off: key });
         notice = `✅ Saved.${notice ? ` ${notice}` : ''}`;

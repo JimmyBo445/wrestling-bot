@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.12.0 — Live roster: a channel per division, plain text like the match card
+- **Separate channels per division:** `/admin panel` → 📺 Channels now has **Live roster: Men's / Women's / Custom / Custom Women's** next to **Live roster: main channel**. A division with its own channel posts there; any division without one goes to the main channel (if set). Turning a division's channel off sends it back to the main channel. Every roster channel ends with the 🆕 "Want a character?" post.
+- **Plain text, like the names under the match card:** `📋 **Men's Division** · 24 taken · 3 open`, then one line per wrestler, the 🟢 Open section, and "Updated x minutes ago". No box around it. Big divisions split into several posts (Discord allows 2,000 characters per message).
+- Posts from 3.11 are replaced automatically the first time the bot updates.
+- Database change: migration 027.
+
 ## 3.11.0 — Live roster channel + overall ratings
 - **📋 Live roster channel** (`/admin panel` → 📺 Channels → **Live roster (who plays who)**): one post per division, A–Z, every line like **Jey Uso (91 Overall) : @boatgawd**. Wrestlers nobody plays yet are listed under **🟢 Open**. Retired and pending wrestlers aren't shown. Mentions never ping. A very big division splits over several posts. The last post explains how to get a character, with 🆕 Make a wrestler, 📨 My requests and 📋 Roster buttons.
 - **It updates by itself:** a few seconds after anything is done with the bot (approve, transfer, claim, retire, rename, overall…), it edits only the posts that changed and shows "Updated x minutes ago". Every hour (and when the bot starts) it double-checks, and puts back any post someone deleted.
