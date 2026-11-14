@@ -1,3 +1,15 @@
+# How to install Version 3.15 (LuchaDerpy)
+
+1. **Upload:** Terminal → `cd ~/Downloads/wrestling-bot` → `git push` (username `JimmyBo445`, password = your `ghp_` token). It worked when you see `main -> main`.
+2. **Railway:** wait for the deploy to say **Active**. The log should show `Applying migration 030_luchaderpy.sql` and `Slash commands registered.`
+3. **Discord** (press Cmd + R first): `/admin panel` → 📺 Channels →
+   - **Live roster + standings: 🟣 LuchaDerpy** → pick the LuchaDerpy roster channel
+   - **🟣 LuchaDerpy show card** → pick the channel where the LuchaDerpy card should be posted
+4. To give someone a LuchaDerpy character: `/whois` the Men's superstar → 🛠 Staff → *Give to a player* → **🟣 LuchaDerpy slot**. Players can also ask for one: 🙋 Request a character → 🟣 LuchaDerpy tab.
+5. To build the show: `/card view` → 🔁 LuchaDerpy → add matches (or 🧰 More tools → ⚡ Auto-build).
+
+---
+
 # How to install Versions 3.8 → 3.10 (Mac, step by step)
 
 One `git push` uploads everything that's waiting (3.7 report results, 3.8 + 3.9 fewer commands,

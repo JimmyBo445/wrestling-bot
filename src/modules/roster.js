@@ -18,7 +18,7 @@ const data = new SlashCommandBuilder()
 async function rosterIds(guildId, division, includeRetired) {
     const { rows } = await pool.query(
         `SELECT c.id FROM characters c WHERE c.guild_id = $1 AND c.division = $2 AND c.status = ANY($3::text[])
-         ORDER BY lower(c.name), c.id`,
+         ORDER BY regexp_replace(lower(c.name), '^the +', ''), c.id`,
         [guildId, division, includeRetired ? ['approved', 'retired'] : ['approved']]);
     return rows.map((r) => String(r.id));
 }

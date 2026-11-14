@@ -17,8 +17,8 @@ function payload(guildName) {
     const embed = new EmbedBuilder().setColor(0xC0392B).setTitle(`🏟 ${guildName || 'FNLW'}: start here`).setDescription([
         'Tap a button. **Only you see the answer**, so you can\'t mess anything up.',
         '',
-        '🙋 New here? **Request a character** (an 🟢 open Men\'s or Women\'s one) or **make a custom wrestler**. Staff approve it.',
-        '🔄 Want to be someone else? **Switch character** trades yours for an 🟢 open one (staff approve it).',
+        '🙋 New here? **Request a character** (an ⚪ open Men\'s, Women\'s or 🟣 LuchaDerpy one) or **make a custom wrestler**. Staff approve it.',
+        '🔄 Want to be someone else? **Switch character** trades yours for an ⚪ open one (staff approve it).',
         '🙋 **My wrestlers**: edit them, see what you\'re booked in, report results.',
         '📨 **My requests**: see what\'s waiting for staff (and cancel it if you changed your mind).'
     ].join('\n'));

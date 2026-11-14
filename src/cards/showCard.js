@@ -289,7 +289,8 @@ async function renderShowCard(data) {
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.font = font(16, 'medium');
     const done = data.matches.filter((m) => m.result && m.result.status !== 'pending').length;
-    ctx.fillText(data.recap ? `${done} OF ${rows} RESULTS LOGGED  •  ${brand.label}  •  ${th.label.toUpperCase()}` : `${rows} MATCH${rows === 1 ? '' : 'ES'}  •  ${brand.label}  •  ${th.label.toUpperCase()}`, W / 2, H - 26);
+    const where = brand.label === th.label.toUpperCase() ? brand.label : `${brand.label}  •  ${th.label.toUpperCase()}`; // 3.15: LuchaDerpy once
+    ctx.fillText(data.recap ? `${done} OF ${rows} RESULTS LOGGED  •  ${where}` : `${rows} MATCH${rows === 1 ? '' : 'ES'}  •  ${where}`, W / 2, H - 26);
     ctx.textAlign = 'left';
 
     return canvas.toBuffer('image/png');

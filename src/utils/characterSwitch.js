@@ -10,7 +10,7 @@ const { pool } = require('../db/pool');
 const { UserError } = require('./errors');
 const { DIVISION_LABELS } = require('./discordHelpers');
 
-const SWITCH_DIVISIONS = ['mens', 'womens'];
+const SWITCH_DIVISIONS = ['mens', 'womens', 'luchaderpy']; // 3.15: 🟣 too, with its own cooldown
 
 async function heldTitles(charId, client = pool) {
     const { rows } = await client.query(
@@ -21,14 +21,15 @@ async function heldTitles(charId, client = pool) {
     return rows.map((r) => r.name);
 }
 
-/** Days left before this player may switch again (0 = free to switch). */
-async function cooldownLeft(guildId, discordId, client = pool, excludeId = null) {
+/** Days left before this player may switch again (0 = free to switch). 3.15: the 🟣 slot has its own timer. */
+async function cooldownLeft(guildId, discordId, client = pool, excludeId = null, lucha = false) {
     const { rows: g } = await client.query(`SELECT switch_cooldown_days FROM guilds WHERE guild_id = $1`, [guildId]);
     const days = g[0]?.switch_cooldown_days ?? 14;
     if (!days) return { left: 0, days };
     const { rows } = await client.query(
-        `SELECT MAX(resolved_at) AS last FROM pending_requests
-         WHERE guild_id = $1 AND requested_by = $2 AND request_type = 'character_switch' AND status = 'approved' AND id <> $3`, [guildId, discordId, excludeId || 0]);
+        `SELECT MAX(pr.resolved_at) AS last FROM pending_requests pr LEFT JOIN characters fc ON fc.id = pr.challenger_character_id
+         WHERE pr.guild_id = $1 AND pr.requested_by = $2 AND pr.request_type = 'character_switch' AND pr.status = 'approved' AND pr.id <> $3
+           AND (COALESCE(fc.division, '') = 'luchaderpy') = $4`, [guildId, discordId, excludeId || 0, Boolean(lucha)]);
     if (!rows[0]?.last) return { left: 0, days };
     const next = new Date(rows[0].last).getTime() + days * 86400000;
     const left = Math.ceil((next - Date.now()) / 86400000);
@@ -38,20 +39,23 @@ async function cooldownLeft(guildId, discordId, client = pool, excludeId = null)
 /** Throws a friendly UserError if this switch isn't allowed. Returns { from, to }. */
 async function check(guildId, discordId, fromId, toId, client = pool, excludeId = null) {
     const { rows } = await client.query(
-        `SELECT c.id, c.name, c.division, c.status, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id
+        `SELECT c.id, c.name, c.division, c.status, c.base_character_id, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.id = ANY($2::bigint[])`, [guildId, [fromId, toId].filter(Boolean)]);
     const from = rows.find((r) => String(r.id) === String(fromId));
     const to = rows.find((r) => String(r.id) === String(toId));
     if (!from || from.status !== 'approved' || from.is_placeholder || String(from.discord_id) !== String(discordId)) throw new UserError('That isn\'t one of your active wrestlers anymore.');
-    if (!SWITCH_DIVISIONS.includes(from.division)) throw new UserError('Switching is only for Men\'s and Women\'s characters.');
+    if (!SWITCH_DIVISIONS.includes(from.division)) throw new UserError('Switching is only for Men\'s, Women\'s and LuchaDerpy characters.');
     const belts = await heldTitles(from.id, client);
     if (belts.length) throw new UserError(`**${from.name}** holds the **${belts.join(', ')}**. Champions can't switch: drop the belt (or ask staff to vacate it) first.`);
-    const cd = await cooldownLeft(guildId, discordId, client, excludeId);
-    if (cd.left > 0) throw new UserError(`You can switch once every ${cd.days} days. Your next switch is <t:${Math.floor(cd.next / 1000)}:R>.`);
+    const lucha = from.division === 'luchaderpy';
+    const cd = await cooldownLeft(guildId, discordId, client, excludeId, lucha);
+    if (cd.left > 0) throw new UserError(`You can switch ${lucha ? 'your 🟣 LuchaDerpy character ' : ''}once every ${cd.days} days. Your next ${lucha ? '🟣 ' : ''}switch is <t:${Math.floor(cd.next / 1000)}:R>.`);
     if (!toId) return { from, to: null };
     if (!to || to.status !== 'approved' || !to.is_placeholder) throw new UserError('That character isn\'t open anymore. Pick another one.');
     if (to.division !== from.division) throw new UserError(`You can only switch within the same division (${DIVISION_LABELS[from.division]}).`);
-    return { from, to };
+    // 3.15: one superstar = one player (the same player may hold both colors; staff see that on the request)
+    const { dual } = await require('./lucha').checkSuperstar({ ...to, unclaimed: to.is_placeholder }, discordId, client);
+    return { from, to, dual };
 }
 
 /** Runs inside the approval transaction. Returns the line shown on the staff card. */
@@ -69,7 +73,7 @@ async function applyInTransaction(tx, guildId, r) {
         `UPDATE signup_entries e SET character_id = $2 WHERE e.character_id = $1
            AND e.signup_id IN (SELECT id FROM signups WHERE guild_id = $3 AND status IN ('open','closed'))
            AND NOT EXISTS (SELECT 1 FROM signup_entries x WHERE x.signup_id = e.signup_id AND x.character_id = $2)`, [from.id, to.id, guildId]);
-    return `${from.name} → ${to.name} for <@${r.requested_by}> (${from.name} is open now)`;
+    return `${from.division === 'luchaderpy' ? '🟣 ' : ''}${from.name} → ${to.name} for <@${r.requested_by}> (${from.name} is open now)`;
 }
 
 /** After staff decide: make the old character open, refresh posts, and DM the player. Never throws. */

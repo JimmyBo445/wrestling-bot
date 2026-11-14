@@ -137,9 +137,9 @@ const isPrivateErr = (i) => i.responses.some((r) => (r.p?.flags & 64) && /⚠️
 
     // ---------- titles ----------
     const T = {};
-    await t('titles seeded (13)', async () => {
+    await t('titles seeded (14, with the 3.15 LuchaDerpy belt)', async () => {
         const { rows } = await f.pool.query(`select id,name from titles where guild_id='g1'`);
-        assert.strictEqual(rows.length, 13);
+        assert.strictEqual(rows.length, 14);
         rows.forEach((r) => (T[r.name] = String(r.id)));
     });
     await t('title match crowns champion; list + belt + history work', async () => {

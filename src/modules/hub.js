@@ -94,11 +94,11 @@ async function pickerPayload(interaction, purpose, arg = '0', div = 'all', page 
     const { rows } = await pool.query(
         `SELECT c.id, c.name, c.division, c.status FROM characters c
          WHERE c.guild_id = $1 AND c.status = ANY($2::text[]) AND ($3::text IS NULL OR c.division = $3)
-         ORDER BY lower(c.name), c.id LIMIT 25 OFFSET $4`, [...params, p * 25]);
+         ORDER BY regexp_replace(lower(c.name), '^the +', ''), c.id LIMIT 25 OFFSET $4`, [...params, p * 25]);
     const embed = new EmbedBuilder().setColor(0xC0392B).setTitle(cfg.title)
         .setDescription(total ? `${total} wrestler${total === 1 ? '' : 's'}${division ? ` in ${DIVISION_LABELS[division]}` : ''}. Pick one from the list${pages > 1 ? ' (◀ ▶ for more)' : ''}.` : 'There are no wrestlers to pick here.');
     const components = [];
-    if (!cfg.lock) components.push(row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`ui:pg:${purpose}:${arg}:${d}:t`, l, d === div))));
+    if (!cfg.lock) components.push(...require('../utils/panelKit').rows5([['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`ui:pg:${purpose}:${arg}:${d}:t`, l, d === div))));
     if (rows.length) {
         components.push(select(`ui:pk:${purpose}:${arg}`, 'Pick a wrestler', rows.map((c) => ({ label: clip(c.name, 100), value: String(c.id),
             description: clip(`${DIVISION_LABELS[c.division] || c.division}${c.status === 'retired' ? ' · retired' : ''}`, 100) }))));
@@ -185,7 +185,7 @@ async function statsPanel(interaction, charId, view = 'ov', other = null) {
 // ================================================================== standings
 
 const STAND_TABS = [['lb', '📊 Leaderboards'], ['rk', '📈 Rankings'], ['pw', '⚡ Power'], ['ss', '📅 Season'], ['rv', '🔥 Rivalries']];
-const divButtons = (prefix, current, withAll) => row(...[...(withAll ? [['all', 'All']] : []), ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`${prefix}:${d}`, l, d === current)));
+const divButtons = (prefix, current, withAll) => require('../utils/panelKit').rows5([...(withAll ? [['all', 'All']] : []), ...Object.entries(DIVISION_LABELS)].map(([d, l]) => tab(`${prefix}:${d}`, l, d === current))); // 3.15: rows of 5
 
 async function standingsPanel(interaction, view = 'pw', a = null, b = null) {
     const tabs = row(...STAND_TABS.map(([k, l]) => tab(`ui:sd:${k}`, l, k === view || (view === 'sr' && k === 'ss') || (view === 'ch' && k === 'lb'))));
@@ -205,7 +205,7 @@ async function standingsPanel(interaction, view = 'pw', a = null, b = null) {
         if (view === 'rk') {
             const div = DIVISION_LABELS[a] ? a : 'mens';
             const p = await require('./rankings').rankingsPayload(interaction.guild, div);
-            return { ...p, components: withHome([tabs, divButtons('ui:sd:rk', div, false)]) };
+            return { ...p, components: withHome([tabs, ...divButtons('ui:sd:rk', div, false)]) };
         }
         if (view === 'pw') {
             const div = DIVISION_LABELS[a] ? a : 'all';
@@ -213,7 +213,7 @@ async function standingsPanel(interaction, view = 'pw', a = null, b = null) {
             const { weekKey } = require('../utils/newsletter');
             const embeds = [];
             for (const d of div === 'all' ? Object.keys(DIVISION_LABELS) : [div]) embeds.push((await powerEmbed(guildId, d, weekKey())).embed);
-            return { embeds, components: withHome([tabs, divButtons('ui:sd:pw', div, true)]) };
+            return { embeds, components: withHome([tabs, ...divButtons('ui:sd:pw', div, true)]) };
         }
         if (view === 'ss' || view === 'sr') {
             const y = Number(a) || thisYear();
@@ -456,7 +456,7 @@ async function contractHome(interaction, view = 'h', notice = null) {
         if (view === 'h') {
             const { rows } = await pool.query(
                 `SELECT c.id, c.name, c.division FROM characters c JOIN users u ON u.id = c.owner_id
-                 WHERE c.guild_id = $1 AND u.discord_id = $2 AND c.status = 'approved' ORDER BY lower(c.name) LIMIT 25`, [interaction.guildId, interaction.user.id]);
+                 WHERE c.guild_id = $1 AND u.discord_id = $2 AND c.status = 'approved' ORDER BY regexp_replace(lower(c.name), '^the +', '') LIMIT 25`, [interaction.guildId, interaction.user.id]);
             const lines = [];
             for (const c of rows) {
                 const k = await cu.getActive(c.id);
@@ -580,7 +580,8 @@ const CHANNELS = [
     ['power', 'Weekly power rankings', 'power_channel_id'], ['reminders', 'Unfinished match pings (daily)', 'reminders_channel_id'],
     ['history', 'Championship history', 'history_channel_id'], ['champions', 'Live champions board', 'champions_channel_id'], ['roster', 'Live roster: main channel', 'roster_channel_id'],
     ['roster_mens', "Live roster: Men's", 'roster_channel_mens'], ['roster_womens', "Live roster: Women's", 'roster_channel_womens'],
-    ['roster_custom', 'Live roster: Custom', 'roster_channel_custom'], ['roster_custom_womens', "Live roster: Custom Women's", 'roster_channel_custom_womens']];
+    ['roster_custom', 'Live roster: Custom', 'roster_channel_custom'], ['roster_custom_womens', "Live roster: Custom Women's", 'roster_channel_custom_womens'],
+    ['roster_luchaderpy', 'Live roster + standings: 🟣 LuchaDerpy', 'roster_channel_luchaderpy'], ['lucha_card', '🟣 LuchaDerpy show card', 'luchaderpy_card_channel_id']]; // 3.15
 
 async function channelsPanel(interaction, notice = null) {
     requireAdmin(interaction, 'change bot channels');
@@ -608,6 +609,10 @@ async function setChannel(interaction, key, channelId) {
     let notice;
     try {
         if (key === 'history') notice = (await capture(interaction, 'admin', 'history', { channel: channelId ? { id: channelId } : null })).content;
+        else if (key === 'lucha_card') { // 3.15
+            await pool.query(`UPDATE guilds SET luchaderpy_card_channel_id = $2 WHERE guild_id = $1`, [interaction.guildId, channelId || null]);
+            notice = channelId ? `📣 Posting the LuchaDerpy card now sends it to <#${channelId}>.` : 'The LuchaDerpy card is posted where you press 📣 Post again.';
+        }
         else if (key.startsWith('roster') || key === 'champions') notice = await require('../utils/rosterBoard').setChannel(interaction.client, interaction.guildId, key, channelId || null); // 3.11 / 3.12 / 3.14
         else if (channelId) await capture(interaction, 'admin', 'channels', { [key]: { id: channelId } });
         else await capture(interaction, 'admin', 'channels', { turn_off: key });
@@ -653,7 +658,7 @@ async function today(guildId) {
     return require('../utils/titleWatch').localNow(rows[0]?.tz).date;
 }
 
-const CARD_PICK = { all: 'Both cards', raw: 'RAW', smackdown: 'SmackDown' };
+const CARD_PICK = { all: 'All cards', raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' };
 const late = (n) => `${n} day${n === 1 ? '' : 's'} late`;
 /** Unfinished matches, optionally only one card (raw / smackdown). */
 async function unfinishedList(guildId, brand = 'all') {
@@ -672,7 +677,7 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
         const secs = U.sections(list);
         const byBrand = (b) => list.filter((m) => m.brand === b).length;
         const summary = list.length
-            ? [`**${list.length}** match${list.length === 1 ? '' : 'es'} still to play${brand === 'all' ? ` · 🟥 RAW **${byBrand('raw')}** · 🟦 SmackDown **${byBrand('smackdown')}**` : ''}.`,
+            ? [`**${list.length}** match${list.length === 1 ? '' : 'es'} still to play${brand === 'all' ? ` · 🟥 RAW **${byBrand('raw')}** · 🟦 SmackDown **${byBrand('smackdown')}** · 🟪 LuchaDerpy **${byBrand('luchaderpy')}**` : ''}.`,
                 `Oldest: **${late(Math.max(...list.map((m) => m.days_late)))}** · players to ping: **${new Set(list.flatMap((m) => m.players)).size}**`].join('\n')
             : `✅ Nothing unfinished${brand === 'all' ? '. Every match on a past card has a result.' : ` on the ${CARD_PICK[brand]} card.`}`;
         const embed = new EmbedBuilder().setColor(list.length ? 0xE67E22 : 0x2ECC71).setTitle(`⏳ Unfinished matches${brand === 'all' ? '' : `: ${CARD_PICK[brand]}`} (${list.length})`).setDescription(summary)
@@ -693,7 +698,7 @@ async function unfinishedPanel(interaction, notice = null, brand = 'all') {
             flush();
         }
         if (fields >= 24) embed.addFields({ name: '…', value: 'More matches than fit here. Pick one card with the buttons below.' });
-        const cards = row(...Object.entries(CARD_PICK).map(([k, l]) => tab(`ui:uf:h:${k}`, k === 'raw' ? '🟥 RAW' : k === 'smackdown' ? '🟦 SmackDown' : 'Both cards', k === brand)));
+        const cards = row(...Object.entries(CARD_PICK).map(([k, l]) => tab(`ui:uf:h:${k}`, k === 'raw' ? '🟥 RAW' : k === 'smackdown' ? '🟦 SmackDown' : k === 'luchaderpy' ? '🟪 LuchaDerpy' : 'All cards', k === brand)));
         const pingLabel = brand === 'all' ? '📣 Ping them here now' : `📣 Ping the ${CARD_PICK[brand]} players here`;
         const buttons = [btn(`ui:uf:p:${brand}`, pingLabel, P, !list.some((m) => m.players.length)), btn('ui:h:staff', '◀ Staff Tools')];
         if (!auto) buttons.push(btn('ui:ch:k:reminders', '🔔 Set up daily pings'));
@@ -721,8 +726,14 @@ async function wrestlerStaffPanel(interaction, charId, notice = null) {
         r1.push(btn(`ui:ov:${c.id}`, '🔢 Set overall'));
         r1.push(btn(`ui:ws:delq:${c.id}`, '🗑 Delete', D));
         const give = new UserSelectMenuBuilder().setCustomId(`ui:ws:to:${c.id}`).setPlaceholder(c.unclaimed ? 'Give to a player…' : 'Move to another player…');
-        const divs = Object.entries(DIVISION_LABELS).filter(([d]) => d !== c.division).map(([d, l]) => btn(`ui:ws:dv:${c.id}:${d}`, `➡️ ${l}`));
-        return withNotice({ embeds: [embed], components: withHome([row(...r1), new ActionRowBuilder().addComponents(give), row(...divs), row(btn(`ui:ws:back:${c.id}`, '◀ Back to wrestler'))]) }, notice);
+        // 3.15: LuchaDerpy is not a division you move a wrestler into: 🟣 versions are tied to their Men's superstar
+        const divs = c.division === 'luchaderpy' ? [] : Object.entries(DIVISION_LABELS).filter(([d]) => d !== c.division && d !== 'luchaderpy').map(([d, l]) => btn(`ui:ws:dv:${c.id}:${d}`, `➡️ ${l}`));
+        const L = require('../utils/lucha');
+        const other = await L.otherHalf(c);
+        if (c.division === 'luchaderpy') embed.addFields({ name: '🟣 LuchaDerpy version', value: `of the Men's superstar **${c.name}**${other && !other.unclaimed ? ` (🟢 <@${other.owner_discord_id}>)` : ' (🟢 open)'}. Its record and titles are separate from Men's.` });
+        else if (other && !other.unclaimed && other.status === 'approved') embed.addFields({ name: '🟣 LuchaDerpy', value: `<@${other.owner_discord_id}> uses **${c.name}** in LuchaDerpy.` });
+        const extra = c.division === 'luchaderpy' && other ? [row(btn(`ui:ws:v:${other.id}`, '🟢 Men\'s version'))] : other ? [row(btn(`ui:ws:v:${other.id}`, '🟣 LuchaDerpy version'))] : [];
+        return withNotice({ embeds: [embed], components: withHome([row(...r1), new ActionRowBuilder().addComponents(give), ...(divs.length ? [row(...divs)] : []), ...extra, row(btn(`ui:ws:back:${c.id}`, '◀ Back to wrestler'))]) }, notice);
     });
 }
 
@@ -950,8 +961,17 @@ async function handle(interaction, parts) {
         if (a === 'to') {
             const uid = v;
             const u = interaction.users?.get?.(uid) || { id: uid, bot: false };
+            if (u.bot) return wrestlerStaffPanel(interaction, b, '⚠️ Bots can\'t own characters.');
+            // 3.15: a Men's superstar → ask which slot
+            const c = await require('../utils/characterUtils').getCharacterById(b);
+            if (c && ['mens', 'luchaderpy'].includes(c.division) && String(c.guild_id) === String(interaction.guildId)) {
+                const menId = c.division === 'luchaderpy' ? c.base_character_id : c.id;
+                return show(interaction, { content: `Give **${c.name}** to <@${uid}> as their…`, embeds: [], allowedMentions: { parse: [] },
+                    components: [row(btn(`ui:ws:sl:${menId}:${uid}:n`, '🟢 Normal Men\'s slot', P), btn(`ui:ws:sl:${menId}:${uid}:l`, '🟣 LuchaDerpy slot', P), btn(`ui:ws:v:${b}`, 'Cancel'))] });
+            }
             return wrestlerStaffRun(interaction, b, 'transfer', { new_owner: u });
         }
+        if (a === 'sl') return wrestlerStaffRun(interaction, b, 'transfer', { new_owner: { id: c, bot: false }, slot: d === 'l' ? 'luchaderpy' : 'normal' });
         if (a === 'delq') {
             return show(interaction, { content: 'Delete this wrestler **for good**? This only works if they have no matches, titles or teams; otherwise retire them instead.', embeds: [],
                 components: [row(btn(`ui:ws:dely:${b}`, 'Yes, delete', D), btn(`ui:ws:v:${b}`, 'Cancel'))] });

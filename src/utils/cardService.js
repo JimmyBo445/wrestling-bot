@@ -1,5 +1,5 @@
 const { pool, withTransaction } = require('../db/pool');
-const { MATCH_CONFIG, isTeamMatch, matchLabel, MAX_CARD_MATCHES, CARD_BRANDS, DIVISION_THEME } = require('./constants');
+const { MATCH_CONFIG, isTeamMatch, matchLabel, MAX_CARD_MATCHES, CARD_BRANDS, DIVISION_THEME, divisionsForBrand } = require('./constants');
 const { UserError } = require('./errors');
 const { injuryWarnings } = require('./injuryUtils');
 const { requireCharacter, getCharacterById } = require('./characterUtils');
@@ -51,8 +51,19 @@ async function filledDrafts(guildId, brand, division = null, client = pool) {
     return (await brandDrafts(guildId, brand, client)).filter((d) => d.n > 0 && (!division || d.division === division));
 }
 
+/** 3.15: LuchaDerpy matches only go on the LuchaDerpy show, and nothing else does. */
+function checkBrandDivision(brand, division) {
+    if (!divisionsForBrand(brand).includes(division)) {
+        throw new UserError(division === 'luchaderpy'
+            ? `🟣 LuchaDerpy matches go on the **LuchaDerpy** card (${CARD_BRANDS.luchaderpy.showName}), not ${brandLabel(brand)}.`
+            : `The **LuchaDerpy** card is only for 🟣 LuchaDerpy matches. ${divisionLabel(division)} matches go on RAW or SmackDown.`);
+    }
+}
+const defaultShowName = (brand) => CARD_BRANDS[brand]?.showName || null;
+
 /** Starts a fresh, empty show card for the brand. Replaces whatever was there (all divisions). */
 async function startShow(guildId, brand, createdBy, name = null, client = pool) {
+    name = name || defaultShowName(brand);
     await client.query(`DELETE FROM card_drafts WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
     require('./signupBooked').onCardChange(guildId);
     const { rows } = await client.query(
@@ -65,11 +76,12 @@ async function startShow(guildId, brand, createdBy, name = null, client = pool) 
 /** Gets (or quietly creates) the draft for one division of the show. */
 async function ensureDraft(guildId, brand, division, createdBy, client = pool) {
     const show = await getShow(guildId, brand, client);
-    if (!show) await client.query(`INSERT INTO card_shows (guild_id, brand, created_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [guildId, brand, createdBy]);
+    checkBrandDivision(brand, division);
+    if (!show) await client.query(`INSERT INTO card_shows (guild_id, brand, name, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, [guildId, brand, defaultShowName(brand), createdBy]);
     const { rows } = await client.query(
         `INSERT INTO card_drafts (guild_id, brand, division, name, created_by) VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (guild_id, brand, division) DO UPDATE SET updated_at = now()
-         RETURNING *`, [guildId, brand, division, show?.name || null, createdBy]);
+         RETURNING *`, [guildId, brand, division, show?.name || defaultShowName(brand), createdBy]);
     return rows[0];
 }
 
@@ -207,6 +219,7 @@ function checkStip(stipulation) {
 async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId = null, stipulation = null, createdBy = 'system' }) {
     checkStip(stipulation);
     const { chars, title, warnings, division } = await checkMatch(guildId, matchType, characterIds, titleId);
+    checkBrandDivision(brand, division);
     return withTransaction(async (client) => {
         const draft = await ensureDraft(guildId, brand, division, createdBy, client);
         await client.query(`SELECT id FROM card_drafts WHERE id = $1 FOR UPDATE`, [draft.id]);
@@ -636,7 +649,7 @@ async function autoShow(guildId, brand, createdBy, perDivision, name = null, { s
     const have = new Map(counts.map((r) => [r.division, r.n]));
     const plans = [], skipped = [];
     let signedCount = 0, signupMode = null;
-    for (const division of DIVISION_ORDER) {
+    for (const division of DIVISION_ORDER.filter((d) => divisionsForBrand(brand).includes(d))) { // 3.15
         if ((have.get(division) || 0) < 2) continue; // nothing to book here, and nothing worth reporting
         try {
             const plan = await planCard(guildId, division, perDivision, { signupIds, priority });
@@ -719,7 +732,7 @@ function chunkLines(header, lines, max = 1900) {
 }
 
 module.exports = {
-    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, getDraft, requireDraft, startDraft, getDraftMatches,
+    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, checkBrandDivision, getDraft, requireDraft, startDraft, getDraftMatches,
     getShow, brandDrafts, filledDrafts, startShow, ensureDraft, setShowName, editMatchOnCard, autoShow, describeShow, pingLines, chunkLines,
     tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard
 };

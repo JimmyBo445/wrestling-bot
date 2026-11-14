@@ -1,7 +1,7 @@
 const { createCanvas } = require('@napi-rs/canvas');
 const { font, C, themeOf, rr, fitText, drawCover, loadArt, placeholderArt, baseBackground, chip, statBox, streakText, recordText, formRow, serverTag } = require('./common');
 
-const DIVS = [['mens', "MEN'S"], ['womens', "WOMEN'S"], ['custom', 'CUSTOM'], ['custom_womens', "CUSTOM WOMEN'S"]];
+const DIVS = [['mens', "MEN'S"], ['womens', "WOMEN'S"], ['custom', 'CUSTOM'], ['custom_womens', "CUSTOM WOMEN'S"], ['luchaderpy', 'LUCHADERPY']];
 
 /** data: { name, avatarUrl, serverName, summary, byDivision:{div:summary}, wrestlers:[{name,division,status,current,wins,losses,draws,champ}],
  *         titles, titleList:[{name,count,current,nth,holders}], legacy:[badge] } */
@@ -49,7 +49,7 @@ async function renderPlayerCard(data) {
 
     // per-division
     ctx.fillStyle = C.gold; ctx.font = font(13, 'bold'); ctx.fillText('BY DIVISION', 40, 366);
-    const dw = (W - 80 - 3 * gap) / 4;
+    const dw = (W - 80 - (DIVS.length - 1) * gap) / DIVS.length;
     DIVS.forEach(([key, label], i) => {
         const d = data.byDivision[key];
         const x = 40 + i * (dw + gap), y = 378;
@@ -57,7 +57,7 @@ async function renderPlayerCard(data) {
         ctx.fillStyle = C.panel; rr(ctx, x, y, dw, 78, 12); ctx.fill();
         ctx.fillStyle = th.accent; ctx.fillRect(x + 12, y, dw - 24, 3);
         ctx.textAlign = 'center';
-        ctx.fillStyle = C.sub; ctx.font = font(11, 'bold'); ctx.fillText(label, x + dw / 2, y + 24);
+        ctx.fillStyle = C.sub; fitText(ctx, label, x + dw / 2, y + 24, dw - 16, 11, 'bold', 8);
         ctx.fillStyle = d ? C.text : C.grey;
         fitText(ctx, d ? `${d.wins}-${d.losses}${d.draws ? `-${d.draws}` : ''}` : '—', x + dw / 2, y + 58, dw - 20, 28, 'bold', 14);
     });

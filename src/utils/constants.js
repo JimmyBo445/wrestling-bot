@@ -16,7 +16,9 @@ const DEFAULT_TITLES = [
 
     { name: "Golden Global Kingdom Championship", division: 'custom_womens', is_tag_title: false },
     { name: "Custom Women's Air Force Championship", division: 'custom_womens', is_tag_title: false },
-    { name: "Custom Women's Tag Team Championship", division: 'custom_womens', is_tag_title: true }
+    { name: "Custom Women's Tag Team Championship", division: 'custom_womens', is_tag_title: true },
+
+    { name: 'Super Fuego Mega Lucha Derpy El Campeon', division: 'luchaderpy', is_tag_title: false } // 3.15
 ];
 
 const ffa = (n) => Array.from({ length: n }, (_, i) => ({ name: `participant${i + 1}`, label: `Wrestler ${i + 1}`, team: null }));
@@ -70,20 +72,26 @@ const DIVISION_THEME = {
     mens:   { label: "Men's",   accent: '#C0392B', accent2: '#7B1E16', embed: 0xC0392B },
     womens: { label: "Women's", accent: '#D6336C', accent2: '#7A1D3C', embed: 0xD6336C },
     custom: { label: 'Custom',  accent: '#7C3AED', accent2: '#3F1D8A', embed: 0x7C3AED },
-    custom_womens: { label: "Custom Women's", accent: '#0EA5A4', accent2: '#0B5E5E', embed: 0x0EA5A4 }
+    custom_womens: { label: "Custom Women's", accent: '#0EA5A4', accent2: '#0B5E5E', embed: 0x0EA5A4 },
+    luchaderpy: { label: 'LuchaDerpy', accent: '#A855F7', accent2: '#4C1D95', embed: 0xA855F7 } // 3.15
 };
 
 // Show brands for match cards. Plain colours + text only (no logos).
 const CARD_BRANDS = {
     raw:       { name: 'RAW', label: 'RAW',       bgTop: '#9b1118', bgBottom: '#2a0306', accent: '#ff3b3b', glow: '#ff5a4a' },
-    smackdown: { name: 'SmackDown', label: 'SMACKDOWN', bgTop: '#0e4cb5', bgBottom: '#041230', accent: '#3d9bff', glow: '#4fa3ff' }
+    smackdown: { name: 'SmackDown', label: 'SMACKDOWN', bgTop: '#0e4cb5', bgBottom: '#041230', accent: '#3d9bff', glow: '#4fa3ff' },
+    // 3.15: the LuchaDerpy show. Only LuchaDerpy (🟣) matches go on it, and LuchaDerpy matches only go on it.
+    luchaderpy: { name: 'LuchaDerpy', label: 'LUCHADERPY', bgTop: '#6b21a8', bgBottom: '#1e0533', accent: '#c084fc', glow: '#d8b4fe', showName: 'Ova Tha MF Breaking Point B!tch Card' }
 };
+const LUCHA = 'luchaderpy';
+/** The divisions that can go on a show: LuchaDerpy only on its own show, the rest only on RAW / SmackDown. */
+const divisionsForBrand = (brand) => (brand === LUCHA ? [LUCHA] : Object.keys(DIVISION_THEME).filter((d) => d !== LUCHA));
 
 module.exports = {
     MAX_CARD_MATCHES, CARD_BRANDS, STIPULATIONS, FINISHES, FINISH_LABEL,
     DEFAULT_TITLES, MATCH_CONFIG, isTeamMatch, matchLabel,
     MAX_CHARACTERS_PER_USER, DEFAULT_COOLDOWN_HOURS, DEFAULT_STREAK_THRESHOLD, RANKING_WINDOW_DAYS,
-    DIVISION_THEME,
+    DIVISION_THEME, LUCHA, divisionsForBrand,
     // kept so any leftover old file that imports it does not crash
     MATCH_TYPES: MATCH_CONFIG, SINGLES_COOLDOWN_HOURS: DEFAULT_COOLDOWN_HOURS
 };

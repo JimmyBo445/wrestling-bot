@@ -169,12 +169,12 @@ async function rosterListPayload(guildId, { division = 'all', sort = 'wrestler',
     const p = Math.min(Math.max(0, page), pages.length - 1);
     // extras = opened from the home menu: also offer the Hall of Fame and the injury report (ids end in :x)
     const id = (d, s, n) => `ui:l:${d}:${s}:${n}${extras ? ':x' : ''}`;
-    const divRow = row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => btn(id(d, sort, 0), l, d === division ? ButtonStyle.Primary : ButtonStyle.Secondary)));
+    const divRows = require('../utils/panelKit').rows5([['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => btn(id(d, sort, 0), l, d === division ? ButtonStyle.Primary : ButtonStyle.Secondary))); // 3.15
     const nav = [btn(id(division, sort === 'player' ? 'wrestler' : 'player', 0), sort === 'player' ? '🔤 A to Z' : '👥 By player')];
     if (pages.length > 1) {
         nav.push(btn(id(division, sort, p - 1), '◀', ButtonStyle.Secondary, p === 0), btn(`ui:x:${p}`, `${p + 1} / ${pages.length}`, ButtonStyle.Secondary, true), btn(id(division, sort, p + 1), '▶', ButtonStyle.Secondary, p >= pages.length - 1));
     }
-    const components = [divRow, row(...nav)];
+    const components = [...divRows, row(...nav)];
     if (extras) components.push(row(btn('ui:dr:p', '🗂 Roster cards'), btn('ui:hi:h', '🏛 Hall of Fame'), btn('ui:hi:i', '🤕 Injuries')));
     return { embeds: pages[p], components, allowedMentions: NOPING };
 }
@@ -190,9 +190,13 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
     let picked = null;
     if (characterId) {
         picked = await requireCharacter(guildId, characterId, { statuses: ['approved', 'retired'] });
-        if (picked.unclaimed) {
+        // 3.15: a Men's superstar nobody has as 🟢 may still be someone's 🟣 (and the reverse)
+        const other = picked.unclaimed ? await require('../utils/lucha').otherHalf(picked) : null;
+        if (picked.unclaimed && other && !other.unclaimed && other.status === 'approved') {
+            picked = other;
+        } else if (picked.unclaimed) {
             return { embeds: [new EmbedBuilder().setColor(0x95A5A6).setTitle(`Who is ${picked.name}?`)
-                .setDescription(`**${picked.name}** (${DIVISION_LABELS[picked.division]}${picked.overall ? `, ${picked.overall} Overall` : ''}) has **no player** right now. They're 🟢 open.`)],
+                .setDescription(`**${picked.name}** (${picked.division === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[picked.division]}${picked.overall ? `, ${picked.overall} Overall` : ''}) has **no player** right now. They're ⚪ open.`)],
             components: [row(btn(`ui:w:p:${picked.id}`, '🖼 Profile card'), btn(`ui:w:s:${picked.id}`, '📊 Stats'), btn(`ui:w:t:${picked.id}`, '🏆 Title history'),
                 // 3.13.1: staff can set the overall (and give / retire) open characters too
                 ...(isAdmin(interaction) ? [btn(`ui:ws:v:${picked.id}`, '🛠 Staff', ButtonStyle.Danger)] : []))] };
@@ -215,7 +219,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             const rec = `${s.wins}-${s.losses}${s.draws ? `-${s.draws}` : ''}`;
             const belts = titles.get(String(c.id));
             const team = teams.get(String(c.id));
-            const bits = [DIVISION_LABELS[c.division] || c.division, c.overall && `${c.overall} Overall`, rec, belts && `🏆 ${belts.map(shortTitle).join(', ')}`, team && `Team: ${team.join(', ')}`].filter(Boolean);
+            const bits = [c.division === 'luchaderpy' ? '🟣 LuchaDerpy' : c.division === 'mens' ? '🟢 Men\'s' : DIVISION_LABELS[c.division] || c.division, c.overall && `${c.overall} Overall`, rec, belts && `🏆 ${belts.map(shortTitle).join(', ')}`, team && `Team: ${team.join(', ')}`].filter(Boolean);
             lines.push(`${String(c.id) === String(picked?.id) ? `**${c.name}** ◀` : `**${c.name}**`}${c.status === 'retired' ? ' _(retired)_' : ''}\n${bits.join(' · ')}`);
         }
         embed.addFields({ name: picked ? `All of ${name}'s wrestlers (${chars.length})` : 'Wrestlers', value: clip(lines.join('\n\n'), 1024) });
@@ -245,7 +249,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             components.push(row(...acts));
         }
         // 3.13: swap a Men's/Women's character for an open one
-        if (String(ownerId) === String(interaction.user.id) && focus.status === 'approved' && ['mens', 'womens'].includes(focus.division)) {
+        if (String(ownerId) === String(interaction.user.id) && focus.status === 'approved' && ['mens', 'womens', 'luchaderpy'].includes(focus.division)) {
             components.push(row(btn(`ui:sw:o:${focus.id}`, `🔄 Switch ${clip(focus.name, 40)} for an open character`), btn('ui:rq:h:mw', '🙋 Request a character')));
         }
     }

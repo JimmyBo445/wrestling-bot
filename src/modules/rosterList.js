@@ -6,7 +6,7 @@ const { UserError } = require('../utils/errors');
 
 const DIVISION_CHOICES = Object.entries(DIVISION_LABELS).map(([value, name]) => ({ name, value }));
 const DIV_ORDER = Object.keys(DIVISION_LABELS);
-const COLORS = { mens: 0x2E86C1, womens: 0xC2185B, custom: 0xE67E22, custom_womens: 0x8E44AD };
+const COLORS = { mens: 0x2E86C1, womens: 0xC2185B, custom: 0xE67E22, custom_womens: 0x8E44AD, luchaderpy: 0xA855F7 };
 const MAX_DESC = 3900, MAX_MSG = 5800;
 
 const data = new SlashCommandBuilder()
@@ -36,7 +36,12 @@ async function buildRosterList(guildId, { division = null, sort = 'wrestler', in
     if (!rows.length) throw new UserError(division ? `There are no ${includeRetired ? '' : 'active '}wrestlers in the ${DIVISION_LABELS[division]} division yet.` : 'There are no wrestlers yet.');
     const [titles, teams] = await Promise.all([currentTitles(guildId), activeTeams(guildId)]);
     const mark = (c) => `${titles.has(String(c.id)) ? ' 🏆' : ''}${c.status === 'retired' ? ' _(retired)_' : ''}`;
-    const who = (c) => (c.unclaimed ? '_unclaimed_' : `<@${c.discord_id}>`);
+    const who = (c) => {
+        // 3.15: a Men's superstar someone uses in LuchaDerpy
+        if (c.lucha_discord_id) return c.unclaimed ? `🟣 <@${c.lucha_discord_id}>` : `🟢🟣 <@${c.discord_id}>`;
+        if (c.division === 'luchaderpy') return `🟣 <@${c.discord_id}>`;
+        return c.unclaimed ? '_unclaimed_' : `<@${c.discord_id}>`;
+    };
     const embeds = [];
 
     if (sort === 'player') {

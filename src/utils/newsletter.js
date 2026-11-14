@@ -58,7 +58,7 @@ async function buildNewsletter(guildId, guildName, { end = new Date() } = {}) {
     if (best) { embed.addFields({ name: `Match of the week${best.rated ? ` ${'⭐'.repeat(best.stars)}` : ''}`, value: `${best.winners || '?'} def. ${best.others || '?'}${best.title_name ? ` · ${best.title_name}` : ''}` }); parts.push(1); }
     if (heated.length) { embed.addFields({ name: 'Hottest feuds', value: heated.map(({ f, heat }) => `🔥 **${f.name}** — ${heat.label} (${heat.score})`).join('\n') }); parts.push(1); }
     else if (riv.length) { embed.addFields({ name: 'Rivalries', value: riv.map((r) => `🔥 ${r.a_name} vs ${r.b_name}: ${r.meetings} meetings (${r.a_wins}-${r.b_wins})`).join('\n') }); parts.push(1); }
-    if (upcoming.length) { embed.addFields({ name: 'Coming up', value: upcoming.map((u) => `📅 **${fmtYmd(u.show_date)}** — ${u.brand === 'raw' ? 'RAW' : 'SmackDown'}${u.name ? ` “${u.name}”` : ''}`).join('\n') }); parts.push(1); }
+    if (upcoming.length) { embed.addFields({ name: 'Coming up', value: upcoming.map((u) => `📅 **${fmtYmd(u.show_date)}** — ${{ raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' }[u.brand] || u.brand}${u.name ? ` “${u.name}”` : ''}`).join('\n') }); parts.push(1); }
     if (injured.length) { embed.addFields({ name: 'Injury report', value: injured.map((i) => `🤕 ${i.name} (back ${i.returns_at})`).join('\n') }); parts.push(1); }
     if (entries.length) { embed.addFields({ name: 'From the office', value: entries.map((e) => `• ${e.body}`).join('\n').slice(0, 1024) }); parts.push(1); }
     if (!parts.length) embed.setDescription('A quiet week. Nothing to report yet.');

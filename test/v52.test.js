@@ -37,10 +37,10 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         i = await click('ui:ch:s:roster', priv({ ...ADM, kind: 'channel', values: ['rosterch'] }));
         assert.match(text(i), /live roster is in <#rosterch>/, text(i));
         const posts = sent.slice(before).filter((m) => m.channelId === 'rosterch');
-        assert.strictEqual(posts.length, 5, 'mens, womens, custom, custom womens, how-to');
+        assert.strictEqual(posts.length, 7, 'mens, womens, custom, custom womens, luchaderpy roster + standings (3.15), how-to');
         const mens = desc(posts[0]);
-        assert.match(mens, /\*\*Aaron \\\*Star\\\*\*\* : <@u2>/, 'names are escaped');
-        assert.match(mens, /\*\*Jey Uso\*\* : <@u1>/);
+        assert.match(mens, /\*\*Aaron \\\*Star\\\*\*\* 🟢 : <@u2>/, 'names are escaped');
+        assert.match(mens, /\*\*Jey Uso\*\* 🟢 : <@u1>/);
         assert.ok(mens.indexOf('Aaron') < mens.indexOf('Jey Uso'), 'A to Z');
         assert.match(mens, /Open — nobody plays them yet[\s\S]*\*\*Open Guy\*\* : _open_/); assert.match(mens, /^📋 \*\*Men's Division\*\* · 2 taken · 1 open/);
         assert.ok(!/Retired Ron|Pending Pat/.test(mens), 'only approved wrestlers');
@@ -48,9 +48,9 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         assert.deepStrictEqual(posts[0].payload.allowedMentions, { parse: [] }, 'never pings');
         assert.match(desc(posts[1]), /Liv Morgan\*\* : <@u3>/);
         assert.match(desc(posts[2]), /Nobody yet/);
-        const how = posts[4].payload.components[0].toJSON().components.map((c) => c.custom_id);
+        const how = posts[6].payload.components[0].toJSON().components.map((c) => c.custom_id);
         assert.deepStrictEqual(how, ['ui:rq:h:mw:rb', 'ui:sw:h:mw:rb', 'ui:mk:h:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']); // main channel has every division
-        assert.strictEqual((await q(`select count(*)::int n from roster_board_posts`))[0].n, 5);
+        assert.strictEqual((await q(`select count(*)::int n from roster_board_posts`))[0].n, 7);
     });
 
     await t('staff set an overall on the wrestler\'s 🛠 Staff screen; only that division\'s post is edited', async () => {
@@ -65,7 +65,7 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         await wait(250);
         const ed = edited.slice(e0);
         assert.strictEqual(ed.length, 1, 'one post edited');
-        assert.match(desc(ed[0]), /\*\*Jey Uso\*\* \(91 Overall\) : <@u1>/);
+        assert.match(desc(ed[0]), /\*\*Jey Uso\*\* \(91 Overall\) 🟢 : <@u1>/);
         assert.strictEqual(sent.length, s0, 'nothing new posted');
         i = await click(`ui:ovm:${J}`, priv({ ...ADM, fields: { overall: '120' } }));
         assert.match(text(i), /1 to 99/);
@@ -95,7 +95,7 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         await f.pool.query(`UPDATE characters SET overall = 80 WHERE id = $1`, [O]);
         const s0 = sent.length;
         assert.strictEqual(await RB.refresh(client, G), 'posted');
-        assert.strictEqual(sent.slice(s0).filter((m) => m.channelId === 'rosterch').length, 5);
+        assert.strictEqual(sent.slice(s0).filter((m) => m.channelId === 'rosterch').length, 7);
         assert.match(desc(sent.slice(s0)[0]), /Open Guy\*\* \(80 Overall\) : _open_/);
     });
 
@@ -105,7 +105,7 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         assert.strictEqual(await RB.refresh(client, G), 'unchanged');
         const s0 = sent.length;
         await RB.refreshAll(client);
-        assert.strictEqual(sent.slice(s0).filter((m) => m.channelId === 'rosterch').length, 5);
+        assert.strictEqual(sent.slice(s0).filter((m) => m.channelId === 'rosterch').length, 7);
     });
 
     await t('a very big division splits over several posts', async () => {

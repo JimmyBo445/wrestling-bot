@@ -69,6 +69,11 @@ async function logMatch(input) {
     }
     const characters = [];
     for (const v of slotCharacterIds) characters.push(await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true }));
+    // 3.15: 🟣 LuchaDerpy characters only wrestle each other (their records stay separate from Men's)
+    const ld = characters.filter((c) => c.division === 'luchaderpy');
+    if (ld.length && ld.length !== characters.length) {
+        throw new UserError(`🟣 LuchaDerpy characters can only be in LuchaDerpy matches. ${characters.filter((c) => c.division !== 'luchaderpy').map((c) => `**${c.name}**`).join(', ')} ${characters.length - ld.length > 1 ? 'aren\'t' : 'isn\'t'} LuchaDerpy.`);
+    }
 
     const teamMode = isTeamMatch(matchType);
     const sideTeams = {}; // 1/2 -> team row or null

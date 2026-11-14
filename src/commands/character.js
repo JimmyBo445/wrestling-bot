@@ -22,6 +22,10 @@ const DIVISION_CHOICES = [
     { name: 'Custom', value: 'custom' },
     { name: "Custom Women's", value: 'custom_womens' }
 ];
+const SLOT_CHOICES = [ // 3.15
+    { name: "🟢 Normal slot", value: 'normal' },
+    { name: "🟣 LuchaDerpy slot (Men's superstars only)", value: 'luchaderpy' }
+];
 const ALIGNMENT_CHOICES = [
     { name: 'Face (good guy)', value: 'face' },
     { name: 'Heel (bad guy)', value: 'heel' },
@@ -49,6 +53,7 @@ const data = new SlashCommandBuilder()
         .addUserOption((o) => o.setName('user').setDescription('Owner').setRequired(true))
         .addStringOption((o) => o.setName('name').setDescription('Character name').setRequired(true).setMaxLength(40))
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
+        .addStringOption((o) => o.setName('slot').setDescription("Normal slot, or the player's 🟣 LuchaDerpy slot (Men's only)").setRequired(true).addChoices(...SLOT_CHOICES))
         .addAttachmentOption((o) => o.setName('picture').setDescription('Upload a picture (easiest: just attach an image)').setRequired(false))
         .addStringOption((o) => o.setName('image_url').setDescription('Or a link (https) to character art').setRequired(false))
         .addStringOption((o) => o.setName('alignment').setDescription('Face, heel or neutral').setRequired(false).addChoices(...ALIGNMENT_CHOICES))
@@ -103,7 +108,8 @@ const data = new SlashCommandBuilder()
     .addSubcommand((sub) => sub.setName('transfer')
         .setDescription('[Admin] Give a character to a different player (keeps all stats and history)')
         .addStringOption((o) => charOpt(o))
-        .addUserOption((o) => o.setName('new_owner').setDescription('Who should own it').setRequired(true)))
+        .addUserOption((o) => o.setName('new_owner').setDescription('Who should own it').setRequired(true))
+        .addStringOption((o) => o.setName('slot').setDescription("For a Men's superstar: normal slot or 🟣 LuchaDerpy slot").setRequired(false).addChoices(...SLOT_CHOICES)))
     .addSubcommand((sub) => sub.setName('swap-division')
         .setDescription('[Admin] Move a character to another division (confirms first if titles or teams are affected)')
         .addStringOption((o) => charOpt(o))
@@ -197,17 +203,29 @@ module.exports = {
             const upload = await readUpload(interaction);
             const imageUrl = upload ? null : await checkImage(interaction.options.getString('image_url'));
             const ownerId = await ensureUser(guildId, targetUser.id);
-            if (!(await canAddCharacter(guildId, ownerId))) throw new UserError(`<@${targetUser.id}> already has ${MAX_CHARACTERS_PER_USER} characters.`);
             const division = interaction.options.getString('division');
+            const lucha = interaction.options.getString('slot') === 'luchaderpy'; // 3.15
+            const L = require('../utils/lucha');
+            if (lucha && division !== 'mens') throw new UserError('Only Men\'s superstars can be used in 🟣 LuchaDerpy. Pick the Men\'s division (or the normal slot).');
+            if (lucha) await L.requireLuchaRoom(guildId, ownerId, targetUser.id);
+            else if (!(await canAddCharacter(guildId, ownerId))) throw new UserError(`<@${targetUser.id}> already has ${MAX_CHARACTERS_PER_USER} characters.`);
+            // 🟣: the Men's superstar is made open, and its 🟣 version goes to the player
+            const menOwner = lucha ? await require('../utils/unclaim').placeholderUserId(guildId, interaction.client.user.id) : ownerId;
             const { rows: made } = await pool.query(
                 `INSERT INTO characters (guild_id, owner_id, name, division, image_url, alignment, bio, finisher, entrance_theme, status, submitted_by, approved_by, approved_at)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'approved', $10, $10, now()) RETURNING id`,
-                [guildId, ownerId, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
+                [guildId, menOwner, name, division, imageUrl, interaction.options.getString('alignment'), interaction.options.getString('bio'),
                     cleanText(interaction.options.getString('finisher')), cleanText(interaction.options.getString('entrance_theme')), interaction.user.id]
             );
             if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(made[0].id, upload), made[0].id]);
-            await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division });
-            return interaction.editReply({ content: `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
+            if (lucha) {
+                const l = await L.ensureLucha(guildId, made[0].id, menOwner);
+                await pool.query(`UPDATE characters SET owner_id = $1 WHERE id = $2`, [ownerId, l.id]);
+            }
+            await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division: lucha ? 'luchaderpy' : division });
+            return interaction.editReply({ content: lucha
+                ? `Assigned 🟣 **${name}** (LuchaDerpy slot) to <@${targetUser.id}>. **${name}** is also on the Men's roster now, marked 🟣.`
+                : `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'overall') {
@@ -217,6 +235,7 @@ module.exports = {
             const n = interaction.options.getInteger('overall') || null;
             const before = character.overall;
             await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2`, [character.id, guildId, n]);
+            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
             await logAudit(guildId, interaction.user.id, 'character_overall', { character: Number(character.id), overall: n, before });
             return respond(interaction, {
                 content: n ? `🔢 **${character.name}** is now **${n} Overall**${before ? ` (was ${before})` : ''}. The roster channel updates in a few seconds.` : `🔢 Removed **${character.name}**'s overall.`,
@@ -249,7 +268,7 @@ module.exports = {
             }
             if (added.length) await logAudit(guildId, interaction.user.id, 'character_open_added', { names: added, division });
             const lines = [];
-            if (added.length) lines.push(`🟢 Added **${added.length}** open ${DIVISION_LABELS[division]} character${added.length === 1 ? '' : 's'}: ${added.map((n) => `**${n}**`).join(', ')}.`, 'Members can ask for them with 🙋 **Request a character** (roster channel, menu post or 🙋 My Wrestlers). The roster channel updates in a few seconds.');
+            if (added.length) lines.push(`⚪ Added **${added.length}** open ${DIVISION_LABELS[division]} character${added.length === 1 ? '' : 's'}: ${added.map((n) => `**${n}**`).join(', ')}.`, 'Members can ask for them with 🙋 **Request a character** (roster channel, menu post or 🙋 My Wrestlers). The roster channel updates in a few seconds.');
             if (skipped.length) lines.push(`⚠️ Skipped (that name is already taken): ${skipped.map((n) => `**${n}**`).join(', ')}.`);
             return interaction.editReply({ content: lines.join('\n'), allowedMentions: NO_MENTIONS });
         }
@@ -298,6 +317,7 @@ module.exports = {
             if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (signatures, catchphrase, finisher or story).');
             params.push(character.id);
             await pool.query(`UPDATE characters SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
+            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed });
             return respond(interaction, { content: `Updated **${character.name}**: ${changed.join(', ')}. See it with \`/character profile\`.`, flags: 64 });
         }
@@ -311,6 +331,7 @@ module.exports = {
             const updates = []; const params = []; const changed = [];
             const set = (col, val, label) => { params.push(val); updates.push(`${col} = $${params.length}`); changed.push(label); };
             const name = interaction.options.getString('name');
+            if (name !== null && character.division === 'luchaderpy') throw new UserError(`A 🟣 LuchaDerpy character always has its superstar's name. Rename the Men's **${character.name}** instead.`);
             if (name !== null) { if (!name.trim()) throw new UserError('Name can\'t be empty.'); await assertNameFree(guildId, name.trim(), character.id); set('name', name.trim(), 'name'); }
             const upload = await readUpload(interaction);
             const img = interaction.options.getString('image_url');
@@ -327,6 +348,7 @@ module.exports = {
             if (!updates.length) throw new UserError('Nothing to change: fill in at least one option (name, picture, image_url, alignment, bio, finisher or entrance_theme).');
             params.push(character.id);
             await pool.query(`UPDATE characters SET ${updates.join(', ')} WHERE id = $${params.length}`, params);
+            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed });
             return interaction.editReply({ content: `Updated **${name?.trim() || character.name}**: ${changed.join(', ')}.` });
         }
@@ -338,6 +360,7 @@ module.exports = {
             await interaction.deferReply({ flags: 64 });
             const upload = await readUpload(interaction);
             await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(character.id, upload), character.id]);
+            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed: ['picture'] });
             return interaction.editReply({ content: `Updated the picture for **${character.name}**. See it with \`/character profile\`.` });
         }
@@ -397,6 +420,12 @@ module.exports = {
                         (SELECT COUNT(*) FROM contenders WHERE character_id = $1)::int AS contenders,
                         (SELECT COUNT(*) FROM team_members WHERE character_id = $1)::int AS teams`, [character.id]);
             const { matches, reigns, contenders, teams } = rows[0];
+            const luchaRow = await require('../utils/lucha').luchaOf(character.id); // 3.15: its 🟣 version goes with it
+            if (luchaRow) {
+                const { rows: lh } = await pool.query(`SELECT (SELECT COUNT(*) FROM match_participants WHERE character_id = $1)::int + (SELECT COUNT(*) FROM title_reigns WHERE character_id = $1)::int AS n`, [luchaRow.id]);
+                if (lh[0].n) throw new UserError(`**${character.name}**'s 🟣 LuchaDerpy version has history, so deleting would break stats. Retire them instead.`);
+                if (!luchaRow.unclaimed) throw new UserError(`**${character.name}** is <@${luchaRow.owner_discord_id}>'s 🟣 LuchaDerpy character. Take it off them first.`);
+            }
             if (matches || reigns || contenders || teams) {
                 const bits = [];
                 if (matches) bits.push(`${matches} match${matches > 1 ? 'es' : ''}`);
@@ -406,7 +435,8 @@ module.exports = {
                 throw new UserError(`**${character.name}** has history (${bits.join(', ')}), so deleting would break stats. Use 🛠 Staff on the wrestler (\`/whois\`) to hide them, or 🛠 Staff on the wrestler (\`/whois\`) to give them to the right owner.`);
             }
             await withTransaction(async (client) => {
-                await client.query(`DELETE FROM pending_requests WHERE character_id = $1 OR challenger_character_id = $1`, [character.id]);
+                await client.query(`DELETE FROM pending_requests WHERE character_id = $1 OR challenger_character_id = $1 OR character_id IN (SELECT id FROM characters WHERE base_character_id = $1) OR challenger_character_id IN (SELECT id FROM characters WHERE base_character_id = $1)`, [character.id]);
+                await client.query(`DELETE FROM signup_entries WHERE character_id IN (SELECT id FROM characters WHERE base_character_id = $1)`, [character.id]);
                 await client.query(`DELETE FROM characters WHERE id = $1 AND guild_id = $2`, [character.id, guildId]);
             });
             await logAudit(guildId, interaction.user.id, 'character_removed', { name: character.name, owner: character.owner_discord_id });
@@ -418,6 +448,9 @@ module.exports = {
             const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
             const to = interaction.options.getString('division');
             if (character.division === to) throw new UserError(`**${character.name}** is already in ${DIVISION_LABELS[to]}.`);
+            // 3.15: LuchaDerpy characters are always tied to their Men's superstar
+            if (character.division === 'luchaderpy' || to === 'luchaderpy') throw new UserError('LuchaDerpy characters can\'t change division. To use a Men\'s superstar in LuchaDerpy, give it to a player\'s 🟣 LuchaDerpy slot (🛠 Staff on the wrestler → Give to a player).');
+            if (await require('../utils/lucha').luchaOf(character.id)) throw new UserError(`**${character.name}** has a 🟣 LuchaDerpy version, so they stay on the Men's roster.`);
             const plan = await divSwap.swapPlan(guildId, character);
             if (!divSwap.hasConflicts(plan)) {
                 await divSwap.swapDivision(interaction.client, guildId, character, to, interaction.user.id);
@@ -452,15 +485,28 @@ module.exports = {
             requireAdmin(interaction, 'transfer characters');
             const newOwnerUser = interaction.options.getUser('new_owner');
             if (newOwnerUser.bot) throw new UserError('Bots can\'t own characters.');
-            const character = await requireCharacter(guildId, interaction.options.getString('character'));
+            let character = await requireCharacter(guildId, interaction.options.getString('character'));
+            // 3.15: a Men's superstar can go to the player's 🟢 normal slot or their 🟣 LuchaDerpy slot
+            const L = require('../utils/lucha');
+            const slot = interaction.options.getString('slot');
+            if (slot === 'luchaderpy' && !L.isLucha(character)) {
+                if (character.division !== 'mens') throw new UserError(`**${character.name}** is ${DIVISION_LABELS[character.division]}. Only Men's superstars can be used in 🟣 LuchaDerpy.`);
+                const holder = await require('../utils/unclaim').placeholderUserId(guildId, interaction.client.user.id);
+                character = await requireCharacter(guildId, (await L.ensureLucha(guildId, character.id, holder)).id);
+            } else if (slot === 'normal' && L.isLucha(character)) {
+                character = await requireCharacter(guildId, character.base_character_id);
+            }
             const newOwnerId = await ensureUser(guildId, newOwnerUser.id);
-            if (String(character.owner_id) === String(newOwnerId)) throw new UserError(`<@${newOwnerUser.id}> already owns **${character.name}**.`);
-            if (['approved', 'pending'].includes(character.status) && !(await canAddCharacter(guildId, newOwnerId))) {
+            if (String(character.owner_id) === String(newOwnerId)) throw new UserError(`<@${newOwnerUser.id}> already has **${character.name}**${L.isLucha(character) ? ' as 🟣 LuchaDerpy' : ''}.`);
+            if (L.isLucha(character)) { if (['approved', 'pending'].includes(character.status)) await L.requireLuchaRoom(guildId, newOwnerId, newOwnerUser.id); }
+            else if (['approved', 'pending'].includes(character.status) && !(await canAddCharacter(guildId, newOwnerId))) {
                 throw new UserError(`<@${newOwnerUser.id}> already has ${MAX_CHARACTERS_PER_USER} characters. Retire or move one of theirs first.`);
             }
+            await L.checkSuperstar(character, newOwnerUser.id);
             await pool.query(`UPDATE characters SET owner_id = $1 WHERE id = $2 AND guild_id = $3`, [newOwnerId, character.id, guildId]);
-            await logAudit(guildId, interaction.user.id, 'character_transferred', { name: character.name, from: character.owner_discord_id, to: newOwnerUser.id });
-            return respond(interaction, { content: `Moved **${character.name}** from <@${character.owner_discord_id}> to <@${newOwnerUser.id}>.`, allowedMentions: NO_MENTIONS });
+            await logAudit(guildId, interaction.user.id, 'character_transferred', { name: character.name, from: character.owner_discord_id, to: newOwnerUser.id, division: character.division });
+            const what = L.isLucha(character) ? `🟣 **${character.name}** (LuchaDerpy)` : `**${character.name}**`;
+            return respond(interaction, { content: character.unclaimed ? `Gave ${what} to <@${newOwnerUser.id}>.` : `Moved ${what} from <@${character.owner_discord_id}> to <@${newOwnerUser.id}>.`, allowedMentions: NO_MENTIONS });
         }
     }
 };

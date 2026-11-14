@@ -15,7 +15,7 @@ const { MATCH_CONFIG, FINISHES, matchLabel } = require('../utils/constants');
 const { btn, row, clip, homeRow, show, onPrivateMessage, ButtonStyle } = require('../utils/panelKit');
 
 const KINDS = ['rp', 'rpm', 'rr', 'rrm', 'rrd'];
-const BRAND = { raw: 'RAW', smackdown: 'SmackDown' };
+const BRAND = { raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' };
 const FINISH_NAME = Object.fromEntries(FINISHES.map((f) => [f.value, f.name]));
 const P = ButtonStyle.Primary, G = ButtonStyle.Success, D = ButtonStyle.Danger, S = ButtonStyle.Secondary;
 

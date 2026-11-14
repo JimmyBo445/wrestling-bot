@@ -109,8 +109,9 @@ async function claimList(interaction, signup, division = 'all') {
     const { rows } = await pool.query(
         `SELECT c.id, c.name, c.division FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND ($2::text IS NULL OR c.division = $2)
-         ORDER BY lower(c.name) LIMIT 25`, [interaction.guildId, division === 'all' ? null : division]);
-    const divRow = row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS)].map(([d, l]) => btn(`signup:claimdiv:${signup.id}:${d}`, l, d === division ? ButtonStyle.Primary : ButtonStyle.Secondary)));
+           AND c.division <> 'luchaderpy' AND NOT ${require('./lucha').luchaTakenSql('c', '$3')}
+         ORDER BY regexp_replace(lower(c.name), '^the +', '') LIMIT 25`, [interaction.guildId, division === 'all' ? null : division, interaction.user.id]);
+    const divRow = row(...[['all', 'All'], ...Object.entries(DIVISION_LABELS).filter(([d]) => d !== 'luchaderpy')].map(([d, l]) => btn(`signup:claimdiv:${signup.id}:${d}`, l, d === division ? ButtonStyle.Primary : ButtonStyle.Secondary)));
     const components = [divRow];
     if (rows.length) {
         components.push(row(new StringSelectMenuBuilder().setCustomId(`signup:claimpick:${signup.id}`).setPlaceholder('Pick the wrestler that should be yours')

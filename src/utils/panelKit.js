@@ -9,6 +9,8 @@ const { UserError } = require('./errors');
 const NOPING = NO_MENTIONS;
 const btn = (id, label, style = ButtonStyle.Secondary, disabled = false) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style).setDisabled(disabled);
 const row = (...c) => new ActionRowBuilder().addComponents(...c);
+/** 3.15: buttons split into rows of 5 (Discord's limit), e.g. All + 5 division tabs. */
+const rows5 = (buttons) => { const out = []; for (let i = 0; i < buttons.length; i += 5) out.push(row(...buttons.slice(i, i + 5))); return out; };
 const clip = (s, n) => (String(s).length > n ? `${String(s).slice(0, n - 1)}…` : String(s));
 const homeRow = () => row(btn('ui:h:home', '🏠 Home'));
 
@@ -123,4 +125,4 @@ function withNotice(payload, notice) {
     return { ...payload, content: [notice, payload.content].filter(Boolean).join('\n').slice(0, 1900) };
 }
 
-module.exports = { NOPING, btn, row, clip, homeRow, onPrivateMessage, show, privately, command, capture, open, problem, withNotice, ButtonStyle };
+module.exports = { NOPING, btn, row, rows5, clip, homeRow, onPrivateMessage, show, privately, command, capture, open, problem, withNotice, ButtonStyle };

@@ -53,7 +53,7 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
         i = await click('ui:mr:h', priv(P('u1')));
         assert.match(text(i), /Jey Uso → Roman Reigns\*\*: switch · ⏳ waiting/);
         i = await click(`ui:sw:o:${CUST}`, priv(P('u1')));
-        assert.match(text(i), /only for Men's and Women's/);
+        assert.match(text(i), /only for Men's, Women's and LuchaDerpy/);
     });
 
     await t('approve: Roman moves to the player, Jey becomes open, card spot follows, DM sent', async () => {

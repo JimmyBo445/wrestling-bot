@@ -18,9 +18,9 @@ const { btn, row, clip, homeRow, show, capture, open, withNotice, ButtonStyle } 
 const KINDS = ['ad', 'adm', 'bk', 'bkm', 'ct', 'ctm', 'cs'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const select = (id, placeholder, options) => row(new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder).addOptions(options.slice(0, 25)));
-const BRANDS = { raw: 'RAW', smackdown: 'SmackDown' };
+const BRANDS = { raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' }; // 3.15
 const brandOf = (b) => (BRANDS[b] ? b : 'raw');
-const otherBrand = (b) => (b === 'raw' ? 'smackdown' : 'raw');
+const otherBrands = (b) => Object.keys(BRANDS).filter((x) => x !== b);
 
 function withHome(rows) {
     const has = rows.some((r) => (r.components || []).some((c) => c.data?.custom_id === 'ui:h:home'));
@@ -399,7 +399,7 @@ async function cardTools(interaction, brand, notice = null) {
         const autoRecap = gr[0]?.auto_recap !== false;
         const { rows: poll } = await pool.query(`SELECT id FROM motn_polls WHERE guild_id = $1 AND status = 'open' LIMIT 1`, [g]).catch(() => ({ rows: [] }));
         const L = BRANDS[brand];
-        const embed = new EmbedBuilder().setColor(brand === 'raw' ? 0xC0392B : 0x2E86DE).setTitle(`🧰 ${L} card tools`).setDescription([
+        const embed = new EmbedBuilder().setColor(brand === 'raw' ? 0xC0392B : brand === 'luchaderpy' ? 0xA855F7 : 0x2E86DE).setTitle(`🧰 ${L} card tools`).setDescription([
             `**Show:** ${showRow?.name || '_no name_'} · 📅 ${showRow?.show_date ? fmtYmd(showRow.show_date) : '_no date (📅 Schedule)_'}`,
             `**Matches:** ${total} (${logged} with a result)`,
             `**Auto recap when the last match is logged:** ${autoRecap ? 'on' : 'off'}`,
@@ -412,7 +412,7 @@ async function cardTools(interaction, brand, notice = null) {
             row(btn(`ui:ct:nw:${brand}`, '🆕 New card'), btn(`ui:ct:au:${brand}`, '⚡ Auto-build', P), btn(`ui:ct:rq:${brand}`, '📨 Add a match request'), btn(`ui:ct:sc:${brand}`, '📅 Schedule'), btn(`ui:ct:up:${brand}`, '🗓 Upcoming')),
             row(btn(`ui:ct:rc:${brand}`, '🧾 Post recap here', S, !logged), btn(`ui:ct:vo:${brand}`, '⭐ Open MOTN vote here', S, !logged), btn(`ui:ct:vc:${brand}`, '🔒 Close MOTN vote', S, !poll.length),
                 btn(`ui:ct:ar:${brand}:${autoRecap ? 'off' : 'on'}`, `Auto recap: ${autoRecap ? 'on' : 'off'}`, autoRecap ? G : S)),
-            row(btn(`cardui:bk:${brand}`, `◀ Back to the ${L} card`), btn(`ui:ct:v:${otherBrand(brand)}`, `🔁 ${BRANDS[otherBrand(brand)]} card`), btn(`ui:ct:cq:${brand}`, '🗑 Clear the card', D, !total && !showRow))
+            row(btn(`cardui:bk:${brand}`, `◀ Back to the ${L} card`), ...otherBrands(brand).map((x) => btn(`ui:ct:v:${x}`, `🔁 ${BRANDS[x]}`)), btn(`ui:ct:cq:${brand}`, '🗑 Clear the card', D, !total && !showRow))
         ] }, notice);
     });
 }

@@ -250,6 +250,21 @@ async function seed() {
     await click('ui:ch:s:roster_womens', { ...A, kind: 'channel', values: ['womensch'], private: true });
     await click('ui:ch:s:champions', { ...A, kind: 'channel', values: ['champch'], private: true });
     await f.pool.query(`UPDATE characters SET overall = 88 WHERE id = $1`, [W.ace]);
+    // 3.15: LuchaDerpy: some 🟣 characters (one of them 🟢🟣), a LuchaDerpy card, a waiting 🟣 request, its channels
+    await run('character', 'open', { name: 'The Rock, Rey Mysterio, Dragon Lee, Penta, Rush', division: 'mens' }, A);
+    const byName = async (n) => (await f.pool.query(`SELECT id FROM characters WHERE name=$1 AND division='mens'`, [n])).rows[0].id;
+    await run('character', 'transfer', { character: await byName('Rey Mysterio'), new_owner: 'u2', slot: 'luchaderpy' }, A);
+    await run('character', 'transfer', { character: await byName('Dragon Lee'), new_owner: 'u3', slot: 'luchaderpy' }, A);
+    await run('character', 'transfer', { character: W.ace, new_owner: 'u1', slot: 'luchaderpy' }, A);
+    for (let k = 0; k < 30; k++) await run('character', 'transfer', { character: await byName(`Roster Man ${String(k).padStart(2, '0')}`), new_owner: `ld${k}`, slot: 'luchaderpy' }, A);
+    const ld = async (menId) => (await f.pool.query(`SELECT id FROM characters WHERE base_character_id=$1`, [menId])).rows[0].id;
+    W.ldRey = await ld(await byName('Rey Mysterio')); W.ldDragon = await ld(await byName('Dragon Lee')); W.ldAce = await ld(W.ace);
+    await svc.addMatchToCard(G, 'luchaderpy', { matchType: 'singles', characterIds: [W.ldRey, W.ldDragon] });
+    await run('match', 'log', { type: 'singles', wrestler1: W.ldAce, wrestler2: W.ldDragon, winner: 1 }, A);
+    await click('ui:rq:p:mw:luchaderpy', { ...P('u4'), private: true, values: [String(await byName('Penta'))] });
+    await click(`ui:rq:y:${await ld(await byName('Penta'))}`, { ...P('u4'), private: true });
+    await click('ui:ch:s:roster_luchaderpy', { ...A, kind: 'channel', values: ['ldch'], private: true });
+    await click('ui:ch:s:lucha_card', { ...A, kind: 'channel', values: ['ldcard'], private: true });
     return W;
 }
 

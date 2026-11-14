@@ -10,7 +10,7 @@ const svc = require('../utils/cardService');
 const { parseDate, fmtYmd } = require('../utils/dates');
 const motn = require('../utils/motn');
 
-const BRAND_CHOICES = Object.entries(CARD_BRANDS).map(([value, b]) => ({ name: b.label === 'RAW' ? 'RAW (red)' : 'SmackDown (blue)', value }));
+const BRAND_CHOICES = Object.entries(CARD_BRANDS).map(([value, b]) => ({ name: { raw: 'RAW (red)', smackdown: 'SmackDown (blue)', luchaderpy: 'LuchaDerpy (purple)' }[value] || b.name, value }));
 const DIVISION_CHOICES = Object.entries(DIVISION_THEME).map(([value, t]) => ({ name: t.label, value }));
 const TYPE_CHOICES = Object.entries(MATCH_CONFIG).map(([value, c]) => ({ name: c.label, value }));
 const MAX_SLOTS = Math.max(...Object.values(MATCH_CONFIG).map((c) => c.slots.length)); // 8

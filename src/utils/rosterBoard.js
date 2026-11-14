@@ -11,7 +11,7 @@ const { DIVISION_LABELS } = require('./discordHelpers');
 const DEBOUNCE_MS = Number(process.env.ROSTER_DEBOUNCE_MS) || 5000;
 const CHUNK = 1800; // characters per post (Discord allows 2000 in a message)
 const NOPING = { parse: [] };
-const DIV_COLUMN = { mens: 'roster_channel_mens', womens: 'roster_channel_womens', custom: 'roster_channel_custom', custom_womens: 'roster_channel_custom_womens' };
+const DIV_COLUMN = { mens: 'roster_channel_mens', womens: 'roster_channel_womens', custom: 'roster_channel_custom', custom_womens: 'roster_channel_custom_womens', luchaderpy: 'roster_channel_luchaderpy' };
 const timers = new Map();
 const busy = new Map(); // guildId → true while refreshing; 'again' if asked again meanwhile
 
@@ -25,13 +25,18 @@ function routes(g) {
     return out;
 }
 
-/** The posts for one division, already split to fit. */
-function divisionPosts(div, list) {
-    const label = DIVISION_LABELS[div];
-    const takenRows = list.filter((r) => !r.is_placeholder);
-    const openRows = list.filter((r) => r.is_placeholder);
-    const lines = takenRows.length ? takenRows.map((r) => `${name(r)} : <@${r.discord_id}>`) : ['_Nobody yet._'];
-    if (openRows.length) lines.push('', `🟢 **Open — nobody plays them yet**`, ...openRows.map((r) => `${name(r)} : _open_`));
+/**
+ * The posts for one division, already split to fit. `entries` are { r, owner, mark } in A–Z order:
+ * owner = the player's discord id (null = open), mark = 🟢 / 🟣 / 🟢🟣 next to the name (3.15, Men's and LuchaDerpy).
+ */
+function divisionPosts(div, entries) {
+    const label = div === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[div];
+    const taken = entries.filter((e) => e.owner);
+    const open = entries.filter((e) => !e.owner);
+    const mk = (e) => (e.mark ? ` ${e.mark}` : '');
+    const lines = taken.length ? taken.map((e) => `${name(e.r)}${mk(e)} : <@${e.owner}>`) : ['_Nobody yet._'];
+    if (open.length) lines.push('', `⚪ **Open — nobody plays them yet**`, ...open.map((e) => `${name(e.r)} : _open_`));
+    if (div === 'mens' && taken.some((e) => e.mark)) lines.push('', '-# 🟢 Men\'s · 🟣 LuchaDerpy · 🟢🟣 both (same player)');
     const chunks = [];
     let cur = [];
     for (const l of lines) {
@@ -41,18 +46,60 @@ function divisionPosts(div, list) {
     chunks.push(cur);
     return chunks.map((c, i) => ({
         slot: `${div}:${i}`,
-        header: `📋 **${label} Division**${chunks.length > 1 ? ` (${i + 1}/${chunks.length})` : ''} · ${takenRows.length} taken · ${openRows.length} open`,
+        header: `📋 **${label} Division**${chunks.length > 1 ? ` (${i + 1}/${chunks.length})` : ''} · ${taken.length} taken · ${open.length} open`,
         body: c.join('\n')
     }));
 }
 
+/** 3.15: what each division's post lists. Men's and LuchaDerpy share one roster of superstars. */
+function entriesFor(div, rows) {
+    const { markOf } = require('./lucha');
+    const lucha = new Map(rows.filter((r) => r.division === 'luchaderpy' && r.base_character_id).map((r) => [String(r.base_character_id), r]));
+    if (div === 'mens') {
+        return rows.filter((r) => r.division === 'mens').map((r) => { const m = markOf(r, lucha.get(String(r.id))); return { r, owner: m.owner, mark: m.owner ? m.mark : null }; });
+    }
+    if (div === 'luchaderpy') {
+        // taken: the 🟣 characters; open: Men's superstars nobody has in either color
+        const out = [];
+        for (const r of rows) { // already A–Z
+            if (r.division === 'luchaderpy' && !r.is_placeholder) out.push({ r, owner: r.discord_id, mark: '🟣' });
+            else if (r.division === 'mens' && !markOf(r, lucha.get(String(r.id))).owner) out.push({ r, owner: null, mark: null });
+        }
+        return out;
+    }
+    return rows.filter((r) => r.division === div).map((r) => ({ r, owner: r.is_placeholder ? null : r.discord_id, mark: null }));
+}
+
+/** 3.15: LuchaDerpy standings (record with the current player), posted in the LuchaDerpy roster channel. */
+async function luchaStandings(guildId) {
+    const { rows } = await pool.query(
+        `SELECT c.id, c.name, u.discord_id,
+                COUNT(m.id) FILTER (WHERE m.result_type = 'decisive' AND mp.is_winner)::int AS w,
+                COUNT(m.id) FILTER (WHERE m.result_type = 'decisive' AND NOT mp.is_winner)::int AS l,
+                COUNT(m.id) FILTER (WHERE m.result_type = 'draw')::int AS d
+         FROM characters c JOIN users u ON u.id = c.owner_id
+         LEFT JOIN match_participants mp ON mp.character_id = c.id AND mp.owner_id = c.owner_id
+         LEFT JOIN matches m ON m.id = mp.match_id
+         WHERE c.guild_id = $1 AND c.division = 'luchaderpy' AND c.status = 'approved' AND NOT u.is_placeholder
+         GROUP BY c.id, c.name, u.discord_id`, [guildId]);
+    const pct = (r) => (r.w + r.l ? r.w / (r.w + r.l) : 0);
+    rows.sort((a, b) => b.w - a.w || pct(b) - pct(a) || a.l - b.l || a.name.replace(/^the\s+/i, '').localeCompare(b.name.replace(/^the\s+/i, '')));
+    const lines = rows.length
+        ? rows.slice(0, 40).map((r, i) => `**${i + 1}.** ${escapeMarkdown(r.name)} · **${r.w}-${r.l}${r.d ? `-${r.d}` : ''}** : <@${r.discord_id}>`)
+        : ['_No LuchaDerpy characters yet._'];
+    return { slot: 'lucha:standings', header: '📊 **LuchaDerpy Standings** · most wins first', body: lines.join('\n').slice(0, CHUNK) };
+}
+
 /** The last post of a roster channel: how to get a character there (3.12: Men's/Women's are requested, custom ones made). */
 function infoFor(divs) {
-    const req = divs.filter((d) => ['mens', 'womens'].includes(d));
+    const req = divs.filter((d) => ['mens', 'womens', 'luchaderpy'].includes(d));
     const make = divs.some((d) => ['custom', 'custom_womens'].includes(d));
     const scope = req.length === 1 ? req[0] : 'mw';
     const lines = [];
-    if (req.length) lines.push(`• **Want a ${req.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an 🟢 open one. Staff approve it.`, '• **Want to be someone else?** Press 🔄 Switch character to trade yours for an 🟢 open one (same division; staff approve it).');
+    const normal = req.filter((d) => d !== 'luchaderpy');
+    if (normal.length) lines.push(`• **Want a ${normal.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an ⚪ open one. Staff approve it.`);
+    if (req.includes('luchaderpy')) lines.push('• **Want a 🟣 LuchaDerpy character?** LuchaDerpy uses the Men\'s roster. Press 🙋 Request a character and pick an ⚪ open superstar. It\'s an extra slot on top of your normal ones. Staff approve it.');
+    if (req.length) lines.push('• **Want to be someone else?** Press 🔄 Switch character to trade yours for an ⚪ open one (same division; staff approve it).');
     if (make) lines.push('• **Make your own custom wrestler:** press 🆕 Make a custom wrestler. Staff approve it and it shows up here.');
     lines.push('• **Waiting on staff?** 📨 My requests shows where your request stands.', '-# This channel updates by itself whenever someone gets, changes or gives up a character.');
     const buttons = [];
@@ -102,7 +149,7 @@ async function championPosts(guildId) {
         const held = list.filter((r) => r.reign_id).length;
         posts.push({
             slot: `champ:${div}`,
-            header: `🏆 **${label} Champions** · ${held} of ${list.length} belt${list.length === 1 ? '' : 's'} held`,
+            header: `🏆 **${div === 'luchaderpy' ? '🟣 LuchaDerpy' : label} Champions** · ${held} of ${list.length} belt${list.length === 1 ? '' : 's'} held`,
             body: list.map((r) => `**${escapeMarkdown(r.name)}**\n${who(r)}`).join('\n\n').slice(0, CHUNK)
         });
     }
@@ -117,16 +164,17 @@ async function plan(guildId) {
     const champCh = g[0]?.champions_channel_id || null;
     if (!Object.values(where).some(Boolean) && !champCh) return out;
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.division, c.overall, u.discord_id, u.is_placeholder
+        `SELECT c.id, c.name, c.division, c.overall, c.status, c.base_character_id, u.discord_id, u.is_placeholder
          FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = 'approved'
-         ORDER BY lower(c.name), c.id`, [guildId]);
+         ORDER BY regexp_replace(lower(c.name), '^the +', ''), c.id`, [guildId]);
     const divsIn = new Map();
     for (const div of Object.keys(DIVISION_LABELS)) {
         const ch = where[div];
         if (!ch) continue;
         if (!out.has(ch)) { out.set(ch, []); divsIn.set(ch, []); }
-        out.get(ch).push(...divisionPosts(div, rows.filter((r) => r.division === div)));
+        out.get(ch).push(...divisionPosts(div, entriesFor(div, rows)));
+        if (div === 'luchaderpy') out.get(ch).push(await luchaStandings(guildId)); // 3.15
         divsIn.get(ch).push(div);
     }
     for (const [ch, list] of out) list.push(infoFor(divsIn.get(ch)));
@@ -228,7 +276,7 @@ function schedule(client, guildId) {
     timers.set(guildId, t);
 }
 
-const COLUMN_FOR = { champions: 'champions_channel_id', roster: 'roster_channel_id', roster_mens: DIV_COLUMN.mens, roster_womens: DIV_COLUMN.womens, roster_custom: DIV_COLUMN.custom, roster_custom_womens: DIV_COLUMN.custom_womens };
+const COLUMN_FOR = { champions: 'champions_channel_id', roster: 'roster_channel_id', roster_mens: DIV_COLUMN.mens, roster_womens: DIV_COLUMN.womens, roster_custom: DIV_COLUMN.custom, roster_custom_womens: DIV_COLUMN.custom_womens, roster_luchaderpy: DIV_COLUMN.luchaderpy };
 
 /**
  * Staff picked a channel for `key` ('roster' = main, 'roster_mens' … = one division), or null to turn it off.
@@ -254,4 +302,4 @@ async function refreshAll(client) {
     for (const r of rows) await refresh(client, r.guild_id, { verify: true });
 }
 
-module.exports = { championPosts, plan, refresh, schedule, setChannel, refreshAll, routes, DIV_COLUMN };
+module.exports = { championPosts, luchaStandings, entriesFor, plan, refresh, schedule, setChannel, refreshAll, routes, DIV_COLUMN };

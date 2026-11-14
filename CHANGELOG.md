@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.15.0 — 🟣 LuchaDerpy
+- **New division: LuchaDerpy.** It uses the **Men's roster**: any Men's superstar can also be used in LuchaDerpy. Every player gets **1 LuchaDerpy slot on top of their normal ones**.
+- **One superstar, one player.** If someone has Roman as 🟢 Men's, nobody else can have Roman as 🟣 LuchaDerpy, and the reverse. The **same player** can have one superstar in both (🟢🟣), but only with staff approval.
+- **Staff are asked which slot.** 🛠 Staff on a Men's wrestler → *Give to a player* now asks **🟢 Normal Men's slot** or **🟣 LuchaDerpy slot**. `/character assign` has a **slot** option, and `/character transfer` has an optional one.
+- **🙋 Request a character** has a **🟣 LuchaDerpy** tab listing the ⚪ open superstars. **🔄 Switch character** works for your 🟣 character too, with the same staff approval. It has its **own 14-day cooldown**, separate from Men's.
+- **Same superstar in both colors?** The player is told staff decide. The staff card shows:
+  - how long they've had him in the other color
+  - his record with them there
+  - his belts
+  - their other characters
+  - their last switch
+- **Records are fully separate.** A 🟣 character is its own wrestler with its own matches, record, standings, power rankings and titles. 🟣 characters can only wrestle other 🟣 characters.
+- **Shared look.** The 🟣 version uses the Men's name, picture, finisher and overall and follows changes to them. If staff give the 🟣 version its own picture or overall, that one is kept.
+- **New belt:** Super Fuego Mega Lucha Derpy El Campeon. It shows on the live champions board under 🟣 LuchaDerpy. A superstar can hold a Men's title and El Campeon at the same time.
+- **New show: LuchaDerpy** ("Ova Tha MF Breaking Point B!tch Card"), purple, next to RAW and SmackDown. 🟣 matches only go on it, and it only takes 🟣 matches. It runs whenever an admin wants (no schedule) and uses the same match types. ⚡ Auto-build only books 🟣 wrestlers for it, from the current signup if you choose.
+- **Two new channels** (📺 Channels):
+  - **🟣 LuchaDerpy show card:** 📣 Post sends the card there.
+  - **Live roster + standings: 🟣 LuchaDerpy:** the LuchaDerpy roster plus a self-updating **LuchaDerpy Standings** post.
+- **Live roster marks:** the Men's post shows 🟢 Men's, 🟣 LuchaDerpy or 🟢🟣 both next to each name. Open characters are now marked ⚪ (instead of 🟢) everywhere.
+- **A–Z ignores a leading "The"** (Randy Orton, The Rock, Roman Reigns) in the roster channels, lists, pickers and request screens.
+- Division tabs wrap onto a second row when there are more than 5.
+- Database change: migration 030.
+
 ## 3.14.2
 - Messages about switching, requesting, claiming and transferring characters no longer mention records at all (keeps it simple for members). How records work didn't change.
 

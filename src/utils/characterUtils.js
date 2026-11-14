@@ -22,7 +22,7 @@ async function autocompleteCharacters(interaction, focusedValue, { statuses = ['
         `SELECT c.id, c.name, c.division, c.status, u.discord_id
          FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = ANY($2) AND c.name ILIKE $3 ${divisionSql}
-         ORDER BY c.name ASC LIMIT 25`,
+         ORDER BY regexp_replace(lower(c.name), '^the +', '') ASC LIMIT 25`,
         params
     );
     const names = await getDisplayNames(interaction.guild, rows.map((r) => r.discord_id));
@@ -35,7 +35,7 @@ async function autocompleteCharacters(interaction, focusedValue, { statuses = ['
 async function getCharacterCount(guildId, ownerId, client = pool) {
     const { rows } = await client.query(
         `SELECT COUNT(*)::int AS count FROM characters
-         WHERE guild_id = $1 AND owner_id = $2 AND status IN ('approved','pending')`,
+         WHERE guild_id = $1 AND owner_id = $2 AND status IN ('approved','pending') AND division <> 'luchaderpy'`, // 3.15: the 🟣 slot is extra
         [guildId, ownerId]
     );
     return rows[0].count;
@@ -75,7 +75,7 @@ async function assertNameFree(guildId, name, excludeId = null, client = pool) {
     if (!key) return;
     const { rows } = await client.query(
         `SELECT c.id, c.name, c.status, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND c.status <> 'denied'`, [guildId]);
+         WHERE c.guild_id = $1 AND c.status <> 'denied' AND c.division <> 'luchaderpy'`, [guildId]); // 3.15: a 🟣 version shares its superstar's name
     const hit = rows.find((r) => normName(r.name) === key && (excludeId === null || String(r.id) !== String(excludeId)));
     if (!hit) return;
     const who = hit.is_placeholder ? 'nobody (unclaimed)' : `<@${hit.discord_id}>`;

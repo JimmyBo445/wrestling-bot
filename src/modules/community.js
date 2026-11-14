@@ -27,7 +27,7 @@ const STATUS = {
 
 async function loadRequests(guildId, uid) {
     const { rows: reqs } = await pool.query(
-        `SELECT pr.*, c.name AS char_name, c2.name AS opp_name, t.name AS title_name, tm.name AS team_name
+        `SELECT pr.*, c.name AS char_name, c.division AS char_division, c2.name AS opp_name, t.name AS title_name, tm.name AS team_name
          FROM pending_requests pr
          LEFT JOIN characters c ON c.id = pr.character_id
          LEFT JOIN characters c2 ON c2.id = pr.challenger_character_id
@@ -48,8 +48,9 @@ async function loadRequests(guildId, uid) {
 function requestLine(r) {
     const st = STATUS[r.status] || r.status;
     if (r.request_type === 'character_submission') return `**${r.char_name || 'New wrestler'}**: new wrestler · ${st} · ${ts(r.created_at)}`;
-    if (r.request_type === 'character_claim') return `**${r.char_name || 'a wrestler'}**: claim · ${st} · ${ts(r.created_at)}`;
-    if (r.request_type === 'character_switch') return `**${r.opp_name || '?'} → ${r.char_name || '?'}**: switch · ${st} · ${ts(r.created_at)}`;
+    const ld = r.char_division === 'luchaderpy' ? '🟣 LuchaDerpy ' : ''; // 3.15
+    if (r.request_type === 'character_claim') return `**${r.char_name || 'a wrestler'}**: ${ld}claim · ${st} · ${ts(r.created_at)}`;
+    if (r.request_type === 'character_switch') return `**${r.opp_name || '?'} → ${r.char_name || '?'}**: ${ld}switch · ${st} · ${ts(r.created_at)}`;
     if (r.request_type === 'match_request') {
         const booked = r.status === 'approved' && r.payload?.booked === 'yes' ? ' · 📅 on a card' : '';
         return `**${r.char_name || '?'} vs ${r.opp_name || '?'}**${r.payload?.note ? ` _(${clip(r.payload.note, 40)})_` : ''} · ${st}${booked} · ${ts(r.created_at)}`;
@@ -168,23 +169,41 @@ async function makeSubmit(interaction, division) {
 // Men's and Women's characters aren't made by players: they ask for an 🟢 open one (a wrestler in the bot
 // that nobody plays) and staff approve it, exactly like 🔄 Claim a wrestler on the signup post.
 
-const REQ_DIVISIONS = ['mens', 'womens'];
+const REQ_DIVISIONS = ['mens', 'womens', 'luchaderpy']; // 3.15: 🟣 LuchaDerpy uses the Men's roster
 const scopeDivs = (scope) => (REQ_DIVISIONS.includes(scope) ? [scope] : REQ_DIVISIONS);
+const SORT = (a) => `regexp_replace(lower(${a}.name), '^the +', '')`; // 3.15: A–Z ignores a leading "The"
 
-/** One page of open characters in a division, optionally only names containing `search`. */
-async function openPage(guildId, div, page = 0, search = '') {
+/**
+ * One page of open characters in a division, optionally only names containing `search`.
+ * 3.15: a Men's superstar is open only if nobody has it as 🟢 or 🟣. With `discordId`, that player also sees
+ * superstars they already have in the other color (asking for both needs staff approval); those rows have `dual`.
+ * For 'luchaderpy' the rows are Men's superstars (ids are the Men's ids).
+ */
+async function openPage(guildId, div, page = 0, search = '', discordId = null) {
     const like = search ? `%${String(search).trim().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
-    const where = `c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2 AND ($3::text IS NULL OR c.name ILIKE $3)`;
-    const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}`, [guildId, div, like]);
+    const me = discordId ? String(discordId) : '';
+    let where;
+    if (div === 'luchaderpy') {
+        where = `c.guild_id = $1 AND c.status = 'approved' AND c.division = 'mens' AND $2::text = 'luchaderpy' AND ($3::text IS NULL OR c.name ILIKE $3)
+                 AND (u.is_placeholder OR u.discord_id = $6) AND NOT ${require('../utils/lucha').luchaTakenSql('c')}`;
+    } else {
+        where = `c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2 AND ($3::text IS NULL OR c.name ILIKE $3)
+                 AND ($2 <> 'mens' OR NOT ${require('../utils/lucha').luchaTakenSql('c', '$6')})`;
+    }
+    const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where} AND $4::text IS NOT NULL AND $5::int IS NOT NULL`, [guildId, div, like, '', 0, me]);
     const total = cnt[0].n;
     const pages = search ? 1 : Math.max(1, Math.ceil(total / 25));
     const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}
-         ORDER BY ($3::text IS NOT NULL AND lower(c.name) LIKE lower($4) || '%') DESC, lower(c.name), c.id LIMIT 25 OFFSET $5`,
-        [guildId, div, like, String(search || '').trim(), p * 25]);
+        `SELECT c.id, c.name, c.overall,
+                (NOT u.is_placeholder OR EXISTS (SELECT 1 FROM characters lx JOIN users lux ON lux.id = lx.owner_id WHERE lx.base_character_id = c.id AND lx.status = 'approved' AND NOT lux.is_placeholder)) AS dual
+         FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}
+         ORDER BY ($3::text IS NOT NULL AND lower(c.name) LIKE lower($4) || '%') DESC, ${SORT('c')}, c.id LIMIT 25 OFFSET $5`,
+        [guildId, div, like, String(search || '').trim(), p * 25, me]);
     return { total, pages, p, rows };
 }
+const optionFor = (r) => ({ label: clip(r.name, 100), value: String(r.id), description: clip([r.overall && `${r.overall} Overall`, r.dual && 'You have them in the other color: staff decide'].filter(Boolean).join(' · '), 100) || undefined });
+const divName = (d) => (d === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[d]);
 
 function searchForm(id, title) {
     return new ModalBuilder().setCustomId(id).setTitle(clip(title, 45)).addComponents(new ActionRowBuilder().addComponents(
@@ -195,36 +214,49 @@ const searchText = (interaction) => { try { return String(interaction.fields.get
 async function requestList(interaction, scope, div, page = 0, search = '') {
     const divs = scopeDivs(scope);
     if (!divs.includes(div)) div = divs[0];
-    const { total, pages, p, rows } = await openPage(interaction.guildId, div, page, search);
+    const { total, pages, p, rows } = await openPage(interaction.guildId, div, page, search, interaction.user.id);
     const comps = [];
-    if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, DIVISION_LABELS[d], d === div ? P : S))));
+    if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, divName(d), d === div ? P : S))));
     if (rows.length) {
-        comps.push(select(`ui:rq:p:${scope}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
+        comps.push(select(`ui:rq:p:${scope}:${div}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map(optionFor)));
     }
     const nav = [btn(`ui:rq:s:${scope}:${div}`, '🔎 Search by name', P)];
     if (search) nav.push(btn(`ui:rq:l:${scope}:${div}:0`, '✖ Clear search'));
     else if (pages > 1) nav.push(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1));
     nav.push(btn('ui:mr:h', '📨 My requests'));
     comps.push(row(...nav));
+    const lucha = div === 'luchaderpy';
     return show(interaction, {
         content: search
             ? (rows.length
                 ? `🔎 Open ${DIVISION_LABELS[div]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name to narrow it down)` : ''}. Pick one to request it.`
                 : `🔎 No open ${DIVISION_LABELS[div]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
             : rows.length
-                ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
+                ? (lucha
+                    ? `🟣 **Request a LuchaDerpy character.** LuchaDerpy uses the Men's roster: these superstars have no player right now (⚪ open). Pick one for your 🟣 LuchaDerpy slot (on top of your normal ones) and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
+                    : `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (⚪ open). Pick one and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`)
                 : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
         embeds: [],
         components: withHome(comps)
     });
 }
 
-async function openChar(interaction, charId) {
+/**
+ * The character a request is for. For LuchaDerpy, `charId` is the Men's superstar and this returns its 🟣 version
+ * (made the first time). Throws if it isn't open for this player anymore.
+ */
+async function openChar(interaction, charId, div = null) {
     const { getCharacterById } = require('../utils/characterUtils');
-    const c = await getCharacterById(charId);
-    if (!c || String(c.guild_id) !== String(interaction.guildId) || c.status !== 'approved' || !c.unclaimed || !REQ_DIVISIONS.includes(c.division)) {
-        throw new UserError('That character isn\'t open anymore. Pick another one.');
+    const L = require('../utils/lucha');
+    let c = await getCharacterById(charId);
+    const gone = () => new UserError('That character isn\'t open anymore. Pick another one.');
+    if (!c || String(c.guild_id) !== String(interaction.guildId) || c.status !== 'approved') throw gone();
+    if (div === 'luchaderpy' && c.division === 'mens') {
+        const holder = await require('../utils/unclaim').placeholderUserId(interaction.guildId, interaction.client.user.id);
+        c = await getCharacterById((await L.ensureLucha(interaction.guildId, c.id, holder)).id);
     }
+    if (!c.unclaimed || !REQ_DIVISIONS.includes(c.division)) throw gone();
+    try { const { dual } = await L.checkSuperstar(c, interaction.user.id); c.dual = dual; } catch (e) { if (e instanceof UserError) throw gone(); throw e; }
     return c;
 }
 
@@ -233,19 +265,28 @@ async function handleRequestChar(interaction, a, b, c) {
     if (a === 'l') return requestList(interaction, b, c, (interaction.customId.split(':')[5]) || 0);
     if (a === 's') return interaction.showModal(searchForm(`ui:rqm:${b}:${c}`, `Search open ${DIVISION_LABELS[c] || ''} characters`));
     if (a === 'p') {
-        const ch = await openChar(interaction, interaction.values?.[0]);
-        return show(interaction, { content: `Ask staff to give you **${ch.name}** (${DIVISION_LABELS[ch.division]})?`, embeds: [],
+        const ch = await openChar(interaction, interaction.values?.[0], c);
+        const lucha = ch.division === 'luchaderpy';
+        const both = ch.dual ? `\n⚠️ You already have **${ch.name}** as ${lucha ? '🟢 Men\'s' : '🟣 LuchaDerpy'}. Using the same superstar in both is up to staff.` : '';
+        return show(interaction, { content: `Ask staff to give you **${ch.name}** ${lucha ? 'for your 🟣 **LuchaDerpy** slot' : `(${DIVISION_LABELS[ch.division]})`}?${both}`, embeds: [],
             components: [row(btn(`ui:rq:y:${ch.id}`, 'Yes, send the request', G), btn(`ui:rq:h:${b || 'mw'}`, 'Pick another'))] });
     }
     if (a === 'y') {
         const ch = await openChar(interaction, b);
-        await require('../utils/signupHelp').requireRoom(interaction);
+        if (ch.division === 'luchaderpy') {
+            const { ensureUser } = require('../utils/ensureGuild');
+            await require('../utils/lucha').requireLuchaRoom(interaction.guildId, await ensureUser(interaction.guildId, interaction.user.id), interaction.user.id);
+            const { rows: waiting } = await pool.query(
+                `SELECT 1 FROM pending_requests pr JOIN characters c ON c.id = pr.character_id WHERE pr.guild_id = $1 AND pr.request_type = 'character_claim' AND pr.status = 'pending' AND pr.requested_by = $2 AND c.division = 'luchaderpy'`,
+                [interaction.guildId, interaction.user.id]);
+            if (waiting.length) throw new UserError('You already asked for a 🟣 LuchaDerpy character. Staff will get to it (see 📨 My requests), or cancel it there to ask for someone else.');
+        } else await require('../utils/signupHelp').requireRoom(interaction);
         const { rows: dupe } = await pool.query(
             `SELECT 1 FROM pending_requests WHERE guild_id = $1 AND request_type = 'character_claim' AND status = 'pending' AND requested_by = $2 AND character_id = $3`,
             [interaction.guildId, interaction.user.id, ch.id]);
         if (dupe.length) throw new UserError(`You already asked for **${ch.name}**. Staff will get to it (see 📨 My requests).`);
         await require('../handlers/pendingQueue').postPendingCard(interaction.guild, { type: 'character_claim', characterId: ch.id, requestedBy: interaction.user.id, payload: { from: 'request' }, staffRoom: true });
-        return show(interaction, { content: `🙋 Request sent! Staff will look at it. Once approved, **${ch.name}** is yours and you'll get a DM.`, embeds: [],
+        return show(interaction, { content: `🙋 Request sent! Staff will look at it. Once approved, **${ch.name}** is yours${ch.division === 'luchaderpy' ? ' in 🟣 LuchaDerpy' : ''} and you'll get a DM.`, embeds: [],
             components: withHome([row(btn('ui:mr:h', '📨 My requests'))]) });
     }
     throw new UserError('That button is from an older version of the bot.');
@@ -257,7 +298,7 @@ async function switchStart(interaction, scope) {
     const divs = scopeDivs(scope);
     const { rows } = await pool.query(
         `SELECT c.id, c.name, c.division FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND u.discord_id = $2 AND c.status = 'approved' AND c.division = ANY($3::text[]) ORDER BY lower(c.name)`,
+         WHERE c.guild_id = $1 AND u.discord_id = $2 AND c.status = 'approved' AND c.division = ANY($3::text[]) ORDER BY regexp_replace(lower(c.name), '^the +', '')`,
         [interaction.guildId, interaction.user.id, divs]);
     if (!rows.length) {
         return show(interaction, { content: `🔄 You don't have a ${divs.map((d) => DIVISION_LABELS[d]).join(' or ')} character to switch. Press 🙋 Request a character to ask for an open one.`, embeds: [],
@@ -271,9 +312,9 @@ async function switchStart(interaction, scope) {
 async function switchList(interaction, fromId, page = 0, search = '') {
     const CS = require('../utils/characterSwitch');
     const { from } = await CS.check(interaction.guildId, interaction.user.id, fromId, null);
-    const { total, pages, p, rows } = await openPage(interaction.guildId, from.division, page, search);
+    const { total, pages, p, rows } = await openPage(interaction.guildId, from.division, page, search, interaction.user.id);
     const comps = [];
-    if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
+    if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map(optionFor)));
     const nav = [btn(`ui:sw:s:${from.id}`, '🔎 Search by name', P)];
     if (search) nav.push(btn(`ui:sw:o:${from.id}`, '✖ Clear search'));
     else if (pages > 1) nav.push(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1));
@@ -285,7 +326,7 @@ async function switchList(interaction, fromId, page = 0, search = '') {
                 ? `🔎 Open ${DIVISION_LABELS[from.division]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name)` : ''}. Pick one to switch **${from.name}** for.`
                 : `🔎 No open ${DIVISION_LABELS[from.division]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
             : rows.length
-            ? `🔄 **Switch ${from.name}** for an 🟢 open ${DIVISION_LABELS[from.division]} character. Staff approve it, and **${from.name}** becomes open for someone else.`
+            ? `🔄 **Switch ${from.name}** for an ⚪ open ${from.division === 'luchaderpy' ? '🟣 LuchaDerpy (Men\'s roster)' : DIVISION_LABELS[from.division]} character. Staff approve it, and **${from.name}** becomes open for someone else.`
             : `🔄 There are no open ${DIVISION_LABELS[from.division]} characters to switch to right now.`,
         embeds: [], components: withHome(comps)
     });
@@ -299,8 +340,13 @@ async function handleSwitch(interaction, a, b, c) {
     if (a === 'l') return switchList(interaction, b, c);
     if (a === 's') return interaction.showModal(searchForm(`ui:swm:${b}`, 'Search open characters'));
     if (a === 't') {
-        const { from, to } = await CS.check(interaction.guildId, interaction.user.id, b, interaction.values?.[0]);
-        return show(interaction, { content: `Switch **${from.name}** for **${to.name}**? Once staff approve it, **${to.name}** is yours and **${from.name}** becomes open. You can switch again after the cooldown.`, embeds: [],
+        let toId = interaction.values?.[0];
+        // 3.15: a 🟣 switch picks a Men's superstar; its LuchaDerpy version is what they switch to
+        const { rows: fr } = await pool.query(`SELECT division FROM characters WHERE id = $1 AND guild_id = $2`, [b, interaction.guildId]);
+        if (fr[0]?.division === 'luchaderpy') toId = (await openChar(interaction, toId, 'luchaderpy')).id;
+        const { from, to, dual } = await CS.check(interaction.guildId, interaction.user.id, b, toId);
+        const both = dual ? `\n⚠️ You already have **${to.name}** in the other color. Using the same superstar in both is up to staff.` : '';
+        return show(interaction, { content: `Switch **${from.name}** for **${to.name}**? Once staff approve it, **${to.name}** is yours and **${from.name}** becomes open. You can switch again after the cooldown.${both}`, embeds: [],
             components: [row(btn(`ui:sw:y:${from.id}:${to.id}`, 'Yes, send it to staff', G), btn(`ui:sw:o:${from.id}`, 'Pick another'))] });
     }
     if (a === 'y') {
@@ -409,8 +455,10 @@ async function overallSave(interaction, charId) {
     if (raw && !/^\d{1,2}$/.test(raw)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
     const n = raw ? Number(raw) : null;
     if (n !== null && (n < 1 || n > 99)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
+    const { rows: before } = await pool.query(`SELECT * FROM characters WHERE id = $1 AND guild_id = $2`, [charId, interaction.guildId]);
     const { rows } = await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2 RETURNING name`, [charId, interaction.guildId, n]);
     if (!rows[0]) throw new UserError('That wrestler doesn\'t exist anymore.');
+    if (before[0]?.division === 'mens') await require('../utils/lucha').syncFromBase(charId, before[0]); // 3.15: the 🟣 version follows
     await require('../utils/audit').logAudit(interaction.guildId, interaction.user.id, 'character_overall', { character: Number(charId), overall: n });
     return hub.wrestlerStaffPanel(interaction, charId, n ? `✅ **${rows[0].name}** is now **${n} Overall**. The roster channel updates in a few seconds.` : `✅ Removed **${rows[0].name}**'s overall.`);
 }

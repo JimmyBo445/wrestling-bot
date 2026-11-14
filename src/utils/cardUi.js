@@ -40,9 +40,10 @@ async function viewMessage(guildId, brand, { page = 0, notice = null } = {}) {
     const rows = [];
     rows.push(new ActionRowBuilder().addComponents(
         btn(`cardui:pv:${brand}`, '👁 Preview', ButtonStyle.Primary, !drafts.length),
-        btn(`cardui:po:${brand}`, '📣 Post here', ButtonStyle.Success, !drafts.length),
+        btn(`cardui:po:${brand}`, brand === 'luchaderpy' ? '📣 Post' : '📣 Post here', ButtonStyle.Success, !drafts.length),
         btn(`ui:ct:h:${brand}`, '🧰 More tools'),
-        btn(`ui:ct:v:${brand === 'raw' ? 'smackdown' : 'raw'}`, brand === 'raw' ? '🔁 SmackDown card' : '🔁 RAW card')));
+        // 3.15: jump to either of the other two shows
+        ...Object.keys(require('./constants').CARD_BRANDS).filter((b) => b !== brand).map((b) => btn(`ui:ct:v:${b}`, `🔁 ${svc.brandLabel(b)}`))));
     const options = [];
     for (const d of drafts) {
         const slots = await svc.getDraftMatches(d.id);
@@ -130,7 +131,7 @@ async function candidates(draft, slot, page) {
         `SELECT c.id, c.name FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT u.is_placeholder
            AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)
-         ORDER BY c.name`, [draft.guild_id, draft.division]);
+         ORDER BY regexp_replace(lower(c.name), '^the +', '')`, [draft.guild_id, draft.division]);
     const free = rows.filter((c) => !booked.has(String(c.id)));
     const pages = Math.max(1, Math.ceil(free.length / PAGE));
     const pg = Math.min(Math.max(0, page), pages - 1);

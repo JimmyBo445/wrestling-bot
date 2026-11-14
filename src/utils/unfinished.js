@@ -9,7 +9,7 @@ const { localNow } = require('./titleWatch');
 
 const MAX_PINGS = 6;
 const PING_HOUR = 13; // 1 pm in the server's time zone (/admin rules timezone:)
-const BRAND = { raw: 'RAW', smackdown: 'SmackDown' };
+const BRAND = { raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' };
 const mdy = (ymd) => { const [y, m, d] = ymd.split('-').map(Number); return `${m}/${d}/${String(y).slice(-2)}`; };
 
 /** Every unfinished match, oldest show first. today = 'YYYY-MM-DD' in the server's time zone. */
@@ -59,7 +59,7 @@ function matchLine(m, { mention = false, extra = '' } = {}) {
     return `• ${BRAND[m.brand] || m.brand} ${m.no_date ? `card from ${mdy(m.show_ymd)}` : mdy(m.show_ymd)} · ${DIVISION_LABELS[m.division] || m.division} #${m.position} (${matchLabel(m.match_type)}): ${vs} · ${bits.join(' · ')}${extra}`;
 }
 
-const BRAND_ICON = { raw: '🟥', smackdown: '🟦' };
+const BRAND_ICON = { raw: '🟥', smackdown: '🟦', luchaderpy: '🟪' };
 const late = (n) => `${n} day${n === 1 ? '' : 's'} late`;
 
 /** Short line for one match inside its card + division section: `#2` Ace vs Bolt · 🏆 IC · Street Fight */

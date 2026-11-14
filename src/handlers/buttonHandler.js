@@ -41,13 +41,16 @@ async function handlePending(interaction) {
         if (r.request_type === 'character_claim' && approve) {
             // a player takes over a wrestler that has no player (3.4)
             const { rows: cRows } = await client.query(
-                `SELECT c.id, c.name, c.status, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = $1 FOR UPDATE OF c`, [r.character_id]);
+                `SELECT c.id, c.name, c.status, c.division, c.base_character_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = $1 FOR UPDATE OF c`, [r.character_id]);
             const ch = cRows[0];
             if (!ch || ch.status !== 'approved' || !ch.is_placeholder) throw new UserError('That wrestler already has a player now (or was retired), so this can\'t be approved. Deny it instead.');
             const newOwner = await ensureUser(interaction.guildId, r.requested_by, client);
-            if (!(await canAddCharacter(interaction.guildId, newOwner, client))) throw new UserError(`<@${r.requested_by}> already has the most wrestlers allowed. Retire one of theirs first, or deny this.`);
+            const L = require('../utils/lucha');
+            if (L.isLucha(ch)) await L.requireLuchaRoom(interaction.guildId, newOwner, r.requested_by, client); // 3.15: the 🟣 slot is extra
+            else if (!(await canAddCharacter(interaction.guildId, newOwner, client))) throw new UserError(`<@${r.requested_by}> already has the most wrestlers allowed. Retire one of theirs first, or deny this.`);
+            await L.checkSuperstar(ch, r.requested_by, client); // one superstar = one player
             await client.query(`UPDATE characters SET owner_id = $1 WHERE id = $2`, [newOwner, ch.id]);
-            line = `${ch.name} moved to <@${r.requested_by}>`;
+            line = `${L.isLucha(ch) ? '🟣 ' : ''}${ch.name} moved to <@${r.requested_by}>`;
         } else if (r.request_type === 'character_switch' && approve) {
             // 3.13: give up one character for an open one in the same division
             line = await require('../utils/characterSwitch').applyInTransaction(client, interaction.guildId, r);
@@ -175,6 +178,19 @@ async function handleButtonInteraction(interaction) {
         try {
             if (act === 'pv' || act === 'po') {
                 const preview = act === 'pv';
+                // 3.15: the LuchaDerpy card goes to its own channel when one is set
+                if (!preview && a === 'luchaderpy') {
+                    const { rows: g } = await pool.query(`SELECT luchaderpy_card_channel_id FROM guilds WHERE guild_id = $1`, [interaction.guildId]);
+                    const chId = g[0]?.luchaderpy_card_channel_id;
+                    if (chId && chId !== interaction.channelId) {
+                        await interaction.deferReply({ flags: EPHEMERAL });
+                        const messages = await cardPost.buildCardMessages(interaction.guild, interaction.guildId, a, { ping: true });
+                        const ch = await interaction.client.channels.fetch(chId).catch(() => null);
+                        if (!ch?.send) return await interaction.editReply({ content: `⚠️ I couldn't post in <#${chId}>. Check I can see it and send messages there (📺 Channels → 🟣 LuchaDerpy show card).` });
+                        await cardPost.sendToChannel(ch, messages);
+                        return await interaction.editReply({ content: `📣 Posted the LuchaDerpy card in <#${chId}>.` });
+                    }
+                }
                 await interaction.deferReply(preview ? { flags: EPHEMERAL } : {});
                 const messages = await cardPost.buildCardMessages(interaction.guild, interaction.guildId, a, { ping: !preview });
                 return await cardPost.replyWith(interaction, messages, { ephemeral: preview });

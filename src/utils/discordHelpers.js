@@ -102,7 +102,7 @@ async function getDisplayName(guild, discordId) {
     return (await getDisplayNames(guild, [discordId], 2500)).get(discordId);
 }
 
-const DIVISION_LABELS = { mens: "Men's", womens: "Women's", custom: 'Custom', custom_womens: "Custom Women's" };
+const DIVISION_LABELS = { mens: "Men's", womens: "Women's", custom: 'Custom', custom_womens: "Custom Women's", luchaderpy: 'LuchaDerpy' };
 
 module.exports = {
     EPHEMERAL, NO_MENTIONS, isAdmin, requireAdmin, respond, reply, memberIsStaff, forgetStaffRole,

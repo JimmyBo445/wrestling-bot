@@ -4,7 +4,7 @@
 // leftover card doesn't count. The post updates by itself a few seconds after any card change.
 const { pool } = require('../db/pool');
 
-const BRAND = { raw: 'RAW', smackdown: 'SmackDown' };
+const BRAND = { raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' };
 
 /** Map characterId → [{ brand, division, position }] for this signup's wrestlers who are on a card. */
 async function bookedMap(signup) {

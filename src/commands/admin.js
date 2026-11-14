@@ -60,7 +60,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('settings').setDescription('Show this server\'s bot settings'))
     .addSubcommand((s) => s.setName('unfinished').setDescription('Card matches from past shows with no result yet, with a button to ping the players')
         .addStringOption((o) => o.setName('card').setDescription('Just one card (default: both)').setRequired(false)
-            .addChoices({ name: 'RAW', value: 'raw' }, { name: 'SmackDown', value: 'smackdown' })))
+            .addChoices({ name: 'RAW', value: 'raw' }, { name: 'SmackDown', value: 'smackdown' }, { name: 'LuchaDerpy', value: 'luchaderpy' })))
     .addSubcommand((s) => s.setName('audit').setDescription('Recent admin actions')
         .addIntegerOption((o) => o.setName('count').setDescription('How many (default 15, max 25)').setRequired(false).setMinValue(1).setMaxValue(25)));
 
@@ -131,7 +131,8 @@ module.exports = {
                 `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin panel\` → 🏆 History channel)_`,
                 `**Live champions board:** ${ch(st.champions_channel_id, 'off')}`,
                 `**Live roster (main):** ${ch(st.roster_channel_id, 'off')}`,
-                `**Live roster per division:** Men's ${ch(st.roster_channel_mens, '→ main')} · Women's ${ch(st.roster_channel_womens, '→ main')} · Custom ${ch(st.roster_channel_custom, '→ main')} · Custom Women's ${ch(st.roster_channel_custom_womens, '→ main')}`
+                `**Live roster per division:** Men's ${ch(st.roster_channel_mens, '→ main')} · Women's ${ch(st.roster_channel_womens, '→ main')} · Custom ${ch(st.roster_channel_custom, '→ main')} · Custom Women's ${ch(st.roster_channel_custom_womens, '→ main')} · 🟣 LuchaDerpy ${ch(st.roster_channel_luchaderpy, '→ main')}`,
+                `**🟣 LuchaDerpy show card:** ${ch(st.luchaderpy_card_channel_id, 'where 📣 Post is pressed')}`
             ].join('\n'));
             return respond(interaction, { embeds: [embed], flags: changed.length ? undefined : EPHEMERAL });
         }

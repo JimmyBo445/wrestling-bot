@@ -5,7 +5,7 @@ const { ensureUser } = require('./ensureGuild');
 const { injuredMap } = require('./injuryUtils');
 const { DIVISION_LABELS, NO_MENTIONS } = require('./discordHelpers');
 
-const DIV_ORDER = ['mens', 'womens', 'custom', 'custom_womens'];
+const DIV_ORDER = ['mens', 'womens', 'custom', 'custom_womens', 'luchaderpy'];
 const MAX_ENTRY_NAMES = 12; // names shown per division on the public post
 
 async function getSignup(id, guildId) {
@@ -52,7 +52,7 @@ async function getEntries(signupId) {
     const { rows } = await pool.query(
         `SELECT e.character_id, e.division, e.owner_id, e.created_at, c.name, u.discord_id
          FROM signup_entries e JOIN characters c ON c.id = e.character_id JOIN users u ON u.id = e.owner_id
-         WHERE e.signup_id = $1 ORDER BY c.name`, [signupId]);
+         WHERE e.signup_id = $1 ORDER BY regexp_replace(lower(c.name), '^the +', '')`, [signupId]);
     return rows;
 }
 
@@ -230,7 +230,7 @@ async function buildBookingList(signup, division = null) {
             const last = r?.last ? ` · last <t:${Math.floor(new Date(r.last).getTime() / 1000)}:R>` : ' · no matches yet';
             if (isBooked(e)) {
                 const spots = booked.get(String(e.character_id));
-                return `🔴 ~~${e.name}~~ (<@${e.discord_id}>) · **booked** on ${spots.map((s) => `${s.brand === 'raw' ? 'RAW' : 'SmackDown'} #${s.position}`).join(', ')}`;
+                return `🔴 ~~${e.name}~~ (<@${e.discord_id}>) · **booked** on ${spots.map((s) => `${{ raw: 'RAW', smackdown: 'SmackDown', luchaderpy: 'LuchaDerpy' }[s.brand] || s.brand} #${s.position}`).join(', ')}`;
             }
             return `${champSet.has(String(e.character_id)) ? '👑 ' : ''}**${e.name}** (<@${e.discord_id}>) ${r ? `${r.w}-${r.l}` : '0-0'}${last}${p ? ` · ⏭️ passed over ×${p}` : ''}`;
         }).join('\n').slice(0, 1020);

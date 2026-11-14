@@ -1,17 +1,23 @@
 // Shared lookups for /whois and /directory list: who plays which wrestler, and what belts they hold.
 const { pool } = require('../db/pool');
 
-/** Every wrestler in the server with its player. statuses: which character statuses to include. */
+/**
+ * Every wrestler in the server with its player. statuses: which character statuses to include.
+ * 3.15: 🟣 LuchaDerpy versions nobody plays are left out; Men's rows carry lucha_discord_id (who has them as 🟣).
+ */
 async function rosterRows(guildId, { statuses = ['approved'], division = null, ownerDiscordId = null } = {}) {
     const params = [guildId, statuses];
     let extra = '';
     if (division) { params.push(division); extra += ` AND c.division = $${params.length}`; }
     if (ownerDiscordId) { params.push(ownerDiscordId); extra += ` AND u.discord_id = $${params.length}`; }
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.division, c.status, c.owner_id, c.overall, u.discord_id, u.is_placeholder AS unclaimed
+        `SELECT c.id, c.name, c.division, c.status, c.owner_id, c.overall, u.discord_id, u.is_placeholder AS unclaimed,
+                (SELECT lu.discord_id FROM characters l JOIN users lu ON lu.id = l.owner_id
+                 WHERE l.base_character_id = c.id AND l.status = 'approved' AND NOT lu.is_placeholder) AS lucha_discord_id
          FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = ANY($2::text[])${extra}
-         ORDER BY lower(c.name), c.id`, params);
+           AND NOT (c.division = 'luchaderpy' AND u.is_placeholder)
+         ORDER BY regexp_replace(lower(c.name), '^the +', ''), c.id`, params);
     return rows;
 }
 
