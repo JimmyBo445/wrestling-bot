@@ -9,7 +9,7 @@ const { requireAdmin, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { btn, row, clip, homeRow, show, open, capture, withNotice, ButtonStyle } = require('../utils/panelKit');
 
-const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm', 'rq'];
+const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm', 'rq', 'sw'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const DAYS = 30;
 const ts = (d) => `<t:${Math.floor(new Date(d).getTime() / 1000)}:R>`;
@@ -34,7 +34,7 @@ async function loadRequests(guildId, uid) {
          LEFT JOIN titles t ON t.id = pr.title_id
          LEFT JOIN teams tm ON tm.id = pr.team_id
          WHERE pr.guild_id = $1 AND pr.requested_by = $2
-           AND pr.request_type IN ('character_submission','character_claim','match_request','contender_challenge')
+           AND pr.request_type IN ('character_submission','character_claim','character_switch','match_request','contender_challenge')
            AND (pr.status = 'pending' OR COALESCE(pr.resolved_at, pr.created_at) > now() - make_interval(days => $3))
          ORDER BY (pr.status = 'pending') DESC, pr.created_at DESC LIMIT 40`, [guildId, uid, DAYS]);
     const { rows: reps } = await pool.query(
@@ -49,6 +49,7 @@ function requestLine(r) {
     const st = STATUS[r.status] || r.status;
     if (r.request_type === 'character_submission') return `**${r.char_name || 'New wrestler'}**: new wrestler · ${st} · ${ts(r.created_at)}`;
     if (r.request_type === 'character_claim') return `**${r.char_name || 'a wrestler'}**: claim · ${st} · ${ts(r.created_at)}`;
+    if (r.request_type === 'character_switch') return `**${r.opp_name || '?'} → ${r.char_name || '?'}**: switch · ${st} · ${ts(r.created_at)}`;
     if (r.request_type === 'match_request') {
         const booked = r.status === 'approved' && r.payload?.booked === 'yes' ? ' · 📅 on a card' : '';
         return `**${r.char_name || '?'} vs ${r.opp_name || '?'}**${r.payload?.note ? ` _(${clip(r.payload.note, 40)})_` : ''} · ${st}${booked} · ${ts(r.created_at)}`;
@@ -64,7 +65,7 @@ async function myRequests(interaction, notice = null) {
             .setFooter({ text: `Waiting requests always show; finished ones for ${DAYS} days.` });
         const group = (types) => reqs.filter((r) => types.includes(r.request_type)).map(requestLine);
         const add = (name, lines) => { if (lines.length) embed.addFields({ name, value: clip(lines.join('\n'), 1024) }); };
-        add('🆕 New wrestlers & claims', group(['character_submission', 'character_claim']));
+        add('🆕 New wrestlers, claims & switches', group(['character_submission', 'character_claim', 'character_switch']));
         add('🥊 Match requests', group(['match_request']));
         add('⚔️ Title challenges', group(['contender_challenge']));
         add('📝 Reported results', reps.map(reportLine));
@@ -230,6 +231,71 @@ async function handleRequestChar(interaction, a, b, c) {
     throw new UserError('That button is from an older version of the bot.');
 }
 
+// ================================================================== 🔄 Switch character (3.13)
+
+async function switchStart(interaction, scope) {
+    const divs = scopeDivs(scope);
+    const { rows } = await pool.query(
+        `SELECT c.id, c.name, c.division FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND u.discord_id = $2 AND c.status = 'approved' AND c.division = ANY($3::text[]) ORDER BY lower(c.name)`,
+        [interaction.guildId, interaction.user.id, divs]);
+    if (!rows.length) {
+        return show(interaction, { content: `🔄 You don't have a ${divs.map((d) => DIVISION_LABELS[d]).join(' or ')} character to switch. Press 🙋 Request a character to ask for an open one.`, embeds: [],
+            components: withHome([row(btn(`ui:rq:h:${scope}`, '🙋 Request a character', G))]) });
+    }
+    if (rows.length === 1) return switchList(interaction, rows[0].id);
+    return show(interaction, { content: '🔄 **Switch character.** Which of your characters do you want to give up?', embeds: [],
+        components: withHome([select('ui:sw:f', 'Pick the one to switch out', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: DIVISION_LABELS[r.division] })))]) });
+}
+
+async function switchList(interaction, fromId, page = 0) {
+    const CS = require('../utils/characterSwitch');
+    const { from } = await CS.check(interaction.guildId, interaction.user.id, fromId, null);
+    const { rows: cnt } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2`, [interaction.guildId, from.division]);
+    const total = cnt[0].n;
+    const pages = Math.max(1, Math.ceil(total / 25));
+    const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+    const { rows } = await pool.query(
+        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2
+         ORDER BY lower(c.name), c.id LIMIT 25 OFFSET $3`, [interaction.guildId, from.division, p * 25]);
+    const comps = [];
+    if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
+    if (pages > 1) comps.push(row(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1)));
+    comps.push(row(btn('ui:mr:h', '📨 My requests')));
+    return show(interaction, {
+        content: rows.length
+            ? `🔄 **Switch ${from.name}** for an 🟢 open ${DIVISION_LABELS[from.division]} character. Staff approve it. Records stay with each character, and **${from.name}** becomes open for someone else.`
+            : `🔄 There are no open ${DIVISION_LABELS[from.division]} characters to switch to right now.`,
+        embeds: [], components: withHome(comps)
+    });
+}
+
+async function handleSwitch(interaction, a, b, c) {
+    const CS = require('../utils/characterSwitch');
+    if (a === 'h') return switchStart(interaction, b || 'mw');
+    if (a === 'o') return switchList(interaction, b);
+    if (a === 'f') return switchList(interaction, interaction.values?.[0]);
+    if (a === 'l') return switchList(interaction, b, c);
+    if (a === 't') {
+        const { from, to } = await CS.check(interaction.guildId, interaction.user.id, b, interaction.values?.[0]);
+        return show(interaction, { content: `Switch **${from.name}** for **${to.name}**? Once staff approve it, **${to.name}** is yours and **${from.name}** becomes open. You can switch again after the cooldown.`, embeds: [],
+            components: [row(btn(`ui:sw:y:${from.id}:${to.id}`, 'Yes, send it to staff', G), btn(`ui:sw:o:${from.id}`, 'Pick another'))] });
+    }
+    if (a === 'y') {
+        const { from, to } = await CS.check(interaction.guildId, interaction.user.id, b, c);
+        const { rows: dupe } = await pool.query(
+            `SELECT 1 FROM pending_requests WHERE guild_id = $1 AND request_type = 'character_switch' AND status = 'pending' AND requested_by = $2`, [interaction.guildId, interaction.user.id]);
+        if (dupe.length) throw new UserError('You already have a switch waiting for staff. Cancel it in 📨 My requests to ask for a different one.');
+        await require('../handlers/pendingQueue').postPendingCard(interaction.guild, { type: 'character_switch', characterId: to.id, challengerCharacterId: from.id, requestedBy: interaction.user.id, staffRoom: true });
+        return show(interaction, { content: `🔄 Switch request sent! Once staff approve it, you're **${to.name}** and you'll get a DM.`, embeds: [],
+            components: withHome([row(btn('ui:mr:h', '📨 My requests'))]) });
+    }
+    throw new UserError('That button is from an older version of the bot.');
+}
+
 // ================================================================== 📌 Menu post (staff)
 
 async function menuPanel(interaction, notice = null) {
@@ -341,6 +407,7 @@ async function handle(interaction, parts) {
         return interaction.showModal(makeForm(b));
     }
     if (kind === 'rq') return handleRequestChar(interaction, a, b, c);
+    if (kind === 'sw') return handleSwitch(interaction, a, b, c);
     if (kind === 'mkm') return makeSubmit(interaction, a);
     if (kind === 'mp') return handleMenu(interaction, a);
     if (kind === 'us') return usagePanel(interaction, a);

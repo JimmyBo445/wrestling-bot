@@ -18,14 +18,15 @@ function payload(guildName) {
         'Tap a button. **Only you see the answer**, so you can\'t mess anything up.',
         '',
         '🙋 New here? **Request a character** (an 🟢 open Men\'s or Women\'s one) or **make a custom wrestler**. Staff approve it.',
+        '🔄 Want to be someone else? **Switch character** trades yours for an 🟢 open one (staff approve it).',
         '🙋 **My wrestlers**: edit them, see what you\'re booked in, report results.',
         '📨 **My requests**: see what\'s waiting for staff (and cancel it if you changed your mind).'
     ].join('\n'));
     return {
         embeds: [embed],
         components: [
-            row(btn('ui:rq:h:mw:mp', '🙋 Request a character', ButtonStyle.Success), btn('ui:mk:h:mp', '🆕 Make a custom wrestler'), btn('ui:h:mine:mp', '🙋 My wrestlers', ButtonStyle.Primary), btn('ui:rp:h:mp', '📝 Report a result'), btn('ui:mr:h:mp', '📨 My requests')),
-            row(btn('ui:h:champs:mp', '🏆 Champions'), btn('ui:h:show:mp', '📅 Next show'), btn('ui:h:results:mp', '📰 Results'), btn('ui:h:roster:mp', '📋 Roster')),
+            row(btn('ui:rq:h:mw:mp', '🙋 Request a character', ButtonStyle.Success), btn('ui:sw:h:mw:mp', '🔄 Switch character'), btn('ui:mk:h:mp', '🆕 Make a custom wrestler'), btn('ui:h:mine:mp', '🙋 My wrestlers', ButtonStyle.Primary), btn('ui:mr:h:mp', '📨 My requests')),
+            row(btn('ui:rp:h:mp', '📝 Report a result'), btn('ui:h:champs:mp', '🏆 Champions'), btn('ui:h:show:mp', '📅 Next show'), btn('ui:h:results:mp', '📰 Results'), btn('ui:h:roster:mp', '📋 Roster')),
             row(btn('ui:h:stats:mp', '📊 Stats'), btn('ui:h:stand:mp', '📈 Standings'), btn('ui:h:legacy:mp', '🎖 Legacy'), btn('ui:h:help:mp', '❓ Help'))
         ],
         allowedMentions: { parse: [] }

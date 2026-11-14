@@ -242,6 +242,10 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             if (isAdmin(interaction)) acts.push(btn(`ui:ws:v:${focus.id}`, '🛠 Staff', ButtonStyle.Danger)); // 3.5: retire, transfer, division…
             components.push(row(...acts));
         }
+        // 3.13: swap a Men's/Women's character for an open one
+        if (String(ownerId) === String(interaction.user.id) && focus.status === 'approved' && ['mens', 'womens'].includes(focus.division)) {
+            components.push(row(btn(`ui:sw:o:${focus.id}`, `🔄 Switch ${clip(focus.name, 40)} for an open character`), btn('ui:rq:h:mw', '🙋 Request a character')));
+        }
     }
     if (mine && !chars.length) components.push(row(btn('ui:rq:h:mw', '🙋 Request a character', ButtonStyle.Success), btn('ui:mk:h', '🆕 Make a custom wrestler'), btn('ui:mr:h', '📨 My requests')));
     return { embeds: [embed], components, allowedMentions: NOPING };

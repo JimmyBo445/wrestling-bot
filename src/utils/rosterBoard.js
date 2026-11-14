@@ -52,11 +52,11 @@ function infoFor(divs) {
     const make = divs.some((d) => ['custom', 'custom_womens'].includes(d));
     const scope = req.length === 1 ? req[0] : 'mw';
     const lines = [];
-    if (req.length) lines.push(`• **Want a ${req.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an 🟢 open one. Staff approve it.`);
+    if (req.length) lines.push(`• **Want a ${req.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an 🟢 open one. Staff approve it.`, '• **Want to be someone else?** Press 🔄 Switch character to trade yours for an 🟢 open one (same division; staff approve it).');
     if (make) lines.push('• **Make your own custom wrestler:** press 🆕 Make a custom wrestler. Staff approve it and it shows up here.');
     lines.push('• **Waiting on staff?** 📨 My requests shows where your request stands.', '-# This channel updates by itself whenever someone gets, changes or gives up a character.');
     const buttons = [];
-    if (req.length) buttons.push(['ui:rq:h:' + scope + ':rb', '🙋 Request a character', ButtonStyle.Primary]);
+    if (req.length) buttons.push(['ui:rq:h:' + scope + ':rb', '🙋 Request a character', ButtonStyle.Primary], ['ui:sw:h:' + scope + ':rb', '🔄 Switch character', ButtonStyle.Secondary]);
     if (make) buttons.push(['ui:mk:h:rb', '🆕 Make a custom wrestler', ButtonStyle.Success]);
     buttons.push(['ui:mr:h:rb', '📨 My requests', ButtonStyle.Secondary], ['ui:h:roster:rb', '📋 Roster with records', ButtonStyle.Secondary]);
     return { slot: 'info', buttons, header: '🙋 **Want a character?**', body: lines.join('\n') };

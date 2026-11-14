@@ -98,7 +98,7 @@ async function rulesPanel(interaction, notice = null) {
         const mile = st.milestones_enabled !== false;
         const rem = Boolean(st.rematch_enabled);
         return withNotice({ embeds: p.embeds || [], components: [
-            row(btn('ui:ad:rn', '✏️ Change the numbers', P), btn('ui:ad:tz', '🕒 Time zone')),
+            row(btn('ui:ad:rn', '✏️ Change the numbers', P), btn('ui:ad:tz', '🕒 Time zone'), btn('ui:ad:swc', `🔄 Switch cooldown: ${st.switch_cooldown_days ?? 14} days`)),
             row(btn(`ui:ad:rt:cooldown_by:${byChar ? 'user' : 'character'}`, `Cooldown counts: ${byChar ? 'same characters' : 'same players'}`),
                 btn(`ui:ad:rt:milestones:${mile ? 'off' : 'on'}`, `Milestone shout-outs: ${mile ? 'on' : 'off'}`, mile ? G : S),
                 btn(`ui:ad:rt:rematches:${rem ? 'off' : 'on'}`, `Rematch clause: ${rem ? 'on' : 'off'}`, rem ? G : S)),
@@ -211,6 +211,10 @@ async function handleAdmin(interaction, a, b, c) {
         const st = await getGuildSettings(interaction.guildId);
         return interaction.showModal(modal('ui:adm:tz', 'Time zone', [{ id: 'zone', label: 'Time zone, like America/Chicago', required: true, max: 60, value: st.tz || 'UTC', placeholder: 'America/Chicago' }]));
     }
+    if (a === 'swc') {
+        const st = await getGuildSettings(interaction.guildId);
+        return interaction.showModal(modal('ui:adm:swc', 'Character switch cooldown', [{ id: 'days', label: 'Days between switches per player (0 = none)', required: true, max: 3, value: st.switch_cooldown_days ?? 14 }]));
+    }
     if (a === 'rt') {
         const r = await attempt(() => capture(interaction, 'admin', 'rules', { [b]: c }));
         return rulesPanel(interaction, r.failed ? r.content : '✅ Saved.');
@@ -276,6 +280,13 @@ async function handleAdminForm(interaction, a) {
         }
         const r = await attempt(() => capture(interaction, 'admin', 'rules', values));
         return rulesPanel(interaction, r.failed ? r.content : '✅ Saved.');
+    }
+    if (a === 'swc') {
+        const n = Number(field(interaction, 'days'));
+        if (!Number.isInteger(n) || n < 0 || n > 365) return rulesPanel(interaction, '⚠️ The cooldown has to be a whole number of days from 0 to 365. Nothing was changed.');
+        await pool.query(`UPDATE guilds SET switch_cooldown_days = $2 WHERE guild_id = $1`, [interaction.guildId, n]);
+        await require('../utils/audit').logAudit(interaction.guildId, interaction.user.id, 'setting_switch_cooldown', { days: n });
+        return rulesPanel(interaction, n ? `✅ Players can switch characters once every **${n}** days.` : '✅ No cooldown: players can switch any time (staff still approve each one).');
     }
     if (a === 'tz') {
         const r = await attempt(() => capture(interaction, 'admin', 'rules', { timezone: field(interaction, 'zone') }));

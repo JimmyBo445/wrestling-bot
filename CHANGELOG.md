@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.13.0 — 🔄 Switch character
+- Players can trade one of their **Men's or Women's** characters for an 🟢 **open** one in the **same division**. Buttons: the Men's/Women's roster channels, the 📌 menu post, and 🙋 My Wrestlers (on your own Men's/Women's wrestler).
+- It goes to the staff room as **Switch Characters** with ✅ Approve / ❌ Deny. The card says what happens to the old character (teams it leaves, contract that ends).
+- On approval: the new character moves to the player with its stats and history, the old one becomes 🟢 open (records stay with each character). Card matches that haven't happened yet and signups switch to the new character. The player gets a DM either way. Roster channels update by themselves.
+- Rules: **champions can't switch** (singles or tag; also re-checked when staff approve), one waiting switch at a time, and a **cooldown** between approved switches: 14 days by default, change it in `/admin panel` → 📜 Rules → 🔄 Switch cooldown (0 = none).
+- Switches show in 📨 My requests and can be cancelled while waiting.
+- Database change: migration 028.
+
 ## 3.12.0 — Live roster: a channel per division, plain text like the match card
 - **Separate channels per division:** `/admin panel` → 📺 Channels now has **Live roster: Men's / Women's / Custom / Custom Women's** next to **Live roster: main channel**. A division with its own channel posts there; any division without one goes to the main channel (if set). Turning a division's channel off sends it back to the main channel. Every roster channel ends with the 🆕 "Want a character?" post.
 - **Plain text, like the names under the match card:** `📋 **Men's Division** · 24 taken · 3 open`, then one line per wrestler, the 🟢 Open section, and "Updated x minutes ago". No box around it. Big divisions split into several posts (Discord allows 2,000 characters per message).

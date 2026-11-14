@@ -48,6 +48,9 @@ async function handlePending(interaction) {
             if (!(await canAddCharacter(interaction.guildId, newOwner, client))) throw new UserError(`<@${r.requested_by}> already has the most wrestlers allowed. Retire one of theirs first, or deny this.`);
             await client.query(`UPDATE characters SET owner_id = $1 WHERE id = $2`, [newOwner, ch.id]);
             line = `${ch.name} moved to <@${r.requested_by}>`;
+        } else if (r.request_type === 'character_switch' && approve) {
+            // 3.13: give up one character for an open one in the same division
+            line = await require('../utils/characterSwitch').applyInTransaction(client, interaction.guildId, r);
         } else if (r.request_type === 'character_submission') {
             await client.query(
                 `UPDATE characters SET status = $1, approved_by = $2, approved_at = now() WHERE id = $3`,
@@ -72,6 +75,7 @@ async function handlePending(interaction) {
     }
 
     await logAudit(interaction.guildId, interaction.user.id, `request_${approve ? 'approved' : 'denied'}`, { id, type: request.request_type });
+    if (request.request_type === 'character_switch') await require('../utils/characterSwitch').afterDecision(interaction, request, approve);
     if (approve && ['character_submission', 'character_claim'].includes(request.request_type)) {
         const extra = await require('../utils/signupHelp').afterApproval(interaction, request);
         if (extra) line = [line, extra].filter(Boolean).join(' · ');

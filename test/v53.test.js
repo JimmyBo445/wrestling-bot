@@ -79,7 +79,7 @@ const btns = (m) => (m.payload.components || []).flatMap((r) => r.toJSON().compo
         await click('ui:ch:s:roster_mens', priv({ ...ADM, kind: 'channel', values: ['mensch'] }));
         await click('ui:ch:s:roster_custom', priv({ ...ADM, kind: 'channel', values: ['customch'] }));
         const last = (ch) => sent.filter((m) => m.channelId === ch).at(-1);
-        assert.deepStrictEqual(btns(last('mensch')), ['ui:rq:h:mens:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']);
+        assert.deepStrictEqual(btns(last('mensch')), ['ui:rq:h:mens:rb', 'ui:sw:h:mens:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']);
         assert.deepStrictEqual(btns(last('customch')), ['ui:mk:h:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']);
         assert.match(last('mensch').payload.content, /Want a Men's character/);
         assert.ok(!/Make a custom/.test(last('mensch').payload.content));
