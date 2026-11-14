@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.15.4
+- The LuchaDerpy roster channel has a new post at the bottom, right above the request buttons: **"What does it take to become a LuchaDerpy wrestler?"** with the four qualification rules, and a reminder to check the character qualifies before requesting it.
+
 ## 3.15.3
 - **`/character take`** (staff): take a character off its player so it's ⚪ open again. The search only lists characters someone has; a superstar's 🟣 LuchaDerpy version is listed separately, so you can take just that one. If the character holds a title or is on a team, it shows the usual heads-up first.
 

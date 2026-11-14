@@ -155,6 +155,9 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         assert.match(ld[0], /\*\*Roman Reigns\*\* 🟣 : <@u2>/);
         assert.ok(!/Jey Uso/.test(ld[0]), 'Men\'s-only characters are not in the LuchaDerpy post');
         assert.match(ld[1], /LuchaDerpy Standings/);
+        assert.match(ld[2], /What does it take to become a LuchaDerpy wrestler/); // 3.15.4
+        assert.match(ld[2], /93 overall and above/);
+        assert.ok(!sent.slice(s0).filter((m) => m.channelId === 'mensch').some((m) => /What does it take/.test(desc(m))), 'only in the LuchaDerpy channel');
         const info = sent.slice(s0).filter((m) => m.channelId === 'ldch').at(-1).payload.components[0].toJSON().components.map((c) => c.custom_id);
         assert.ok(info.includes('ui:rq:h:luchaderpy:rb'), info.join(' '));
     });

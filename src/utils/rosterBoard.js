@@ -90,6 +90,20 @@ async function luchaStandings(guildId) {
     return { slot: 'lucha:standings', header: '📊 **LuchaDerpy Standings** · most wins first', body: lines.join('\n').slice(0, CHUNK) };
 }
 
+/** 3.15.4: who qualifies for LuchaDerpy, shown at the bottom of the LuchaDerpy roster channel. */
+const LUCHA_RULES = {
+    slot: 'lucha:rules',
+    header: '🟣 **What does it take to become a LuchaDerpy wrestler? Simple!**',
+    body: [
+        '⚠️ **Make sure the character qualifies before you request them for LuchaDerpy.**',
+        '',
+        '• All characters that are listed as **"Light Heavyweight"** and **"Cruiserweight"** are eligible to compete!',
+        '• As for your favorite **"Heavyweights"** and above, they may qualify if they have an outside dive or springboard attack on their default moveset or have made an appearance in Triple A (ex: Ivar and Omos)!',
+        '• Wrestlers **93 overall and above** will be forbidden to compete to help even the playing field.',
+        '• You may use your current superstar to compete if they meet the qualifications or pick up a new superstar and keep your main!'
+    ].join('\n')
+};
+
 /** The last post of a roster channel: how to get a character there (3.12: Men's/Women's are requested, custom ones made). */
 function infoFor(divs) {
     const req = divs.filter((d) => ['mens', 'womens', 'luchaderpy'].includes(d));
@@ -177,7 +191,10 @@ async function plan(guildId) {
         if (div === 'luchaderpy') out.get(ch).push(await luchaStandings(guildId)); // 3.15
         divsIn.get(ch).push(div);
     }
-    for (const [ch, list] of out) list.push(infoFor(divsIn.get(ch)));
+    for (const [ch, list] of out) {
+        if (divsIn.get(ch).includes('luchaderpy')) list.push(LUCHA_RULES); // 3.15.4: right above the request buttons
+        list.push(infoFor(divsIn.get(ch)));
+    }
     // 3.14: the champions board goes first in its channel
     if (champCh) out.set(champCh, [...await championPosts(guildId), ...(out.get(champCh) || [])]);
     return out;
