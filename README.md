@@ -1,4 +1,4 @@
-# Wrestling Bot 3.14.1
+# Wrestling Bot 3.14.2
 
 A Discord bot for running a fantasy wrestling promotion: characters, matches, tag teams,
 #1 contenders, 13 championship titles in four divisions, stats, rankings and visual cards. Works in many

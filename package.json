@@ -1,6 +1,6 @@
 {
   "name": "wrestling-bot",
-  "version": "3.14.1",
+  "version": "3.14.2",
   "description": "Discord wrestling booking & stats bot",
   "main": "src/index.js",
   "type": "commonjs",

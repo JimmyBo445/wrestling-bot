@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.14.2
+- Messages about switching, requesting, claiming and transferring characters no longer mention records at all (keeps it simple for members). How records work didn't change.
+
 ## 3.14.1
 - Clearer wording about records when a character changes hands (switch, request/claim, transfer): the player keeps their own record, the character keeps its history (shown as "All owners"), and the new player's record with that character starts at 0-0. Nothing about how records are counted changed.
 

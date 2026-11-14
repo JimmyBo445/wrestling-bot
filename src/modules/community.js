@@ -212,7 +212,7 @@ async function requestList(interaction, scope, div, page = 0, search = '') {
                 ? `🔎 Open ${DIVISION_LABELS[div]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name to narrow it down)` : ''}. Pick one to request it.`
                 : `🔎 No open ${DIVISION_LABELS[div]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
             : rows.length
-                ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you. Your record starts fresh with them; their past stays in their history.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
+                ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
                 : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
         embeds: [],
         components: withHome(comps)
@@ -285,7 +285,7 @@ async function switchList(interaction, fromId, page = 0, search = '') {
                 ? `🔎 Open ${DIVISION_LABELS[from.division]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name)` : ''}. Pick one to switch **${from.name}** for.`
                 : `🔎 No open ${DIVISION_LABELS[from.division]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
             : rows.length
-            ? `🔄 **Switch ${from.name}** for an 🟢 open ${DIVISION_LABELS[from.division]} character. Staff approve it. **Your own record stays yours**, your record with the new character starts at 0-0, and **${from.name}** becomes open for someone else.`
+            ? `🔄 **Switch ${from.name}** for an 🟢 open ${DIVISION_LABELS[from.division]} character. Staff approve it, and **${from.name}** becomes open for someone else.`
             : `🔄 There are no open ${DIVISION_LABELS[from.division]} characters to switch to right now.`,
         embeds: [], components: withHome(comps)
     });
