@@ -192,8 +192,10 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
         picked = await requireCharacter(guildId, characterId, { statuses: ['approved', 'retired'] });
         if (picked.unclaimed) {
             return { embeds: [new EmbedBuilder().setColor(0x95A5A6).setTitle(`Who is ${picked.name}?`)
-                .setDescription(`**${picked.name}** (${DIVISION_LABELS[picked.division]}) has **no player** right now. They're unclaimed.`)],
-            components: [row(btn(`ui:w:p:${picked.id}`, '🖼 Profile card'), btn(`ui:w:s:${picked.id}`, '📊 Stats'), btn(`ui:w:t:${picked.id}`, '🏆 Title history'))] };
+                .setDescription(`**${picked.name}** (${DIVISION_LABELS[picked.division]}${picked.overall ? `, ${picked.overall} Overall` : ''}) has **no player** right now. They're 🟢 open.`)],
+            components: [row(btn(`ui:w:p:${picked.id}`, '🖼 Profile card'), btn(`ui:w:s:${picked.id}`, '📊 Stats'), btn(`ui:w:t:${picked.id}`, '🏆 Title history'),
+                // 3.13.1: staff can set the overall (and give / retire) open characters too
+                ...(isAdmin(interaction) ? [btn(`ui:ws:v:${picked.id}`, '🛠 Staff', ButtonStyle.Danger)] : []))] };
         }
         ownerId = picked.owner_discord_id;
     }

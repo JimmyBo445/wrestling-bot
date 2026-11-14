@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.13.2
+- **`/character overall`** (staff): pick any wrestler (taken, 🟢 open or retired) and type the overall, 1–99, or 0 to remove it. Shows what it was before. The roster channels update by themselves.
+
+## 3.13.1
+- 🟢 Open characters now have a **🛠 Staff** button on `/whois` (staff only), so you can set their overall, give them to a player, retire or delete them. Their `/whois` also shows their overall.
+
 ## 3.13.0 — 🔄 Switch character
 - Players can trade one of their **Men's or Women's** characters for an 🟢 **open** one in the **same division**. Buttons: the Men's/Women's roster channels, the 📌 menu post, and 🙋 My Wrestlers (on your own Men's/Women's wrestler).
 - It goes to the staff room as **Switch Characters** with ✅ Approve / ❌ Deny. The card says what happens to the old character (teams it leaves, contract that ends).

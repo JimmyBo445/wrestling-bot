@@ -62,6 +62,10 @@ const data = new SlashCommandBuilder()
         .addIntegerOption((o) => o.setName('overall').setDescription('Overall 1-99 (only when adding one name)').setRequired(false).setMinValue(1).setMaxValue(99))
         .addAttachmentOption((o) => o.setName('picture').setDescription('Picture (only when adding one name)').setRequired(false))
         .addStringOption((o) => o.setName('finisher').setDescription('Finishing move (only when adding one name)').setRequired(false).setMaxLength(40)))
+    .addSubcommand((sub) => sub.setName('overall')
+        .setDescription('[Admin] Set or change a wrestler\'s overall rating')
+        .addStringOption((o) => charOpt(o, 'The wrestler (anyone: taken, open or retired)'))
+        .addIntegerOption((o) => o.setName('overall').setDescription('1-99, or 0 to remove it').setRequired(true).setMinValue(0).setMaxValue(99)))
     .addSubcommand((sub) => sub.setName('list')
         .setDescription("List a player's characters")
         .addUserOption((o) => o.setName('user').setDescription('Defaults to you').setRequired(false)))
@@ -111,7 +115,7 @@ const data = new SlashCommandBuilder()
 // Which statuses to offer in the dropdown for each subcommand
 const STATUS_BY_SUB = {
     profile: ['approved', 'retired'], story: ['approved', 'retired', 'pending'], picture: ['approved', 'retired', 'pending'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
-    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired']
+    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired'], overall: ['approved', 'retired']
 };
 
 /** Trims; empty text becomes null. */
@@ -204,6 +208,20 @@ module.exports = {
             if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(made[0].id, upload), made[0].id]);
             await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division });
             return interaction.editReply({ content: `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'overall') {
+            // 3.13.2: quick way for staff to set/change an overall (also: 🛠 Staff on the wrestler → 🔢 Set overall)
+            requireAdmin(interaction, 'set overall ratings');
+            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
+            const n = interaction.options.getInteger('overall') || null;
+            const before = character.overall;
+            await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2`, [character.id, guildId, n]);
+            await logAudit(guildId, interaction.user.id, 'character_overall', { character: Number(character.id), overall: n, before });
+            return respond(interaction, {
+                content: n ? `🔢 **${character.name}** is now **${n} Overall**${before ? ` (was ${before})` : ''}. The roster channel updates in a few seconds.` : `🔢 Removed **${character.name}**'s overall.`,
+                flags: 64, allowedMentions: NO_MENTIONS
+            });
         }
 
         if (sub === 'open') {
@@ -450,5 +468,5 @@ void reply; void DIVISION_THEME;
 
 // 3.9: Discord lists submit, profile, picture and assign. Edit, story, retire, transfer… are buttons
 // on the wrestler's screen (/whois or /fnlw → My Wrestlers); the old subcommands still work inside the bot.
-require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'open'],
+require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'open', 'overall'],
     description: 'Your wrestlers. Edit/story: /fnlw → My Wrestlers. Staff (retire, transfer, unclaim): /whois' });

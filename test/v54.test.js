@@ -108,6 +108,31 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
         void plan; void edited;
     });
 
+    await t('3.13.1: open characters have 🛠 Staff on /whois (to set their overall)', async () => {
+        let i = await run('whois', null, { character: PUNK }, ADM);
+        assert.ok(ids(i).includes(`ui:ws:v:${PUNK}`), ids(i).join(' '));
+        i = await run('whois', null, { character: PUNK }, P('u1'));
+        assert.ok(!ids(i).includes(`ui:ws:v:${PUNK}`));
+        i = await click(`ui:ovm:${PUNK}`, priv({ ...ADM, fields: { overall: '87' } }));
+        assert.match(text(i), /87 Overall/);
+        i = await run('whois', null, { character: PUNK }, ADM);
+        assert.match(text(i), /87 Overall/);
+    });
+
+    await t('3.13.2: /character overall sets, changes and removes an overall (staff only)', async () => {
+        const names = require('./mock').client.commands.get('character').data.toJSON().options.map((o) => o.name);
+        assert.ok(names.includes('overall'));
+        let i = await run('character', 'overall', { character: PUNK, overall: 90 }, ADM);
+        assert.match(text(i), /CM Punk\*\* is now \*\*90 Overall\*\* \(was 87\)/);
+        i = await run('character', 'overall', { character: BOLT, overall: 0 }, ADM);
+        assert.match(text(i), /Removed/);
+        assert.strictEqual((await q(`select overall from characters where id=$1`, [PUNK]))[0].overall, 90);
+        i = await run('character', 'overall', { character: PUNK, overall: 50 }, P('u1'));
+        assert.match(text(i), /Only admins|staff/i);
+        const ac = await require('./mock').auto('character', 'overall', 'character', 'cm', {}, ADM);
+        assert.ok(ac.some((c) => String(c.value) === String(PUNK)), 'open characters show in the list');
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     await f.pool.end(); process.exit(failed ? 1 : 0);
 })();
