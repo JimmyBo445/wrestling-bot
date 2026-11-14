@@ -460,7 +460,7 @@ module.exports = {
             }
             await pool.query(`UPDATE characters SET owner_id = $1 WHERE id = $2 AND guild_id = $3`, [newOwnerId, character.id, guildId]);
             await logAudit(guildId, interaction.user.id, 'character_transferred', { name: character.name, from: character.owner_discord_id, to: newOwnerUser.id });
-            return respond(interaction, { content: `Moved **${character.name}** from <@${character.owner_discord_id}> to <@${newOwnerUser.id}>. All stats and history came with it.`, allowedMentions: NO_MENTIONS });
+            return respond(interaction, { content: `Moved **${character.name}** from <@${character.owner_discord_id}> to <@${newOwnerUser.id}>. Their history (titles, accolades, past matches as "All owners") stays with the character; each player keeps their own record.`, allowedMentions: NO_MENTIONS });
         }
     }
 };

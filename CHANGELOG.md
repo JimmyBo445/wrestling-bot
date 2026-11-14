@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.14.1
+- Clearer wording about records when a character changes hands (switch, request/claim, transfer): the player keeps their own record, the character keeps its history (shown as "All owners"), and the new player's record with that character starts at 0-0. Nothing about how records are counted changed.
+
 ## 3.14.0 — Live champions board
 - `/admin panel` → 📺 Channels → **Live champions board** → pick a channel. One plain-text post per division (`🏆 **Men's Champions** · 3 of 4 belts held`), every belt listed with its champion: **Jey Uso** (@boatgawd) · 42 days. Tag champions show the team and both players: **Bloody Widows** (@a, @b). Empty belts say _Vacant_; interim champions are marked.
 - It updates by itself a few seconds after a title changes hands (or a reign is fixed in `/title manage`), and once a day for the day count. Deleted posts come back on the hourly check. Mentions never ping.

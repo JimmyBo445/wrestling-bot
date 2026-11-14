@@ -1,5 +1,6 @@
 // 3.13: 🔄 Switch character. A player gives up one of their Men's/Women's characters for an 🟢 open one in the
-// same division. Staff approve it. Records stay with each character (like a transfer). Rules:
+// same division. Staff approve it. Records work like a transfer: the player keeps their own record, each character keeps
+// its history (shown as 'All owners'), and the new player's record with a character starts at 0-0. Rules:
 //   • not while the character they give up holds a title (singles, or with a tag team)
 //   • same division only
 //   • one approved switch every N days per player (/admin panel → Rules, default 14)

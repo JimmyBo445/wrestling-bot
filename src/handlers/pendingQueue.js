@@ -27,7 +27,7 @@ async function describeRequest(r) {
         return `**${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}) submitted by <@${r.requested_by}>${fromSignup}`;
     }
     if (r.request_type === 'character_claim') {
-        return `<@${r.requested_by}> wants to take over **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}), a wrestler with no player right now. Approving moves it to them with all its stats and history.${fromSignup}`;
+        return `<@${r.requested_by}> wants to take over **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}), a wrestler with no player right now. Approving moves it to them (their record with it starts fresh; its history stays).${fromSignup}`;
     }
     if (r.request_type === 'character_switch') {
         // character_id = the open character they want, challenger_character_id = the one they give up
@@ -38,7 +38,7 @@ async function describeRequest(r) {
             const lines = old ? U.describePlan(old, await U.unclaimPlan(r.guild_id, old)).filter((l) => !l.startsWith('🏆')) : [];
             if (lines.length) extra = `\n\n**What happens to ${old.name}:**\n${lines.join('\n')}`;
         } catch (_) { extra = ''; }
-        return `<@${r.requested_by}> wants to switch from **${challenger?.name || 'Unknown'}** to **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}).\nApproving gives them **${c?.name || 'the new character'}** (with its stats and history) and makes **${challenger?.name || 'the old one'}** 🟢 open. Records stay with each character. Card matches that haven't happened yet switch to the new character.${extra}`;
+        return `<@${r.requested_by}> wants to switch from **${challenger?.name || 'Unknown'}** to **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}).\nApproving gives them **${c?.name || 'the new character'}** and makes **${challenger?.name || 'the old one'}** 🟢 open. The player keeps their own record; each character keeps its history. Card matches that haven't happened yet switch to the new character.${extra}`;
     }
     if (r.request_type === 'contender_challenge') {
         const who = t?.name || challenger?.name || 'Unknown';

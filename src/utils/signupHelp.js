@@ -119,7 +119,7 @@ async function claimList(interaction, signup, division = 'all') {
     components.push(row(back(signup)));
     return reply(interaction, {
         content: rows.length
-            ? '🔄 **Claim a wrestler**: these wrestlers have no player right now. Pick yours and staff will move it to you (with all its stats and history).'
+            ? '🔄 **Claim a wrestler**: these wrestlers have no player right now. Pick yours and staff will move it to you. Your record starts fresh with them; their past stays in their history.'
             : `🔄 No wrestlers ${division === 'all' ? '' : `in ${DIVISION_LABELS[division]} `}are without a player right now. If yours is on someone else's account, ask staff to move it with 🛠 Staff on the wrestler (\`/whois\`).`,
         components
     });
