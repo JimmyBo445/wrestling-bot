@@ -282,6 +282,25 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         assert.ok((await owner(w)).discord_id === 'u9', 'players can\'t use it');
     });
 
+    await t('3.15.3: /character take makes a character ⚪ open again (either color); search lists only taken ones', async () => {
+        let i = await run('character', 'take', { character: SAMI }, ADM);
+        assert.match(text(i), /Took \*\*Sami Zayn\*\* off <@u7>\. It's ⚪ open now/, text(i));
+        assert.strictEqual((await owner(SAMI)).is_placeholder, true);
+        const randyL = (await lucha(RANDY)).id;
+        i = await run('character', 'take', { character: randyL }, ADM);
+        assert.match(text(i), /Took 🟣 \*\*Randy Orton\*\* \(LuchaDerpy\) off <@u7>/, text(i));
+        assert.strictEqual((await lucha(RANDY)).is_placeholder, true);
+        i = await run('character', 'take', { character: SAMI }, ADM);
+        assert.match(text(i), /already unclaimed/);
+        const { autocompleteCharacters } = require('../src/utils/characterUtils');
+        const fake = { guildId: G, guild: { members: { fetch: async () => new Map() } } };
+        assert.strictEqual((await autocompleteCharacters(fake, 'Sami', { claimed: true })).length, 0);
+        assert.ok((await autocompleteCharacters(fake, 'Roman', { claimed: true })).length >= 1);
+        const before = (await owner(ROMAN)).discord_id;
+        await run('character', 'take', { character: ROMAN }, P('u3'));
+        assert.strictEqual((await owner(ROMAN)).discord_id, before, 'players can\'t use it');
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
     await f.pool.end();

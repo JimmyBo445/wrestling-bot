@@ -14,11 +14,12 @@ function parseId(value) {
  * Autocomplete list of characters. Option `statuses` controls which are shown
  * (default: approved only). Names are looked up in one batch and cached.
  */
-async function autocompleteCharacters(interaction, focusedValue, { statuses = ['approved'], division = null, lucha = true } = {}) {
+async function autocompleteCharacters(interaction, focusedValue, { statuses = ['approved'], division = null, lucha = true, claimed = false } = {}) {
     const params = [interaction.guildId, statuses, `%${focusedValue.replace(/[%_]/g, '')}%`];
     let divisionSql = '';
     if (division) { params.push(division); divisionSql = `AND c.division = $4`; }
     // 3.15.1: a 🟣 LuchaDerpy version only shows when someone plays it (lucha:false hides them all, e.g. for overalls)
+    if (claimed) divisionSql += ` AND NOT u.is_placeholder`; // 3.15.3: only wrestlers someone plays
     divisionSql += lucha ? ` AND NOT (c.division = 'luchaderpy' AND u.is_placeholder)` : ` AND c.division <> 'luchaderpy'`;
     const { rows } = await pool.query(
         `SELECT c.id, c.name, c.division, c.status, u.discord_id, u.is_placeholder,

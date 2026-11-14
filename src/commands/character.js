@@ -110,6 +110,9 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => charOpt(o))
         .addUserOption((o) => o.setName('player').setDescription('Who gets it').setRequired(true))
         .addStringOption((o) => o.setName('slot').setDescription("Men's superstars only. Leave empty and I'll ask: 🟢 Normal or 🟣 LuchaDerpy").setRequired(false).addChoices(...SLOT_CHOICES)))
+    .addSubcommand((sub) => sub.setName('take') // 3.15.3: the opposite of give
+        .setDescription('[Admin] Take a character off its player (it becomes ⚪ open)')
+        .addStringOption((o) => charOpt(o)))
     .addSubcommand((sub) => sub.setName('transfer')
         .setDescription('[Admin] Give a character to a different player (keeps all stats and history)')
         .addStringOption((o) => charOpt(o))
@@ -126,7 +129,7 @@ const data = new SlashCommandBuilder()
 // Which statuses to offer in the dropdown for each subcommand
 const STATUS_BY_SUB = {
     profile: ['approved', 'retired'], story: ['approved', 'retired', 'pending'], picture: ['approved', 'retired', 'pending'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
-    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], give: ['approved'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired'], overall: ['approved', 'retired']
+    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], give: ['approved'], take: ['approved', 'retired'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired'], overall: ['approved', 'retired']
 };
 
 /** Trims; empty text becomes null. */
@@ -167,7 +170,7 @@ module.exports = {
         const focused = interaction.options.getFocused();
         const sub = interaction.options.getSubcommand(false);
         // 3.15.1: one overall per superstar, so the overall search lists each superstar once
-        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: !['overall', 'give'].includes(sub) }));
+        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: !['overall', 'give'].includes(sub), claimed: sub === 'take' }));
     },
 
     async execute(interaction) {
@@ -471,13 +474,14 @@ module.exports = {
             return respond(interaction, { embeds: [embed], components: [row], allowedMentions: NO_MENTIONS });
         }
 
-        if (sub === 'unclaim') {
+        if (sub === 'unclaim' || sub === 'take') {
             requireAdmin(interaction, 'unclaim characters');
             const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired'] });
             if (character.unclaimed) throw new UserError(`**${character.name}** is already unclaimed. Give them to someone with 🛠 Staff on the wrestler (\`/whois\`).`);
             const plan = await unclaim.unclaimPlan(guildId, character);
             if (!unclaim.hasConflicts(plan)) {
                 await unclaim.unclaimCharacter(interaction.client, guildId, character, interaction.user.id, interaction.client.user.id);
+                if (sub === 'take') return respond(interaction, { content: `Took ${character.division === 'luchaderpy' ? '🟣 ' : ''}**${character.name}**${character.division === 'luchaderpy' ? ' (LuchaDerpy)' : ''} off <@${character.owner_discord_id}>. It's ⚪ open now. Give it to someone with \`/character give\`.`, allowedMentions: NO_MENTIONS });
                 return respond(interaction, { content: `**${character.name}** was taken off <@${character.owner_discord_id}> and is now **unclaimed**. They keep their name, picture and history, but can't be booked until you give them to a player with 🛠 Staff on the wrestler (\`/whois\`).`, allowedMentions: NO_MENTIONS });
             }
             const embed = new EmbedBuilder().setColor(0xe67e22).setTitle(`Unclaim ${character.name}?`)
@@ -530,5 +534,5 @@ void reply; void DIVISION_THEME;
 
 // 3.9: Discord lists submit, profile, picture and assign. Edit, story, retire, transfer… are buttons
 // on the wrestler's screen (/whois or /fnlw → My Wrestlers); the old subcommands still work inside the bot.
-require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'give', 'open', 'overall'],
+require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'give', 'take', 'open', 'overall'],
     description: 'Your wrestlers. Edit/story: /fnlw → My Wrestlers. Staff (retire, transfer, unclaim): /whois' });

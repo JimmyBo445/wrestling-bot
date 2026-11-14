@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.15.3
+- **`/character take`** (staff): take a character off its player so it's ⚪ open again. The search only lists characters someone has; a superstar's 🟣 LuchaDerpy version is listed separately, so you can take just that one. If the character holds a title or is on a team, it shows the usual heads-up first.
+
 ## 3.15.2
 - **`/character give`** (staff): give an existing character (⚪ open or already taken) to a player in one step. Pick the character and the player. For a Men's superstar, pick the slot, or leave it empty and the bot asks 🟢 Normal Men's or 🟣 LuchaDerpy with two buttons. Each superstar is listed once in the search.
 
