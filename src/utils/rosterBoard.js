@@ -46,16 +46,21 @@ function divisionPosts(div, list) {
     }));
 }
 
-const INFO = {
-    slot: 'info', buttons: true,
-    header: '🆕 **Want a character?**',
-    body: [
-        '• **Make your own:** press 🆕 Make a wrestler. Staff approve it and it shows up here.',
-        '• **Want an 🟢 open one?** Ask staff and they\'ll give it to you.',
-        '• **Waiting on staff?** 📨 My requests shows where your request stands.',
-        '-# This channel updates by itself whenever someone gets, changes or gives up a character.'
-    ].join('\n')
-};
+/** The last post of a roster channel: how to get a character there (3.12: Men's/Women's are requested, custom ones made). */
+function infoFor(divs) {
+    const req = divs.filter((d) => ['mens', 'womens'].includes(d));
+    const make = divs.some((d) => ['custom', 'custom_womens'].includes(d));
+    const scope = req.length === 1 ? req[0] : 'mw';
+    const lines = [];
+    if (req.length) lines.push(`• **Want a ${req.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an 🟢 open one. Staff approve it.`);
+    if (make) lines.push('• **Make your own custom wrestler:** press 🆕 Make a custom wrestler. Staff approve it and it shows up here.');
+    lines.push('• **Waiting on staff?** 📨 My requests shows where your request stands.', '-# This channel updates by itself whenever someone gets, changes or gives up a character.');
+    const buttons = [];
+    if (req.length) buttons.push(['ui:rq:h:' + scope + ':rb', '🙋 Request a character', ButtonStyle.Primary]);
+    if (make) buttons.push(['ui:mk:h:rb', '🆕 Make a custom wrestler', ButtonStyle.Success]);
+    buttons.push(['ui:mr:h:rb', '📨 My requests', ButtonStyle.Secondary], ['ui:h:roster:rb', '📋 Roster with records', ButtonStyle.Secondary]);
+    return { slot: 'info', buttons, header: '🙋 **Want a character?**', body: lines.join('\n') };
+}
 
 /** What should be posted: Map channelId → [posts in order]. */
 async function plan(guildId) {
@@ -68,24 +73,23 @@ async function plan(guildId) {
          FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = 'approved'
          ORDER BY lower(c.name), c.id`, [guildId]);
+    const divsIn = new Map();
     for (const div of Object.keys(DIVISION_LABELS)) {
         const ch = where[div];
         if (!ch) continue;
-        if (!out.has(ch)) out.set(ch, []);
+        if (!out.has(ch)) { out.set(ch, []); divsIn.set(ch, []); }
         out.get(ch).push(...divisionPosts(div, rows.filter((r) => r.division === div)));
+        divsIn.get(ch).push(div);
     }
-    for (const list of out.values()) list.push(INFO);
+    for (const [ch, list] of out) list.push(infoFor(divsIn.get(ch)));
     return out;
 }
 
-const keyOf = (p) => hash({ h: p.header, b: p.body });
+const keyOf = (p) => hash({ h: p.header, b: p.body, k: (p.buttons || []).map((x) => x[0]) });
 
 function payload(p) {
     const content = `${p.header}\n\n${p.body}${p.buttons ? '' : `\n\n-# Updated <t:${Math.floor(Date.now() / 1000)}:R>`}`;
-    const components = p.buttons ? [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ui:mk:h:rb').setLabel('🆕 Make a wrestler').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('ui:mr:h:rb').setLabel('📨 My requests').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId('ui:h:roster:rb').setLabel('📋 Roster with records').setStyle(ButtonStyle.Secondary))] : [];
+    const components = p.buttons ? [new ActionRowBuilder().addComponents(...p.buttons.map(([id, label, style]) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style)))] : [];
     return { content, embeds: [], components, allowedMentions: NOPING };
 }
 

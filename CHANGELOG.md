@@ -4,6 +4,10 @@
 - **Separate channels per division:** `/admin panel` → 📺 Channels now has **Live roster: Men's / Women's / Custom / Custom Women's** next to **Live roster: main channel**. A division with its own channel posts there; any division without one goes to the main channel (if set). Turning a division's channel off sends it back to the main channel. Every roster channel ends with the 🆕 "Want a character?" post.
 - **Plain text, like the names under the match card:** `📋 **Men's Division** · 24 taken · 3 open`, then one line per wrestler, the 🟢 Open section, and "Updated x minutes ago". No box around it. Big divisions split into several posts (Discord allows 2,000 characters per message).
 - Posts from 3.11 are replaced automatically the first time the bot updates.
+- **Men's and Women's characters are requested, not made.** 🙋 **Request a character** lists the 🟢 open characters of that division (paged, with overalls); picking one sends a claim to the staff room, staff approve it and the character moves to the player with all its stats (they get a DM). Follow it in 📨 My requests.
+- **🆕 Make a custom wrestler** only offers Custom and Custom Women's now, everywhere: the roster channels, the 📌 menu post, 🙋 My Wrestlers and the signup post (🔄 Claim a wrestler is now first there).
+- **Roster channel buttons depend on the channel:** Men's/Women's channels get 🙋 Request a character; custom channels get 🆕 Make a custom wrestler; both get 📨 My requests and 📋 Roster with records.
+- **New command `/character open`** (staff): add open characters with no player. One name (with optional overall, picture and finisher) or up to 25 at once separated by commas, e.g. `name: Roman Reigns, CM Punk, Seth Rollins`. Names already taken are skipped.
 - Database change: migration 027.
 
 ## 3.11.0 — Live roster channel + overall ratings

@@ -26,7 +26,7 @@ const eph = (i) => i.ephemeral === true || i.responses.some((r) => (Number(r.p?.
     const WH = (await q(`select id from titles where guild_id=$1 and division='mens' and not is_tag_title order by id limit 1`, [G]))[0].id;
 
     await t('what Discord lists now', async () => {
-        assert.deepStrictEqual(opts('character'), ['submit', 'profile', 'picture', 'assign']);
+        assert.deepStrictEqual(opts('character'), ['submit', 'profile', 'picture', 'assign', 'open']);
         assert.deepStrictEqual(opts('stats'), ['wrestler', 'player', 'show_everyone']);
         assert.deepStrictEqual(opts('standings'), ['board', 'show_everyone']);
         assert.deepStrictEqual(opts('legacy'), ['wrestler', 'player', 'show_everyone']);

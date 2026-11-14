@@ -16,12 +16,15 @@ const row = (...c) => new ActionRowBuilder().addComponents(...c);
 
 const HELP_TEXT = [
     '**Don\'t see your wrestler?**',
-    '➕ New wrestler: tap **Request a new wrestler** (or `/character submit`)',
-    '🔄 Wrestler with no player: tap **Claim a wrestler**',
+    '🔄 Men\'s or Women\'s character with no player: tap **Claim a wrestler**',
+    '➕ Your own custom wrestler: tap **Make a custom wrestler**',
     'Staff approve both. Once approved, you\'re signed up automatically.'
 ].join('\n');
 
 /** How many wrestlers (approved or pending) this player has, and whether they're at the limit. */
+/** 3.12: new wrestlers can only be made in the custom divisions; Men's and Women's are claimed. */
+const MAKE_DIVISIONS = ['custom', 'custom_womens'];
+
 async function slotsFor(guildId, discordId) {
     const { ensureUser } = require('./ensureGuild');
     const ownerId = await ensureUser(guildId, discordId);
@@ -35,7 +38,7 @@ async function pickerExtras(signup, guildId, discordId) {
     const { full } = await slotsFor(guildId, discordId);
     return {
         text: `${HELP_TEXT}${full ? `\n${LIMIT_TEXT}` : ''}`,
-        row: row(btn(`signup:new:${signup.id}`, '➕ Request a new wrestler', ButtonStyle.Success), btn(`signup:claim:${signup.id}`, '🔄 Claim a wrestler'))
+        row: row(btn(`signup:claim:${signup.id}`, '🔄 Claim a wrestler', ButtonStyle.Success), btn(`signup:new:${signup.id}`, '➕ Make a custom wrestler'))
     };
 }
 
@@ -155,15 +158,19 @@ async function handle(interaction, action, signup, parts) {
     if (action === 'new') {
         await requireRoom(interaction);
         return reply(interaction, {
-            content: '➕ **Request a new wrestler**: which division? Next you fill in a short form (name, plus optional finisher, alignment, bio and picture link).',
-            components: [row(...Object.entries(DIVISION_LABELS).map(([d, l]) => btn(`signup:newdiv:${signup.id}:${d}`, l, ButtonStyle.Primary))), row(back(signup))]
+            content: '➕ **Make a new wrestler** (custom divisions only; Men\'s and Women\'s characters are claimed with 🔄 Claim a wrestler): which division? Next you fill in a short form (name, plus optional finisher, alignment, bio and picture link).',
+            components: [row(...MAKE_DIVISIONS.map((d) => btn(`signup:newdiv:${signup.id}:${d}`, DIVISION_LABELS[d], ButtonStyle.Primary))), row(back(signup))]
         });
     }
     if (action === 'newdiv') {
+        if (!MAKE_DIVISIONS.includes(parts[3])) throw new UserError('Men\'s and Women\'s characters can\'t be made, only claimed. Press 🔄 Claim a wrestler.');
         await requireRoom(interaction);
         return interaction.showModal(newForm(signup, parts[3]));
     }
-    if (action === 'newform') return submitNew(interaction, signup, parts[3]);
+    if (action === 'newform') {
+        if (!MAKE_DIVISIONS.includes(parts[3])) throw new UserError('Men\'s and Women\'s characters can\'t be made, only claimed. Press 🔄 Claim a wrestler.');
+        return submitNew(interaction, signup, parts[3]);
+    }
     if (action === 'claim') return claimList(interaction, signup);
     if (action === 'claimdiv') return claimList(interaction, signup, parts[3]);
     if (action === 'claimpick') return claimConfirm(interaction, signup, interaction.values?.[0]);
@@ -200,4 +207,4 @@ async function afterApproval(interaction, request) {
     } catch (err) { console.error('Signup auto-add failed:', err.message); return null; }
 }
 
-module.exports = { ACTIONS, HELP_TEXT, pickerExtras, handle, afterApproval };
+module.exports = { ACTIONS, HELP_TEXT, pickerExtras, handle, afterApproval, requireRoom, MAKE_DIVISIONS };

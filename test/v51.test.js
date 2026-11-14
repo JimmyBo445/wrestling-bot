@@ -70,13 +70,13 @@ const btnIds = (payload) => (payload.components || []).flatMap((r) => (r.toJSON 
         }
     });
     await t('🆕 Make a wrestler from the menu sends it to staff', async () => {
-        let i = await click('ui:mk:d:womens', P('u5'));
+        let i = await click('ui:mk:d:custom_womens', P('u5'));
         assert.ok(i.responses.some((r) => r.type === 'modal'));
-        i = await click('ui:mkm:womens', priv({ ...P('u5'), fields: { name: 'Zara Blaze', finisher: '', alignment: 'heel', bio: '', image_url: '' } }));
+        i = await click('ui:mkm:custom_womens', priv({ ...P('u5'), fields: { name: 'Zara Blaze', finisher: '', alignment: 'heel', bio: '', image_url: '' } }));
         assert.ok(!/⚠️/.test(text(i)), text(i));
         const c = (await q(`select status from characters where name='Zara Blaze'`))[0];
         assert.strictEqual(c.status, 'pending');
-        i = await click('ui:mkm:womens', priv({ ...P('u5'), fields: { name: 'Bad Align', alignment: 'evil' } }));
+        i = await click('ui:mkm:custom_womens', priv({ ...P('u5'), fields: { name: 'Bad Align', alignment: 'evil' } }));
         assert.match(text(i), /face, heel or neutral/);
     });
     await t('turn it off removes it', async () => {

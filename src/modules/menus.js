@@ -243,7 +243,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             components.push(row(...acts));
         }
     }
-    if (mine && !chars.length) components.push(row(btn('ui:mk:h', '🆕 Make a wrestler', ButtonStyle.Success), btn('ui:mr:h', '📨 My requests')));
+    if (mine && !chars.length) components.push(row(btn('ui:rq:h:mw', '🙋 Request a character', ButtonStyle.Success), btn('ui:mk:h', '🆕 Make a custom wrestler'), btn('ui:mr:h', '📨 My requests')));
     return { embeds: [embed], components, allowedMentions: NOPING };
 }
 

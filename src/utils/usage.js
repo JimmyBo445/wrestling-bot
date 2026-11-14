@@ -14,7 +14,7 @@ const KIND = {
     rp: 'Report a result', rpm: 'Report a result', rr: 'Reported results (staff)', rrm: 'Reported results (staff)', rrd: 'Reported results (staff)',
     ad: 'Admin panel', adm: 'Admin panel', bk: 'Signups & booking', bkm: 'Signups & booking', ct: 'Card tools (staff)', ctm: 'Card tools (staff)', cs: 'Championship buttons',
     sv: 'Compare players', lz: 'Legacy (staff)', lzm: 'Legacy (staff)', nm: 'Nominate', dr: 'Roster cards', kb: 'Contract bonuses', kbm: 'Contract bonuses',
-    pl: 'PLEs', plm: 'PLEs', tt: 'Title manage (staff)', ttm: 'Title manage (staff)', mr: 'My requests', mk: 'Make a wrestler', mkm: 'Make a wrestler', mp: 'Menu post (staff)',
+    pl: 'PLEs', plm: 'PLEs', tt: 'Title manage (staff)', ttm: 'Title manage (staff)', mr: 'My requests', mk: 'Make a custom wrestler', mkm: 'Make a custom wrestler', rq: 'Request a character', mp: 'Menu post (staff)',
     us: 'Bot usage (staff)', av: 'Award vote', w: 'Wrestler screen', pg: 'Wrestler picker', pk: 'Wrestler picker', belt: 'Belt menu', help: 'Help menu', r: 'Roster', lg: 'Legacy'
 };
 

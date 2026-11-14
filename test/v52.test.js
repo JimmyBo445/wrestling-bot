@@ -49,7 +49,7 @@ const inRoster = () => sent.filter((m) => m.channelId === 'rosterch');
         assert.match(desc(posts[1]), /Liv Morgan\*\* : <@u3>/);
         assert.match(desc(posts[2]), /Nobody yet/);
         const how = posts[4].payload.components[0].toJSON().components.map((c) => c.custom_id);
-        assert.deepStrictEqual(how, ['ui:mk:h:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']);
+        assert.deepStrictEqual(how, ['ui:rq:h:mw:rb', 'ui:mk:h:rb', 'ui:mr:h:rb', 'ui:h:roster:rb']); // main channel has every division
         assert.strictEqual((await q(`select count(*)::int n from roster_board_posts`))[0].n, 5);
     });
 

@@ -31,7 +31,7 @@ const allText = (i) => i.responses.map((r) => r.p?.content || '').join('\n') + t
     await t('the picker shows the "don\'t see your wrestler?" message and both buttons', async () => {
         const i = await click(`signup:join:${sid}`, P('u1'));
         assert.match(allText(i), /Don't see your wrestler\?/);
-        assert.match(allText(i), /\/character submit/);
+        assert.match(allText(i), /Make a custom wrestler/); // 3.12: Men's/Women's are claimed, custom ones made
         assert.match(allText(i), /signed up automatically/);
         assert.ok(ids(i).includes(`signup:new:${sid}`) && ids(i).includes(`signup:claim:${sid}`));
         assert.ok(ids(i).includes(`signup:pick:${sid}`), 'the normal picker is still there');
@@ -45,17 +45,17 @@ const allText = (i) => i.responses.map((r) => r.p?.content || '').join('\n') + t
 
     await t('request a new wrestler: division → form → normal approval request, linked to the signup', async () => {
         let i = await click(`signup:new:${sid}`, priv(P('u2')));
-        assert.ok(ids(i).includes(`signup:newdiv:${sid}:womens`));
-        i = await click(`signup:newdiv:${sid}:womens`, priv(P('u2')));
+        assert.ok(ids(i).includes(`signup:newdiv:${sid}:custom_womens`));
+        i = await click(`signup:newdiv:${sid}:custom_womens`, priv(P('u2')));
         const m = modalOf(i);
         assert.deepStrictEqual(m.inputs, ['name', 'finisher', 'alignment', 'bio', 'image_url']);
         assert.deepStrictEqual(m.json.components.map((r) => r.components[0].required), [true, false, false, false, false], 'only the name is required');
         const before = sent.length;
-        i = await click(`signup:newform:${sid}:womens`, priv({ ...P('u2'), fields: { name: 'Nova Storm', finisher: 'Supernova', alignment: 'Face' } }));
+        i = await click(`signup:newform:${sid}:custom_womens`, priv({ ...P('u2'), fields: { name: 'Nova Storm', finisher: 'Supernova', alignment: 'Face' } }));
         assert.match(allText(i), /Nova Storm.*submitted/s);
         assert.match(allText(i), /signed up for \*\*RAW Week 9\*\* automatically/);
         const c = (await q(`select id, status, division, finisher, alignment from characters where name='Nova Storm'`))[0];
-        assert.deepStrictEqual([c.status, c.division, c.finisher, c.alignment], ['pending', 'womens', 'Supernova', 'face']);
+        assert.deepStrictEqual([c.status, c.division, c.finisher, c.alignment], ['pending', 'custom_womens', 'Supernova', 'face']);
         const req = (await q(`select * from pending_requests where character_id=$1`, [c.id]))[0];
         assert.strictEqual(String(req.payload.signup_id), String(sid));
         assert.ok(sent.slice(before).find((x) => x.channelId === 'pendch'), 'approval card posted');
@@ -64,7 +64,7 @@ const allText = (i) => i.responses.map((r) => r.p?.content || '').join('\n') + t
     });
     await t('a bad alignment is refused without sending anything', async () => {
         const n = (await q(`select count(*)::int n from characters`))[0].n;
-        const i = await click(`signup:newform:${sid}:mens`, priv({ ...P('u3'), fields: { name: 'Bad Guy', alignment: 'villain' } }));
+        const i = await click(`signup:newform:${sid}:custom`, priv({ ...P('u3'), fields: { name: 'Bad Guy', alignment: 'villain' } }));
         assert.match(allText(i), /face, heel or neutral/);
         assert.strictEqual((await q(`select count(*)::int n from characters`))[0].n, n);
     });

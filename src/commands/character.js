@@ -55,6 +55,13 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('bio').setDescription('One-line description').setRequired(false).setMaxLength(120))
         .addStringOption((o) => o.setName('finisher').setDescription('Finishing move, shown on their profile').setRequired(false).setMaxLength(40))
         .addStringOption((o) => o.setName('entrance_theme').setDescription('Entrance theme (song name), shown on their profile').setRequired(false).setMaxLength(60)))
+    .addSubcommand((sub) => sub.setName('open')
+        .setDescription('[Admin] Add open characters (no player yet) that members can request')
+        .addStringOption((o) => o.setName('name').setDescription('Name, or several names separated by commas').setRequired(true).setMaxLength(1000))
+        .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVISION_CHOICES))
+        .addIntegerOption((o) => o.setName('overall').setDescription('Overall 1-99 (only when adding one name)').setRequired(false).setMinValue(1).setMaxValue(99))
+        .addAttachmentOption((o) => o.setName('picture').setDescription('Picture (only when adding one name)').setRequired(false))
+        .addStringOption((o) => o.setName('finisher').setDescription('Finishing move (only when adding one name)').setRequired(false).setMaxLength(40)))
     .addSubcommand((sub) => sub.setName('list')
         .setDescription("List a player's characters")
         .addUserOption((o) => o.setName('user').setDescription('Defaults to you').setRequired(false)))
@@ -197,6 +204,36 @@ module.exports = {
             if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(made[0].id, upload), made[0].id]);
             await logAudit(guildId, interaction.user.id, 'character_assigned', { name, owner: targetUser.id, division });
             return interaction.editReply({ content: `Assigned **${name}** (${DIVISION_LABELS[division]}) to <@${targetUser.id}>.`, allowedMentions: NO_MENTIONS });
+        }
+
+        if (sub === 'open') {
+            // 3.12: characters with no player yet; members ask for them with 🙋 Request a character
+            requireAdmin(interaction, 'add open characters');
+            const names = [...new Set(interaction.options.getString('name').split(',').map((n) => n.trim().replace(/\s+/g, ' ')).filter(Boolean))];
+            if (!names.length) throw new UserError('Type at least one name.');
+            if (names.length > 25) throw new UserError('Add at most 25 names at a time.');
+            const tooLong = names.find((n) => n.length > 40);
+            if (tooLong) throw new UserError(`**${tooLong.slice(0, 50)}…** is too long (40 characters max).`);
+            const division = interaction.options.getString('division');
+            const one = names.length === 1;
+            await interaction.deferReply({ flags: 64 });
+            const upload = one ? await readUpload(interaction) : null;
+            const holder = await require('../utils/unclaim').placeholderUserId(guildId, interaction.client.user.id);
+            const added = [], skipped = [];
+            for (const name of names) {
+                try { await assertNameFree(guildId, name); } catch (e) { if (!(e instanceof UserError)) throw e; skipped.push(name); continue; }
+                const { rows: made } = await pool.query(
+                    `INSERT INTO characters (guild_id, owner_id, name, division, finisher, overall, status, submitted_by, approved_by, approved_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, 'approved', $7, $7, now()) RETURNING id`,
+                    [guildId, holder, name, division, one ? cleanText(interaction.options.getString('finisher')) : null, one ? interaction.options.getInteger('overall') : null, interaction.user.id]);
+                if (upload) await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(made[0].id, upload), made[0].id]);
+                added.push(name);
+            }
+            if (added.length) await logAudit(guildId, interaction.user.id, 'character_open_added', { names: added, division });
+            const lines = [];
+            if (added.length) lines.push(`🟢 Added **${added.length}** open ${DIVISION_LABELS[division]} character${added.length === 1 ? '' : 's'}: ${added.map((n) => `**${n}**`).join(', ')}.`, 'Members can ask for them with 🙋 **Request a character** (roster channel, menu post or 🙋 My Wrestlers). The roster channel updates in a few seconds.');
+            if (skipped.length) lines.push(`⚠️ Skipped (that name is already taken): ${skipped.map((n) => `**${n}**`).join(', ')}.`);
+            return interaction.editReply({ content: lines.join('\n'), allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'list') {
@@ -413,5 +450,5 @@ void reply; void DIVISION_THEME;
 
 // 3.9: Discord lists submit, profile, picture and assign. Edit, story, retire, transfer… are buttons
 // on the wrestler's screen (/whois or /fnlw → My Wrestlers); the old subcommands still work inside the bot.
-require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign'],
+require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'open'],
     description: 'Your wrestlers. Edit/story: /fnlw → My Wrestlers. Staff (retire, transfer, unclaim): /whois' });

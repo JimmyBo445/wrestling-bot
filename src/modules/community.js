@@ -9,8 +9,8 @@ const { requireAdmin, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { btn, row, clip, homeRow, show, open, capture, withNotice, ButtonStyle } = require('../utils/panelKit');
 
-const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm'];
-const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, D = ButtonStyle.Danger;
+const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm', 'rq'];
+const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const DAYS = 30;
 const ts = (d) => `<t:${Math.floor(new Date(d).getTime() / 1000)}:R>`;
 const select = (id, placeholder, options) => row(new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder).addOptions(options.slice(0, 25)));
@@ -125,11 +125,13 @@ async function handleRequests(interaction, a, b, c) {
 
 // ================================================================== 🆕 Make a wrestler
 
+const MAKE_DIVISIONS = ['custom', 'custom_womens']; // 3.12: Men's and Women's characters are requested (claimed), not made
+
 function makeStart(interaction) {
     return show(interaction, {
-        content: '🆕 **Make a wrestler.** Which division? Next you fill in a short form (name, plus optional finisher, alignment, bio and picture link). Staff approve it.\n_To upload a picture file instead of a link, use `/character submit`._',
+        content: '🆕 **Make a custom wrestler.** Which division? Next you fill in a short form (name, plus optional finisher, alignment, bio and picture link). Staff approve it.\n_Want a Men\'s or Women\'s character instead? Press 🙋 Request a character._\n_To upload a picture file instead of a link, use `/character submit`._',
         embeds: [],
-        components: withHome([row(...Object.entries(DIVISION_LABELS).map(([d, l]) => btn(`ui:mk:d:${d}`, l, P)))])
+        components: withHome([row(...MAKE_DIVISIONS.map((d) => btn(`ui:mk:d:${d}`, DIVISION_LABELS[d], P)), btn('ui:rq:h:mw', '🙋 Request a character'))])
     });
 }
 function makeForm(division) {
@@ -147,7 +149,7 @@ function makeForm(division) {
 }
 async function makeSubmit(interaction, division) {
     const f = (k) => { try { return String(interaction.fields.getTextInputValue(k) || '').trim(); } catch (_) { return ''; } };
-    if (!DIVISION_LABELS[division]) throw new UserError('Pick a division first.');
+    if (!MAKE_DIVISIONS.includes(division)) throw new UserError('Men\'s and Women\'s characters can\'t be made, only requested. Press 🙋 Request a character.');
     const alignment = f('alignment').toLowerCase() || null;
     const back = [row(btn('ui:mk:h', '🆕 Make another'), btn('ui:mr:h', '📨 My requests'))];
     if (alignment && !['face', 'heel', 'neutral'].includes(alignment)) {
@@ -159,6 +161,73 @@ async function makeSubmit(interaction, division) {
         content = out.content || `**${f('name')}** was sent to staff.`;
     } catch (e) { if (!(e instanceof UserError)) throw e; content = `⚠️ ${e.message}`; }
     return show(interaction, { content: `${content}\nYou can follow it in 📨 My requests.`, embeds: [], components: withHome(back) });
+}
+
+// ================================================================== 🙋 Request a character (3.12)
+// Men's and Women's characters aren't made by players: they ask for an 🟢 open one (a wrestler in the bot
+// that nobody plays) and staff approve it, exactly like 🔄 Claim a wrestler on the signup post.
+
+const REQ_DIVISIONS = ['mens', 'womens'];
+const scopeDivs = (scope) => (REQ_DIVISIONS.includes(scope) ? [scope] : REQ_DIVISIONS);
+
+async function requestList(interaction, scope, div, page = 0) {
+    const divs = scopeDivs(scope);
+    if (!divs.includes(div)) div = divs[0];
+    const { rows: cnt } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2`, [interaction.guildId, div]);
+    const total = cnt[0].n;
+    const pages = Math.max(1, Math.ceil(total / 25));
+    const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
+    const { rows } = await pool.query(
+        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2
+         ORDER BY lower(c.name), c.id LIMIT 25 OFFSET $3`, [interaction.guildId, div, p * 25]);
+    const comps = [];
+    if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, DIVISION_LABELS[d], d === div ? P : S))));
+    if (rows.length) {
+        comps.push(select(`ui:rq:p:${scope}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
+    }
+    if (pages > 1) comps.push(row(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1)));
+    comps.push(row(btn('ui:mr:h', '📨 My requests')));
+    return show(interaction, {
+        content: rows.length
+            ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you, with all its stats and history.${pages > 1 ? ` (${total} open, ◀ ▶ for more)` : ''}`
+            : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
+        embeds: [],
+        components: withHome(comps)
+    });
+}
+
+async function openChar(interaction, charId) {
+    const { getCharacterById } = require('../utils/characterUtils');
+    const c = await getCharacterById(charId);
+    if (!c || String(c.guild_id) !== String(interaction.guildId) || c.status !== 'approved' || !c.unclaimed || !REQ_DIVISIONS.includes(c.division)) {
+        throw new UserError('That character isn\'t open anymore. Pick another one.');
+    }
+    return c;
+}
+
+async function handleRequestChar(interaction, a, b, c) {
+    if (a === 'h') return requestList(interaction, b || 'mw', scopeDivs(b || 'mw')[0]);
+    if (a === 'l') return requestList(interaction, b, c, (interaction.customId.split(':')[5]) || 0);
+    if (a === 'p') {
+        const ch = await openChar(interaction, interaction.values?.[0]);
+        return show(interaction, { content: `Ask staff to give you **${ch.name}** (${DIVISION_LABELS[ch.division]})?`, embeds: [],
+            components: [row(btn(`ui:rq:y:${ch.id}`, 'Yes, send the request', G), btn(`ui:rq:h:${b || 'mw'}`, 'Pick another'))] });
+    }
+    if (a === 'y') {
+        const ch = await openChar(interaction, b);
+        await require('../utils/signupHelp').requireRoom(interaction);
+        const { rows: dupe } = await pool.query(
+            `SELECT 1 FROM pending_requests WHERE guild_id = $1 AND request_type = 'character_claim' AND status = 'pending' AND requested_by = $2 AND character_id = $3`,
+            [interaction.guildId, interaction.user.id, ch.id]);
+        if (dupe.length) throw new UserError(`You already asked for **${ch.name}**. Staff will get to it (see 📨 My requests).`);
+        await require('../handlers/pendingQueue').postPendingCard(interaction.guild, { type: 'character_claim', characterId: ch.id, requestedBy: interaction.user.id, payload: { from: 'request' }, staffRoom: true });
+        return show(interaction, { content: `🙋 Request sent! Staff will look at it. Once approved, **${ch.name}** is yours and you'll get a DM.`, embeds: [],
+            components: withHome([row(btn('ui:mr:h', '📨 My requests'))]) });
+    }
+    throw new UserError('That button is from an older version of the bot.');
 }
 
 // ================================================================== 📌 Menu post (staff)
@@ -266,7 +335,12 @@ async function overallSave(interaction, charId) {
 async function handle(interaction, parts) {
     const [, kind, a, b, c] = parts;
     if (kind === 'mr') return handleRequests(interaction, a, b, c);
-    if (kind === 'mk') return a === 'd' ? interaction.showModal(makeForm(b)) : makeStart(interaction);
+    if (kind === 'mk') {
+        if (a !== 'd') return makeStart(interaction);
+        if (!MAKE_DIVISIONS.includes(b)) throw new UserError('Men\'s and Women\'s characters can\'t be made, only requested. Press 🙋 Request a character.');
+        return interaction.showModal(makeForm(b));
+    }
+    if (kind === 'rq') return handleRequestChar(interaction, a, b, c);
     if (kind === 'mkm') return makeSubmit(interaction, a);
     if (kind === 'mp') return handleMenu(interaction, a);
     if (kind === 'us') return usagePanel(interaction, a);
