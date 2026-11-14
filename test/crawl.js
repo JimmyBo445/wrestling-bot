@@ -5,6 +5,7 @@
 //   • messages Discord would refuse (too long, too many buttons, repeated button ids, bad menus)
 // Run:  node test/crawl.js            (prints a report; exit code 1 if anything is wrong)
 process.env.MENU_QUIET_MS = '20';
+process.env.ROSTER_DEBOUNCE_MS = '20';
 const f = require('./fixtures');
 const { run, click, client } = require('./mock');
 
@@ -245,6 +246,8 @@ async function seed() {
     await run('directory', 'hof-induct', { character: W.jax }, A);
     await run('admin', 'add', { text: 'Big show this Friday' }, { ...A, group: 'newsletter' });
     await click('ui:mp:s', { ...A, kind: 'channel', values: ['startch'], private: true });
+    await click('ui:ch:s:roster', { ...A, kind: 'channel', values: ['rosterch'], private: true });
+    await f.pool.query(`UPDATE characters SET overall = 88 WHERE id = $1`, [W.ace]);
     return W;
 }
 

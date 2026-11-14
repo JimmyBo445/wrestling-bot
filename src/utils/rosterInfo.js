@@ -8,7 +8,7 @@ async function rosterRows(guildId, { statuses = ['approved'], division = null, o
     if (division) { params.push(division); extra += ` AND c.division = $${params.length}`; }
     if (ownerDiscordId) { params.push(ownerDiscordId); extra += ` AND u.discord_id = $${params.length}`; }
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.division, c.status, c.owner_id, u.discord_id, u.is_placeholder AS unclaimed
+        `SELECT c.id, c.name, c.division, c.status, c.owner_id, c.overall, u.discord_id, u.is_placeholder AS unclaimed
          FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = ANY($2::text[])${extra}
          ORDER BY lower(c.name), c.id`, params);

@@ -42,6 +42,7 @@ async function handleInteraction(client, interaction) {
         try { if (!interaction.isAutocomplete() && await memberIsStaff(interaction)) interaction.isStaff = true; } catch (_) { /* no staff role */ }
 
         require('./utils/usage').record(interaction); // 3.10: counts only, for the staff usage report
+        if (!interaction.isAutocomplete?.()) require('./utils/rosterBoard').schedule(client, interaction.guildId); // 3.11: live roster channel
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
             if (!command) return;

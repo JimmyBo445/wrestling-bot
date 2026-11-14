@@ -9,7 +9,7 @@ const { requireAdmin, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { btn, row, clip, homeRow, show, open, capture, withNotice, ButtonStyle } = require('../utils/panelKit');
 
-const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us'];
+const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, D = ButtonStyle.Danger;
 const DAYS = 30;
 const ts = (d) => `<t:${Math.floor(new Date(d).getTime() / 1000)}:R>`;
@@ -237,6 +237,30 @@ async function usagePanel(interaction, days) {
     }));
 }
 
+// ================================================================== 🔢 Overall (staff, 3.11)
+
+async function overallForm(interaction, charId) {
+    requireAdmin(interaction, 'set overall ratings');
+    const { rows } = await pool.query(`SELECT name, overall FROM characters WHERE id = $1 AND guild_id = $2`, [charId, interaction.guildId]);
+    if (!rows[0]) throw new UserError('That wrestler doesn\'t exist anymore.');
+    const t = new TextInputBuilder().setCustomId('overall').setLabel('Overall 1-99 (empty = hide it)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(2);
+    if (rows[0].overall) t.setValue(String(rows[0].overall));
+    return interaction.showModal(new ModalBuilder().setCustomId(`ui:ovm:${charId}`).setTitle(clip(`Overall: ${rows[0].name}`, 45)).addComponents(new ActionRowBuilder().addComponents(t)));
+}
+async function overallSave(interaction, charId) {
+    requireAdmin(interaction, 'set overall ratings');
+    let raw = '';
+    try { raw = String(interaction.fields.getTextInputValue('overall') || '').trim(); } catch (_) { raw = ''; }
+    const hub = require('./hub');
+    if (raw && !/^\d{1,2}$/.test(raw)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
+    const n = raw ? Number(raw) : null;
+    if (n !== null && (n < 1 || n > 99)) return hub.wrestlerStaffPanel(interaction, charId, '⚠️ The overall has to be a number from 1 to 99. Nothing was changed.');
+    const { rows } = await pool.query(`UPDATE characters SET overall = $3 WHERE id = $1 AND guild_id = $2 RETURNING name`, [charId, interaction.guildId, n]);
+    if (!rows[0]) throw new UserError('That wrestler doesn\'t exist anymore.');
+    await require('../utils/audit').logAudit(interaction.guildId, interaction.user.id, 'character_overall', { character: Number(charId), overall: n });
+    return hub.wrestlerStaffPanel(interaction, charId, n ? `✅ **${rows[0].name}** is now **${n} Overall**. The roster channel updates in a few seconds.` : `✅ Removed **${rows[0].name}**'s overall.`);
+}
+
 // ================================================================== routing
 
 async function handle(interaction, parts) {
@@ -246,6 +270,8 @@ async function handle(interaction, parts) {
     if (kind === 'mkm') return makeSubmit(interaction, a);
     if (kind === 'mp') return handleMenu(interaction, a);
     if (kind === 'us') return usagePanel(interaction, a);
+    if (kind === 'ov') return overallForm(interaction, a);
+    if (kind === 'ovm') return overallSave(interaction, a);
     throw new UserError('That button is from an older version of the bot.');
 }
 

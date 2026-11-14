@@ -128,7 +128,8 @@ module.exports = {
                 `**Legacy announcements:** ${ch(st.legacy_channel_id, 'off')}`,
                 `**Weekly power rankings:** ${ch(st.power_channel_id, 'off')}`,
                 `**Unfinished match pings:** ${ch(st.reminders_channel_id, 'off')}`,
-                `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin panel\` → 🏆 History channel)_`
+                `**Championship history:** ${ch(st.history_channel_id, 'off')} _(set with \`/admin panel\` → 🏆 History channel)_`,
+                `**Live roster (who plays who):** ${ch(st.roster_channel_id, 'off')}`
             ].join('\n'));
             return respond(interaction, { embeds: [embed], flags: changed.length ? undefined : EPHEMERAL });
         }

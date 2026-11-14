@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.11.0 — Live roster channel + overall ratings
+- **📋 Live roster channel** (`/admin panel` → 📺 Channels → **Live roster (who plays who)**): one post per division, A–Z, every line like **Jey Uso (91 Overall) : @boatgawd**. Wrestlers nobody plays yet are listed under **🟢 Open**. Retired and pending wrestlers aren't shown. Mentions never ping. A very big division splits over several posts. The last post explains how to get a character, with 🆕 Make a wrestler, 📨 My requests and 📋 Roster buttons.
+- **It updates by itself:** a few seconds after anything is done with the bot (approve, transfer, claim, retire, rename, overall…), it edits only the posts that changed and shows "Updated x minutes ago". Every hour (and when the bot starts) it double-checks, and puts back any post someone deleted.
+- **🔢 Overall rating:** staff set it on a wrestler's 🛠 Staff screen (`/whois` → 🛠 Staff → 🔢 Set overall), 1–99, empty to hide. It shows on the roster channel and on wrestler cards in 🙋 My Wrestlers and `/whois`.
+- Database change: migration 026.
+
 ## 3.10.2 — Fix: wrestler lists past page 1
 - Any wrestler list with more than 25 wrestlers (Stats, Suggest opponents, signups, etc.) broke on **page 2**: Discord refused it with "Component custom id cannot be duplicated", because the ◀ button and the "All" tab had the same hidden id. Fixed.
 - The checkup (`npm run checkup`) now builds a roster of almost 100 wrestlers, so every list gets a page 2 and 3. It finds this kind of problem by itself now (it reported 37 places before the fix and none after).

@@ -30,7 +30,8 @@ function labelFor(interaction) {
     const id = String(interaction.customId || '');
     if (!id) return null;
     const parts = id.split(/[:_]/);
-    const fromMenu = parts[parts.length - 1] === 'mp' ? '📌 Menu post → ' : '';
+    const last = parts[parts.length - 1];
+    const fromMenu = last === 'mp' ? '📌 Menu post → ' : last === 'rb' ? '📋 Roster channel → ' : '';
     if (parts[0] === 'ui') {
         if (parts[1] === 'h') return `${fromMenu}${HOME[parts[2]] || parts[2]}`;
         if ((parts[1] === 'pg' || parts[1] === 'pk') && parts[2] === 'nom') return 'Nominate';

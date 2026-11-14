@@ -23,6 +23,7 @@ client.once(Events.ClientReady, async (c) => {
     require('./utils/historyChannel').setClient(c);
     require('./utils/signupBooked').setClient(c);
     require('./utils/menuPost').load(c).catch((err) => console.error('Menu post startup failed:', err.message));
+    require('./utils/rosterBoard').refreshAll(c).catch((err) => console.error('Roster channel startup failed:', err.message));
     if (process.env.AUTO_DEPLOY_COMMANDS !== 'false') {
         try {
             await registerCommands({

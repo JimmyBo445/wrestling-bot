@@ -35,6 +35,7 @@ async function announceReturns(client) {
 
 async function tick(client) {
     try { await announceReturns(client); } catch (err) { console.error('Injury check failed:', err.message); }
+    try { await require('./rosterBoard').refreshAll(client); } catch (err) { console.error('Roster channel check failed:', err.message); }
     try {
         const { rows } = await pool.query(`SELECT * FROM guilds`);
         for (const g of rows) {

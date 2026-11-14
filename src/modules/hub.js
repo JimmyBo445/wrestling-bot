@@ -578,7 +578,7 @@ const CHANNELS = [
     ['matches', 'Match results copy', 'matches_channel_id'], ['monthly', 'Wrestler of the Month', 'monthly_channel_id'],
     ['newsletter', 'Weekly newsletter', 'newsletter_channel_id'], ['legacy', 'Legacy announcements', 'legacy_channel_id'],
     ['power', 'Weekly power rankings', 'power_channel_id'], ['reminders', 'Unfinished match pings (daily)', 'reminders_channel_id'],
-    ['history', 'Championship history', 'history_channel_id']];
+    ['history', 'Championship history', 'history_channel_id'], ['roster', 'Live roster (who plays who)', 'roster_channel_id']];
 
 async function channelsPanel(interaction, notice = null) {
     requireAdmin(interaction, 'change bot channels');
@@ -606,6 +606,7 @@ async function setChannel(interaction, key, channelId) {
     let notice;
     try {
         if (key === 'history') notice = (await capture(interaction, 'admin', 'history', { channel: channelId ? { id: channelId } : null })).content;
+        else if (key === 'roster') notice = await require('../utils/rosterBoard').setChannel(interaction.client, interaction.guildId, channelId || null); // 3.11
         else if (channelId) await capture(interaction, 'admin', 'channels', { [key]: { id: channelId } });
         else await capture(interaction, 'admin', 'channels', { turn_off: key });
         notice = `✅ Saved.${notice ? ` ${notice}` : ''}`;
@@ -709,12 +710,13 @@ async function wrestlerStaffPanel(interaction, charId, notice = null) {
             return withNotice({ content: 'That wrestler doesn\'t exist anymore.', components: [homeRow()] }, notice);
         }
         const embed = new EmbedBuilder().setColor(0xC0392B).setTitle(`🛠 Staff: ${c.name}`)
-            .setDescription([`**Status:** ${c.status}`, `**Division:** ${DIVISION_LABELS[c.division] || c.division}`, `**Player:** ${c.unclaimed ? '_nobody (unclaimed)_' : `<@${c.owner_discord_id}>`}`, '',
+            .setDescription([`**Status:** ${c.status}`, `**Division:** ${DIVISION_LABELS[c.division] || c.division}`, `**Player:** ${c.unclaimed ? '_nobody (unclaimed)_' : `<@${c.owner_discord_id}>`}`, `**Overall:** ${c.overall || '_not set_'}`, '',
                 'Every button runs the normal `/character` command, so its usual checks apply (titles, teams, the wrestler limit…).'].join('\n'));
         const r1 = [];
         if (c.status === 'approved') r1.push(btn(`ui:ws:ret:${c.id}`, '📦 Retire'));
         if (c.status === 'retired') r1.push(btn(`ui:ws:res:${c.id}`, '♻️ Restore', G));
         if (!c.unclaimed && ['approved', 'retired'].includes(c.status)) r1.push(btn(`ui:ws:unc:${c.id}`, '🙅 Unclaim (take off the player)'));
+        r1.push(btn(`ui:ov:${c.id}`, '🔢 Set overall'));
         r1.push(btn(`ui:ws:delq:${c.id}`, '🗑 Delete', D));
         const give = new UserSelectMenuBuilder().setCustomId(`ui:ws:to:${c.id}`).setPlaceholder(c.unclaimed ? 'Give to a player…' : 'Move to another player…');
         const divs = Object.entries(DIVISION_LABELS).filter(([d]) => d !== c.division).map(([d, l]) => btn(`ui:ws:dv:${c.id}:${d}`, `➡️ ${l}`));
@@ -1078,4 +1080,4 @@ async function onModal(interaction, what, a, b) {
     throw new UserError('That form is from an older version of the bot. Run `/fnlw` again.');
 }
 
-module.exports = { SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload, unfinishedPanel, legacyPanel, votesPanel, groupList, groupView, tournamentList, tournamentView, feudList, feudView, contractHome, contractView, hofPanel, injuryPanel };
+module.exports = { wrestlerStaffPanel, SECTIONS, KINDS, handle, openSection, statsPanel, standingsPanel, pickerPayload, unfinishedPanel, legacyPanel, votesPanel, groupList, groupView, tournamentList, tournamentView, feudList, feudView, contractHome, contractView, hofPanel, injuryPanel };

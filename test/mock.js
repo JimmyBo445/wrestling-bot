@@ -13,7 +13,7 @@ commands.set('championship-legacy', require('../src/modules/championship'));
 // 3.5: /faction was merged into /team; older tests still reach the faction code by its old name
 commands.set('faction', require('../src/modules/faction'));
 const client = { commands, user: { id: 'bot1' } };
-client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: async (mid) => ({ id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); } }) } }) };
+client.channels = { fetch: async (id) => ({ ...getChannelLazy(id), messages: { fetch: fakeFetch } }) };
 client.guilds = { cache: new Map() };
 const dms = []; // direct messages the bot sent: { id, content }
 client.users = { fetch: async (uid) => ({ id: uid, send: async (c) => { dms.push({ id: uid, content: typeof c === 'string' ? c : c.content }); } }) };
@@ -23,9 +23,14 @@ const sent = []; // messages posted to channels by the bot
 const channelMock = (id) => ({
     id, isTextBased: () => true,
     send: async (payload) => { const m = { id: `msg${sent.length + 1}`, channelId: id, payload }; sent.push(m); return m; },
-    messages: { fetch: async (mid) => ({ id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); } }) }
+    messages: { fetch: fakeFetch }
 });
 const edited = []; // messages the bot edited (by id)
+const deleted = []; // messages the bot deleted (by id); fetching one of these fails like on Discord
+async function fakeFetch(mid) {
+    if (deleted.includes(mid)) { const e = new Error('Unknown Message'); e.code = 10008; throw e; }
+    return { id: mid, content: '', edit: async (p) => { edited.push({ id: mid, p }); }, delete: async () => { deleted.push(mid); } };
+}
 const channels = new Map();
 const getChannel = (id) => { if (!channels.has(id)) channels.set(id, channelMock(id)); return channels.get(id); };
 getChannelLazy = getChannel;
@@ -136,4 +141,4 @@ const modalOf = (i) => {
     return { id: j.custom_id, title: j.title, inputs: j.components.map((r) => r.components[0].custom_id), json: j };
 };
 
-module.exports = { dms, edited, run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client, ids, modalOf };
+module.exports = { deleted, dms, edited, run, auto, click, sent, text, lastPayload, hasFile, makeInteraction, client, ids, modalOf };

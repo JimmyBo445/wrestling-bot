@@ -213,7 +213,7 @@ async function whoisPayload(interaction, { ownerId = null, characterId = null, m
             const rec = `${s.wins}-${s.losses}${s.draws ? `-${s.draws}` : ''}`;
             const belts = titles.get(String(c.id));
             const team = teams.get(String(c.id));
-            const bits = [DIVISION_LABELS[c.division] || c.division, rec, belts && `🏆 ${belts.map(shortTitle).join(', ')}`, team && `Team: ${team.join(', ')}`].filter(Boolean);
+            const bits = [DIVISION_LABELS[c.division] || c.division, c.overall && `${c.overall} Overall`, rec, belts && `🏆 ${belts.map(shortTitle).join(', ')}`, team && `Team: ${team.join(', ')}`].filter(Boolean);
             lines.push(`${String(c.id) === String(picked?.id) ? `**${c.name}** ◀` : `**${c.name}**`}${c.status === 'retired' ? ' _(retired)_' : ''}\n${bits.join(' · ')}`);
         }
         embed.addFields({ name: picked ? `All of ${name}'s wrestlers (${chars.length})` : 'Wrestlers', value: clip(lines.join('\n\n'), 1024) });
@@ -315,6 +315,7 @@ const HELP = {
         '**Unfinished matches:** `/admin panel` → ⏳ Unfinished lists matches from past cards with no result, with a 📣 ping button. Daily pings: 📺 Channels.',
         '**Approvals:** `/admin pending`',
         '**Menu post:** `/admin panel` → 📌 Menu post puts a button menu for everyone in a channel (it stays at the bottom). **📈 Bot usage** shows what people use (counts only; also in the Monday staff report).',
+        '**Live roster channel:** `/admin panel` → 📺 Channels → Live roster. One post per division ("Jey Uso (91 Overall) : @player") that updates itself. Set a wrestler\'s overall with 🛠 Staff on the wrestler (`/whois`) → 🔢 Set overall.',
         '**Everything else:** `/admin panel` → 📺 Channels · 📜 Rules · 👮 Staff role · 🏆 History channel · 📰 Newsletter · 📊 Staff report · 🏅 Monthly awards · 📒 Audit log · 💾 Backups. Spreadsheet import: `/admin data`.'] }
 };
 
