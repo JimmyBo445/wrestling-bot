@@ -9,7 +9,7 @@ const { requireAdmin, DIVISION_LABELS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { btn, row, clip, homeRow, show, open, capture, withNotice, ButtonStyle } = require('../utils/panelKit');
 
-const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm', 'rq', 'sw'];
+const KINDS = ['mr', 'mk', 'mkm', 'mp', 'us', 'ov', 'ovm', 'rq', 'sw', 'rqm', 'swm'];
 const P = ButtonStyle.Primary, S = ButtonStyle.Secondary, G = ButtonStyle.Success, D = ButtonStyle.Danger;
 const DAYS = 30;
 const ts = (d) => `<t:${Math.floor(new Date(d).getTime() / 1000)}:R>`;
@@ -171,30 +171,49 @@ async function makeSubmit(interaction, division) {
 const REQ_DIVISIONS = ['mens', 'womens'];
 const scopeDivs = (scope) => (REQ_DIVISIONS.includes(scope) ? [scope] : REQ_DIVISIONS);
 
-async function requestList(interaction, scope, div, page = 0) {
-    const divs = scopeDivs(scope);
-    if (!divs.includes(div)) div = divs[0];
-    const { rows: cnt } = await pool.query(
-        `SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2`, [interaction.guildId, div]);
+/** One page of open characters in a division, optionally only names containing `search`. */
+async function openPage(guildId, div, page = 0, search = '') {
+    const like = search ? `%${String(search).trim().replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+    const where = `c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2 AND ($3::text IS NULL OR c.name ILIKE $3)`;
+    const { rows: cnt } = await pool.query(`SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}`, [guildId, div, like]);
     const total = cnt[0].n;
-    const pages = Math.max(1, Math.ceil(total / 25));
+    const pages = search ? 1 : Math.max(1, Math.ceil(total / 25));
     const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
     const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2
-         ORDER BY lower(c.name), c.id LIMIT 25 OFFSET $3`, [interaction.guildId, div, p * 25]);
+        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}
+         ORDER BY ($3::text IS NOT NULL AND lower(c.name) LIKE lower($4) || '%') DESC, lower(c.name), c.id LIMIT 25 OFFSET $5`,
+        [guildId, div, like, String(search || '').trim(), p * 25]);
+    return { total, pages, p, rows };
+}
+
+function searchForm(id, title) {
+    return new ModalBuilder().setCustomId(id).setTitle(clip(title, 45)).addComponents(new ActionRowBuilder().addComponents(
+        new TextInputBuilder().setCustomId('name').setLabel('Name (or part of it)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40).setPlaceholder('Roman')));
+}
+const searchText = (interaction) => { try { return String(interaction.fields.getTextInputValue('name') || '').trim(); } catch (_) { return ''; } };
+
+async function requestList(interaction, scope, div, page = 0, search = '') {
+    const divs = scopeDivs(scope);
+    if (!divs.includes(div)) div = divs[0];
+    const { total, pages, p, rows } = await openPage(interaction.guildId, div, page, search);
     const comps = [];
     if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, DIVISION_LABELS[d], d === div ? P : S))));
     if (rows.length) {
         comps.push(select(`ui:rq:p:${scope}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
     }
-    if (pages > 1) comps.push(row(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1)));
-    comps.push(row(btn('ui:mr:h', '📨 My requests')));
+    const nav = [btn(`ui:rq:s:${scope}:${div}`, '🔎 Search by name', P)];
+    if (search) nav.push(btn(`ui:rq:l:${scope}:${div}:0`, '✖ Clear search'));
+    else if (pages > 1) nav.push(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1));
+    nav.push(btn('ui:mr:h', '📨 My requests'));
+    comps.push(row(...nav));
     return show(interaction, {
-        content: rows.length
-            ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you, with all its stats and history.${pages > 1 ? ` (${total} open, ◀ ▶ for more)` : ''}`
-            : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
+        content: search
+            ? (rows.length
+                ? `🔎 Open ${DIVISION_LABELS[div]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name to narrow it down)` : ''}. Pick one to request it.`
+                : `🔎 No open ${DIVISION_LABELS[div]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
+            : rows.length
+                ? `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (🟢 open). Pick one and staff will give it to you, with all its stats and history.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
+                : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
         embeds: [],
         components: withHome(comps)
     });
@@ -212,6 +231,7 @@ async function openChar(interaction, charId) {
 async function handleRequestChar(interaction, a, b, c) {
     if (a === 'h') return requestList(interaction, b || 'mw', scopeDivs(b || 'mw')[0]);
     if (a === 'l') return requestList(interaction, b, c, (interaction.customId.split(':')[5]) || 0);
+    if (a === 's') return interaction.showModal(searchForm(`ui:rqm:${b}:${c}`, `Search open ${DIVISION_LABELS[c] || ''} characters`));
     if (a === 'p') {
         const ch = await openChar(interaction, interaction.values?.[0]);
         return show(interaction, { content: `Ask staff to give you **${ch.name}** (${DIVISION_LABELS[ch.division]})?`, embeds: [],
@@ -248,25 +268,23 @@ async function switchStart(interaction, scope) {
         components: withHome([select('ui:sw:f', 'Pick the one to switch out', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: DIVISION_LABELS[r.division] })))]) });
 }
 
-async function switchList(interaction, fromId, page = 0) {
+async function switchList(interaction, fromId, page = 0, search = '') {
     const CS = require('../utils/characterSwitch');
     const { from } = await CS.check(interaction.guildId, interaction.user.id, fromId, null);
-    const { rows: cnt } = await pool.query(
-        `SELECT COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2`, [interaction.guildId, from.division]);
-    const total = cnt[0].n;
-    const pages = Math.max(1, Math.ceil(total / 25));
-    const p = Math.min(Math.max(0, Number(page) || 0), pages - 1);
-    const { rows } = await pool.query(
-        `SELECT c.id, c.name, c.overall FROM characters c JOIN users u ON u.id = c.owner_id
-         WHERE c.guild_id = $1 AND c.status = 'approved' AND u.is_placeholder = true AND c.division = $2
-         ORDER BY lower(c.name), c.id LIMIT 25 OFFSET $3`, [interaction.guildId, from.division, p * 25]);
+    const { total, pages, p, rows } = await openPage(interaction.guildId, from.division, page, search);
     const comps = [];
     if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: r.overall ? `${r.overall} Overall` : undefined }))));
-    if (pages > 1) comps.push(row(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1)));
-    comps.push(row(btn('ui:mr:h', '📨 My requests')));
+    const nav = [btn(`ui:sw:s:${from.id}`, '🔎 Search by name', P)];
+    if (search) nav.push(btn(`ui:sw:o:${from.id}`, '✖ Clear search'));
+    else if (pages > 1) nav.push(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1));
+    nav.push(btn('ui:mr:h', '📨 My requests'));
+    comps.push(row(...nav));
     return show(interaction, {
-        content: rows.length
+        content: search
+            ? (rows.length
+                ? `🔎 Open ${DIVISION_LABELS[from.division]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name)` : ''}. Pick one to switch **${from.name}** for.`
+                : `🔎 No open ${DIVISION_LABELS[from.division]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
+            : rows.length
             ? `🔄 **Switch ${from.name}** for an 🟢 open ${DIVISION_LABELS[from.division]} character. Staff approve it. Records stay with each character, and **${from.name}** becomes open for someone else.`
             : `🔄 There are no open ${DIVISION_LABELS[from.division]} characters to switch to right now.`,
         embeds: [], components: withHome(comps)
@@ -279,6 +297,7 @@ async function handleSwitch(interaction, a, b, c) {
     if (a === 'o') return switchList(interaction, b);
     if (a === 'f') return switchList(interaction, interaction.values?.[0]);
     if (a === 'l') return switchList(interaction, b, c);
+    if (a === 's') return interaction.showModal(searchForm(`ui:swm:${b}`, 'Search open characters'));
     if (a === 't') {
         const { from, to } = await CS.check(interaction.guildId, interaction.user.id, b, interaction.values?.[0]);
         return show(interaction, { content: `Switch **${from.name}** for **${to.name}**? Once staff approve it, **${to.name}** is yours and **${from.name}** becomes open. You can switch again after the cooldown.`, embeds: [],
@@ -408,6 +427,8 @@ async function handle(interaction, parts) {
     }
     if (kind === 'rq') return handleRequestChar(interaction, a, b, c);
     if (kind === 'sw') return handleSwitch(interaction, a, b, c);
+    if (kind === 'rqm') return requestList(interaction, a, b, 0, searchText(interaction));
+    if (kind === 'swm') return switchList(interaction, a, 0, searchText(interaction));
     if (kind === 'mkm') return makeSubmit(interaction, a);
     if (kind === 'mp') return handleMenu(interaction, a);
     if (kind === 'us') return usagePanel(interaction, a);

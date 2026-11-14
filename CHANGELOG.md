@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.13.3
+- **🔎 Search by name** in 🙋 Request a character and 🔄 Switch character: type part of a name (like "seth") instead of paging with ◀ ▶. Shows the matching 🟢 open characters (names starting with what you typed come first); ✖ Clear search goes back to the full list.
+
 ## 3.13.2
 - **`/character overall`** (staff): pick any wrestler (taken, 🟢 open or retired) and type the overall, 1–99, or 0 to remove it. Shows what it was before. The roster channels update by themselves.
 

@@ -133,6 +133,29 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
         assert.ok(ac.some((c) => String(c.value) === String(PUNK)), 'open characters show in the list');
     });
 
+    await t('3.13.3: search by name in Request a character and Switch character', async () => {
+        for (let k = 0; k < 30; k++) await run('character', 'open', { name: `Filler Superstar ${String(k).padStart(2, '0')}`, division: 'mens' }, ADM);
+        await run('character', 'open', { name: 'Seth Rollins', division: 'mens' }, ADM);
+        let i = await click('ui:rq:h:mens', priv(P('u7')));
+        assert.ok(ids(i).includes('ui:rq:s:mens:mens'), ids(i).join(' '));
+        assert.ok(!JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON())).includes('Seth Rollins'), 'Seth is on page 2');
+        i = await click('ui:rq:s:mens:mens', priv(P('u7')));
+        assert.ok(i.responses.some((r) => r.type === 'modal'));
+        i = await click('ui:rqm:mens:mens', priv({ ...P('u7'), fields: { name: 'seth' } }));
+        const j = JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON()));
+        assert.ok(j.includes('Seth Rollins') && !j.includes('Filler'), j.slice(0, 300));
+        assert.match(text(i), /matching \*\*seth\*\*/);
+        assert.ok(ids(i).includes('ui:rq:l:mens:mens:0'), 'clear search');
+        i = await click('ui:rqm:mens:mens', priv({ ...P('u7'), fields: { name: 'zzz_%' } }));
+        assert.match(text(i), /No open Men's character matches/);
+        // switch list search
+        await f.pool.query(`UPDATE guilds SET switch_cooldown_days = 0 WHERE guild_id = $1`, [G]);
+        i = await click(`ui:sw:o:${ROMAN}`, priv(P('u1')));
+        assert.ok(ids(i).includes(`ui:sw:s:${ROMAN}`));
+        i = await click(`ui:swm:${ROMAN}`, priv({ ...P('u1'), fields: { name: 'Rollins' } }));
+        assert.ok(JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON())).includes('Seth Rollins'));
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     await f.pool.end(); process.exit(failed ? 1 : 0);
 })();
