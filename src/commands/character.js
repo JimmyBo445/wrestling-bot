@@ -105,6 +105,11 @@ const data = new SlashCommandBuilder()
     .addSubcommand((sub) => sub.setName('remove')
         .setDescription('[Admin] Permanently delete a character that has no match/title history')
         .addStringOption((o) => charOpt(o)))
+    .addSubcommand((sub) => sub.setName('give') // 3.15.2: the quick way to hand an existing character to a player
+        .setDescription('[Admin] Give an existing character (open or taken) to a player')
+        .addStringOption((o) => charOpt(o))
+        .addUserOption((o) => o.setName('player').setDescription('Who gets it').setRequired(true))
+        .addStringOption((o) => o.setName('slot').setDescription("Men's superstars only. Leave empty and I'll ask: 🟢 Normal or 🟣 LuchaDerpy").setRequired(false).addChoices(...SLOT_CHOICES)))
     .addSubcommand((sub) => sub.setName('transfer')
         .setDescription('[Admin] Give a character to a different player (keeps all stats and history)')
         .addStringOption((o) => charOpt(o))
@@ -121,7 +126,7 @@ const data = new SlashCommandBuilder()
 // Which statuses to offer in the dropdown for each subcommand
 const STATUS_BY_SUB = {
     profile: ['approved', 'retired'], story: ['approved', 'retired', 'pending'], picture: ['approved', 'retired', 'pending'], edit: ['approved', 'retired', 'pending'], retire: ['approved'],
-    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired'], overall: ['approved', 'retired']
+    restore: ['retired'], remove: ['approved', 'pending', 'retired', 'denied'], transfer: ['approved', 'pending', 'retired'], give: ['approved'], unclaim: ['approved', 'retired'], 'swap-division': ['approved', 'retired'], overall: ['approved', 'retired']
 };
 
 /** Trims; empty text becomes null. */
@@ -162,7 +167,7 @@ module.exports = {
         const focused = interaction.options.getFocused();
         const sub = interaction.options.getSubcommand(false);
         // 3.15.1: one overall per superstar, so the overall search lists each superstar once
-        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: sub !== 'overall' }));
+        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: !['overall', 'give'].includes(sub) }));
     },
 
     async execute(interaction) {
@@ -483,14 +488,23 @@ module.exports = {
             return respond(interaction, { embeds: [embed], components: [row], allowedMentions: NO_MENTIONS });
         }
 
-        if (sub === 'transfer') {
+        if (sub === 'transfer' || sub === 'give') {
             requireAdmin(interaction, 'transfer characters');
-            const newOwnerUser = interaction.options.getUser('new_owner');
+            const newOwnerUser = interaction.options.getUser(sub === 'give' ? 'player' : 'new_owner');
             if (newOwnerUser.bot) throw new UserError('Bots can\'t own characters.');
             let character = await requireCharacter(guildId, interaction.options.getString('character'));
             // 3.15: a Men's superstar can go to the player's 🟢 normal slot or their 🟣 LuchaDerpy slot
             const L = require('../utils/lucha');
             const slot = interaction.options.getString('slot');
+            if (sub === 'give' && !slot && ['mens', 'luchaderpy'].includes(character.division)) {
+                // 3.15.2: no slot picked → ask with buttons
+                const { btn, row } = require('../utils/panelKit');
+                const { ButtonStyle } = require('discord.js');
+                const menId = L.isLucha(character) ? character.base_character_id : character.id;
+                return respond(interaction, { content: `Give **${character.name}** to <@${newOwnerUser.id}> as their…`, flags: 64, allowedMentions: NO_MENTIONS,
+                    components: [row(btn(`ui:ws:sl:${menId}:${newOwnerUser.id}:n`, '🟢 Normal Men\'s slot', ButtonStyle.Primary), btn(`ui:ws:sl:${menId}:${newOwnerUser.id}:l`, '🟣 LuchaDerpy slot', ButtonStyle.Primary))] });
+            }
+            if (sub === 'give' && slot === 'luchaderpy' && character.division !== 'mens' && !L.isLucha(character)) throw new UserError(`**${character.name}** is ${DIVISION_LABELS[character.division]}. Only Men's superstars can be used in 🟣 LuchaDerpy. Leave the slot empty.`);
             if (slot === 'luchaderpy' && !L.isLucha(character)) {
                 if (character.division !== 'mens') throw new UserError(`**${character.name}** is ${DIVISION_LABELS[character.division]}. Only Men's superstars can be used in 🟣 LuchaDerpy.`);
                 const holder = await require('../utils/unclaim').placeholderUserId(guildId, interaction.client.user.id);
@@ -516,5 +530,5 @@ void reply; void DIVISION_THEME;
 
 // 3.9: Discord lists submit, profile, picture and assign. Edit, story, retire, transfer… are buttons
 // on the wrestler's screen (/whois or /fnlw → My Wrestlers); the old subcommands still work inside the bot.
-require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'open', 'overall'],
+require('../utils/slim').keepSubs(module.exports, { show: ['submit', 'profile', 'picture', 'assign', 'give', 'open', 'overall'],
     description: 'Your wrestlers. Edit/story: /fnlw → My Wrestlers. Staff (retire, transfer, unclaim): /whois' });

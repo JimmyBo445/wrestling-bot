@@ -264,6 +264,24 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         for (const r of i.responses.at(-1).p.components) assert.ok(r.toJSON().components.length <= 5);
     });
 
+    await t('3.15.2: /character give hands an existing character over; a Men\'s superstar asks which slot', async () => {
+        const names = client.commands.get('character').data.toJSON().options.map((o) => o.name);
+        assert.ok(names.includes('give'), names.join(' '));
+        let i = await run('character', 'give', { character: SAMI, player: 'u7' }, ADM);
+        assert.match(text(i), /Give \*\*Sami Zayn\*\* to <@u7> as their/);
+        assert.ok(ids(i).includes(`ui:ws:sl:${SAMI}:u7:n`) && ids(i).includes(`ui:ws:sl:${SAMI}:u7:l`), ids(i).join(' '));
+        i = await click(`ui:ws:sl:${SAMI}:u7:n`, priv(ADM));
+        assert.match(text(i), /Gave \*\*Sami Zayn\*\* to <@u7>/, text(i));
+        assert.strictEqual((await owner(SAMI)).discord_id, 'u7');
+        i = await run('character', 'give', { character: RANDY, player: 'u7', slot: 'luchaderpy' }, ADM);
+        assert.match(text(i), /Gave 🟣 \*\*Randy Orton\*\* \(LuchaDerpy\) to <@u7>/, text(i));
+        const w = await f.makeChar(G, 'u8', 'Some Lady', 'womens');
+        i = await run('character', 'give', { character: w, player: 'u9' }, ADM);
+        assert.match(text(i), /Moved \*\*Some Lady\*\* from <@u8> to <@u9>/, text(i));
+        i = await run('character', 'give', { character: w, player: 'u8' }, P('u8'));
+        assert.ok((await owner(w)).discord_id === 'u9', 'players can\'t use it');
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
     await f.pool.end();

@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.15.2
+- **`/character give`** (staff): give an existing character (⚪ open or already taken) to a player in one step. Pick the character and the player. For a Men's superstar, pick the slot, or leave it empty and the bot asks 🟢 Normal Men's or 🟣 LuchaDerpy with two buttons. Each superstar is listed once in the search.
+
 ## 3.15.1
 - `/character overall`: a superstar used in LuchaDerpy no longer shows up twice. Each superstar is listed once, with whoever plays it (🟢 Men's, 🟣 LuchaDerpy or 🟢🟣 both) instead of "Unclaimed".
 - One overall per superstar: setting it (by command or 🛠 Staff → 🔢 Set overall) always sets the Men's and LuchaDerpy versions together.
