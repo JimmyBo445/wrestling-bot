@@ -17,6 +17,8 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('open').setDescription('Post a signup with a button for players to pick their wrestlers')
         .addStringOption((o) => o.setName('title').setDescription('e.g. "RAW - Nov 3"').setRequired(true).setMaxLength(80))
         .addStringOption((o) => o.setName('deadline').setDescription('Closes after this date, YYYY-MM-DD (default: stays open until you close it)').setRequired(false).setMaxLength(10))
+        .addStringOption((o) => o.setName('kind').setDescription('Normal sign-up, or a separate 🟣 LuchaDerpy one').setRequired(false)
+            .addChoices({ name: "Normal (Men's, Women's, Custom, Custom Women's)", value: 'main' }, { name: '🟣 LuchaDerpy only', value: 'luchaderpy' }))
         .addChannelOption((o) => o.setName('channel').setDescription('Where to post it (default: here)').setRequired(false)
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
     .addSubcommand((s) => s.setName('list').setDescription('Who signed up, by division, with records, for booking (only you see it)')
@@ -61,11 +63,12 @@ module.exports = {
             const channel = chId ? await interaction.guild.channels.fetch(chId).catch(() => null) : interaction.channel;
             if (!channel?.isTextBased()) throw new UserError('I can\'t post in that channel.');
             await interaction.deferReply({ flags: 64 });
-            const { rows: older } = await pool.query(`UPDATE signups SET status = 'done', closed_at = COALESCE(closed_at, now()) WHERE guild_id = $1 AND status IN ('open','closed') RETURNING *`, [guildId]);
+            const kind = su.kindOf(interaction.options.getString('kind')); // 3.16: a new sign-up only replaces the older one of the same kind
+            const { rows: older } = await pool.query(`UPDATE signups SET status = 'done', closed_at = COALESCE(closed_at, now()) WHERE guild_id = $1 AND kind = $2 AND status IN ('open','closed') RETURNING *`, [guildId, kind]);
             for (const o of older) await su.refreshSignupPost(interaction.client, { ...o, status: 'done' });
             const { rows } = await pool.query(
-                `INSERT INTO signups (guild_id, title, channel_id, deadline, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-                [guildId, title, channel.id, deadline, interaction.user.id]);
+                `INSERT INTO signups (guild_id, title, channel_id, deadline, created_by, kind) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+                [guildId, title, channel.id, deadline, interaction.user.id, kind]);
             const signup = rows[0];
             let msg;
             try { msg = await channel.send(await su.buildSignupMessage(signup)); }
@@ -74,8 +77,8 @@ module.exports = {
                 throw new UserError('I couldn\'t post in that channel. Check that I can send messages and embeds there.');
             }
             await pool.query(`UPDATE signups SET message_id = $1 WHERE id = $2`, [msg?.id || null, signup.id]);
-            await logAudit(guildId, interaction.user.id, 'signup_open', { title });
-            return respond(interaction, { content: `✅ Signup **${title}** is open in <#${channel.id}>. See who joined with \`/booking signups\` → 📋 Who signed up.${deadline ? ` It closes automatically after ${deadline}.` : ' Close it from `/booking signups`.'}` });
+            await logAudit(guildId, interaction.user.id, 'signup_open', { title, kind });
+            return respond(interaction, { content: `✅ ${kind === su.LUCHA_KIND ? '🟣 LuchaDerpy signup' : 'Signup'} **${title}** is open in <#${channel.id}>. See who joined with \`/booking signups\` → 📋 Who signed up.${deadline ? ` It closes automatically after ${deadline}.` : ' Close it from `/booking signups`.'}` });
         }
 
         const signup = await su.resolveSignup(guildId, interaction.options.getString('signup'));

@@ -155,7 +155,7 @@ module.exports = {
             const wanted = interaction.options.getInteger('matches') || 3;
             const su = require('../utils/signupUtils');
             const wantSignup = interaction.options.getBoolean('use_signup');
-            const signup = wantSignup === false ? null : await su.activeSignup(guildId);
+            const signup = wantSignup === false ? null : await su.activeSignup(guildId, brand === 'luchaderpy' ? su.LUCHA_KIND : 'main'); // 3.16
             const signupIds = signup ? await su.signedUpIds(signup.id) : null;
             const priority = signup ? await su.passedOverCounts(guildId, [...signupIds]) : null;
             const out = await svc.autoShow(guildId, brand, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null, { signupIds, priority });

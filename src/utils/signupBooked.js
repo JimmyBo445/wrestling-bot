@@ -36,8 +36,10 @@ function onCardChange(guildId) {
         timers.delete(guildId);
         try {
             const su = require('./signupUtils');
-            const s = await su.activeSignup(guildId);
-            if (s) await su.refreshSignupPost(botClient, s);
+            for (const kind of ['main', su.LUCHA_KIND]) { // 3.16: both kinds of sign-up
+                const s = await su.activeSignup(guildId, kind);
+                if (s) await su.refreshSignupPost(botClient, s);
+            }
         } catch (err) { console.error('Signup booked refresh failed:', err.message); }
     }, 3000);
     if (t.unref) t.unref();

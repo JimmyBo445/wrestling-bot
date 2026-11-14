@@ -123,9 +123,9 @@ const subs = (name) => (require('./mock').client.commands.get(name).data.toJSON(
     let signupId;
     await t('/booking signups: players get Suggest opponents; staff also get the signup buttons', async () => {
         let i = await run('booking', 'signups', {}, P('u1'));
-        assert.deepStrictEqual(ids(i).filter((x) => !x.startsWith('ui:h:')), ['ui:pg:sug:0:all:0']);
+        assert.deepStrictEqual(ids(i).filter((x) => !x.startsWith('ui:h:')), ['ui:bk:h:main', 'ui:bk:h:luchaderpy', 'ui:pg:sug:0:all:0']);
         i = await run('booking', 'signups', {}, ADM);
-        for (const x of ['ui:bk:op', 'ui:bk:ls:0', 'ui:bk:cl:0']) assert.ok(ids(i).includes(x), x);
+        for (const x of ['ui:bk:op:main', 'ui:bk:ls:0', 'ui:bk:cl:0']) assert.ok(ids(i).includes(x), x);
         const p = await click('ui:bk:op', P('u1'));
         assert.match(text(p), /Only admins|staff/i);
     });

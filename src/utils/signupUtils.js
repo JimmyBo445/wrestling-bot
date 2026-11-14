@@ -7,6 +7,12 @@ const { DIVISION_LABELS, NO_MENTIONS } = require('./discordHelpers');
 
 const DIV_ORDER = ['mens', 'womens', 'custom', 'custom_womens', 'luchaderpy'];
 const MAX_ENTRY_NAMES = 12; // names shown per division on the public post
+// 3.16: two kinds of sign-up that never mix: 'main' (Men's, Women's, Custom, Custom Women's) and 'luchaderpy' (🟣 only)
+const LUCHA_KIND = 'luchaderpy';
+const kindOf = (k) => (k === LUCHA_KIND ? LUCHA_KIND : 'main');
+const kindDivs = (k) => (kindOf(k) === LUCHA_KIND ? ['luchaderpy'] : DIV_ORDER.filter((d) => d !== 'luchaderpy'));
+const kindForDivision = (d) => (d === 'luchaderpy' ? LUCHA_KIND : 'main');
+const kindLabel = (k) => (kindOf(k) === LUCHA_KIND ? '🟣 LuchaDerpy sign-up' : 'Sign-up');
 
 async function getSignup(id, guildId) {
     const { rows } = await pool.query(`SELECT * FROM signups WHERE id = $1 AND guild_id = $2`, [id, guildId]);
@@ -14,10 +20,10 @@ async function getSignup(id, guildId) {
 }
 
 /** The signup an admin most likely means: the newest open one, else the newest closed one, else the newest finished one. */
-async function latestSignup(guildId, { openOnly = false } = {}) {
+async function latestSignup(guildId, { openOnly = false, kind = 'main' } = {}) {
     const { rows } = await pool.query(
-        `SELECT * FROM signups WHERE guild_id = $1 ${openOnly ? `AND status = 'open'` : ''}
-         ORDER BY (status = 'open') DESC, (status = 'closed') DESC, created_at DESC, id DESC LIMIT 1`, [guildId]);
+        `SELECT * FROM signups WHERE guild_id = $1 AND kind = $2 ${openOnly ? `AND status = 'open'` : ''}
+         ORDER BY (status = 'open') DESC, (status = 'closed') DESC, created_at DESC, id DESC LIMIT 1`, [guildId, kindOf(kind)]);
     return rows[0] || null;
 }
 
@@ -25,9 +31,9 @@ async function latestSignup(guildId, { openOnly = false } = {}) {
  * The signup that guides booking and matchmaking: the newest one that is open or closed but not yet marked done.
  * It stays in effect (no timer) until an admin runs `signup-done` or opens a new signup.
  */
-async function activeSignup(guildId) {
+async function activeSignup(guildId, kind = 'main') {
     const { rows } = await pool.query(
-        `SELECT * FROM signups WHERE guild_id = $1 AND status IN ('open','closed') ORDER BY created_at DESC, id DESC LIMIT 1`, [guildId]);
+        `SELECT * FROM signups WHERE guild_id = $1 AND kind = $2 AND status IN ('open','closed') ORDER BY created_at DESC, id DESC LIMIT 1`, [guildId, kindOf(kind)]);
     return rows[0] || null;
 }
 
@@ -79,11 +85,11 @@ async function passedOverCounts(guildId, characterIds) {
 }
 
 /** A player's characters that can sign up (approved, not injured). */
-async function eligibleCharacters(guildId, discordId) {
+async function eligibleCharacters(guildId, discordId, kind = 'main') {
     const ownerId = await ensureUser(guildId, discordId);
     const { rows } = await pool.query(
-        `SELECT id, name, division FROM characters WHERE guild_id = $1 AND owner_id = $2 AND status = 'approved' ORDER BY division, name`,
-        [guildId, ownerId]);
+        `SELECT id, name, division FROM characters WHERE guild_id = $1 AND owner_id = $2 AND status = 'approved' AND division = ANY($3::text[]) ORDER BY division, name`,
+        [guildId, ownerId, kindDivs(kind)]);
     const inj = await injuredMap(rows.map((r) => r.id));
     return { ownerId, chars: rows.filter((r) => !inj.has(String(r.id))), injured: rows.filter((r) => inj.has(String(r.id))) };
 }
@@ -91,7 +97,7 @@ async function eligibleCharacters(guildId, discordId) {
 /** Replaces this player's entries on a signup with exactly the characters chosen. */
 async function setEntries(signup, guildId, discordId, characterIds) {
     if (signup.status !== 'open') throw new UserError('That signup is closed.');
-    const { ownerId, chars } = await eligibleCharacters(guildId, discordId);
+    const { ownerId, chars } = await eligibleCharacters(guildId, discordId, signup.kind);
     const allowed = new Map(chars.map((c) => [String(c.id), c]));
     const chosen = [...new Set(characterIds.map(String))];
     for (const id of chosen) if (!allowed.has(id)) throw new UserError('One of those wrestlers can\'t sign up right now (not yours, not approved, or injured).');
@@ -107,6 +113,11 @@ async function setEntries(signup, guildId, discordId, characterIds) {
 
 async function addEntry(signup, character) {
     if (character.status !== 'approved') throw new UserError('Only approved wrestlers can sign up.');
+    if (kindForDivision(character.division) !== kindOf(signup.kind)) {
+        throw new UserError(kindOf(signup.kind) === LUCHA_KIND
+            ? `**${signup.title}** is a 🟣 LuchaDerpy sign-up, so only LuchaDerpy characters can join. **${character.name}** is ${DIVISION_LABELS[character.division]}.`
+            : `**${character.name}** is a 🟣 LuchaDerpy character. LuchaDerpy has its own sign-up (\`/booking signups\` → 🟣 LuchaDerpy).`);
+    }
     await pool.query(
         `INSERT INTO signup_entries (signup_id, character_id, owner_id, division) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
         [signup.id, character.id, character.owner_id, character.division]);
@@ -132,7 +143,8 @@ async function buildSignupMessage(signup) {
     const SB = require('./signupBooked');
     const booked = signup.status === 'done' ? new Map() : await SB.bookedMap(signup);
     const names = (list) => list.slice(0, MAX_ENTRY_NAMES).map((e) => e.name).join(', ') + (list.length > MAX_ENTRY_NAMES ? ` +${list.length - MAX_ENTRY_NAMES} more` : '');
-    const lines = DIV_ORDER.map((d) => {
+    const lucha = kindOf(signup.kind) === LUCHA_KIND;
+    const lines = kindDivs(signup.kind).map((d) => {
         const list = entries.filter((e) => e.division === d);
         if (!list.length) return `**${DIVISION_LABELS[d]}** (0): _nobody yet_`;
         const free = list.filter((e) => !booked.has(String(e.character_id)));
@@ -145,10 +157,13 @@ async function buildSignupMessage(signup) {
         return out.join('\n');
     });
     const dl = signup.deadline ? `\nSignups close after **${new Date(signup.deadline).toISOString().slice(0, 10)}**.` : '';
-    const embed = new EmbedBuilder().setColor(open ? 0x2ECC71 : 0x95A5A6)
-        .setTitle(`${open ? '✋' : '🔒'} ${signup.title}`)
-        .setDescription(`${open ? 'Press **Sign up / change** and pick the wrestler(s) you want on this show. You can change your picks any time until it closes.' : 'Signups are closed.'}${dl}\n\n${lines.join('\n')}`)
-        .setFooter({ text: `${entries.length} wrestler${entries.length === 1 ? '' : 's'} signed up${booked.size ? ` · ${booked.size} booked · 🔴 = already on a card` : ''}` });
+    const shown = entries.filter((e) => kindDivs(signup.kind).includes(e.division)).length;
+    const embed = new EmbedBuilder().setColor(!open ? 0x95A5A6 : lucha ? 0xA855F7 : 0x2ECC71)
+        .setTitle(`${open ? '✋' : '🔒'} ${lucha ? '🟣 ' : ''}${signup.title}`)
+        .setDescription(`${open ? (lucha
+            ? '**LuchaDerpy sign-up.** Press **Sign up / change** and pick your 🟣 LuchaDerpy character. You can change it any time until it closes.'
+            : 'Press **Sign up / change** and pick the wrestler(s) you want on this show. You can change your picks any time until it closes.') : 'Signups are closed.'}${dl}\n\n${lines.join('\n')}`)
+        .setFooter({ text: `${shown} wrestler${shown === 1 ? '' : 's'} signed up${booked.size ? ` · ${booked.size} booked · 🔴 = already on a card` : ''}` });
     return { embeds: [embed], components: open ? buttons(signup) : signup.status === 'closed' ? closedButtons(signup) : [], allowedMentions: NO_MENTIONS };
 }
 
@@ -164,7 +179,18 @@ async function refreshSignupPost(client, signup) {
 
 /** Picker shown privately after pressing the button: every eligible wrestler, grouped by division in the description. */
 async function buildPicker(signup, guildId, discordId) {
-    const { chars, injured } = await eligibleCharacters(guildId, discordId);
+    const { chars, injured } = await eligibleCharacters(guildId, discordId, signup.kind);
+    if (kindOf(signup.kind) === LUCHA_KIND) { // 3.16: only 🟣 characters; no "claim / make a wrestler" here
+        const req = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ui:rq:h:luchaderpy').setLabel('🙋 Request a LuchaDerpy character').setStyle(ButtonStyle.Primary));
+        if (!chars.length) {
+            return { content: injured.length ? 'Your 🟣 LuchaDerpy character is injured right now, so it can\'t sign up.' : 'This sign-up is for 🟣 **LuchaDerpy** characters only, and you don\'t have one yet. Request one first; once staff approve it you can sign up here.', components: injured.length ? [] : [req] };
+        }
+        const mineL = await signedUpIds(signup.id);
+        const menuL = new StringSelectMenuBuilder().setCustomId(`signup:pick:${signup.id}`)
+            .setPlaceholder('Pick your LuchaDerpy character').setMinValues(0).setMaxValues(Math.min(chars.length, 25))
+            .addOptions(chars.slice(0, 25).map((c) => ({ label: c.name.slice(0, 100), description: '🟣 LuchaDerpy', value: String(c.id), default: mineL.has(String(c.id)) })));
+        return { content: `**${signup.title}** (🟣 LuchaDerpy) — pick your LuchaDerpy character, then press outside the menu to confirm. Picking none withdraws you.`, components: [new ActionRowBuilder().addComponents(menuL)] };
+    }
     const help = await require('./signupHelp').pickerExtras(signup, guildId, discordId);
     if (!chars.length) {
         return { content: `${injured.length ? 'All your approved wrestlers are injured right now, so none can sign up.' : 'You have no approved wrestlers yet.'}\n\n${help.text}`, components: [help.row] };
@@ -244,5 +270,5 @@ async function buildBookingList(signup, division = null) {
 module.exports = {
     getSignup, latestSignup, activeSignup, markDone, resolveSignup, getEntries, signedUpIds, passedOverCounts,
     eligibleCharacters, setEntries, addEntry, removeEntry, buildSignupMessage, refreshSignupPost,
-    buildPicker, closeSignup, buildBookingList, DIV_ORDER
+    buildPicker, closeSignup, buildBookingList, DIV_ORDER, LUCHA_KIND, kindOf, kindDivs, kindForDivision, kindLabel
 };

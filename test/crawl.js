@@ -263,6 +263,10 @@ async function seed() {
     await run('match', 'log', { type: 'singles', wrestler1: W.ldAce, wrestler2: W.ldDragon, winner: 1 }, A);
     await click('ui:rq:p:mw:luchaderpy', { ...P('u4'), private: true, values: [String(await byName('Penta'))] });
     await click(`ui:rq:y:${await ld(await byName('Penta'))}`, { ...P('u4'), private: true });
+    // 3.16: a separate LuchaDerpy sign-up
+    await run('booking', 'signup-open', { title: 'LuchaDerpy - Nov 21', kind: 'luchaderpy' }, A);
+    const ls = (await f.pool.query(`SELECT id FROM signups WHERE kind='luchaderpy' ORDER BY id DESC LIMIT 1`)).rows[0].id;
+    for (const c of [W.ldRey, W.ldDragon]) await run('booking', 'signup-add', { signup: ls, character: c }, A);
     await click('ui:ch:s:roster_luchaderpy', { ...A, kind: 'channel', values: ['ldch'], private: true });
     await click('ui:ch:s:lucha_card', { ...A, kind: 'channel', values: ['ldcard'], private: true });
     return W;

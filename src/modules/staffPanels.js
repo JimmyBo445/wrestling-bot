@@ -301,29 +301,39 @@ async function handleAdminForm(interaction, a) {
 
 // ================================================================== /booking signups
 
-async function bookingHome(interaction, notice = null) {
+/** 3.16: which kind of sign-up a signup id belongs to (so a button's result lands on the right tab). */
+async function kindOfSignup(interaction, id) {
+    const { rows } = await pool.query(`SELECT kind FROM signups WHERE id = $1 AND guild_id = $2`, [Number(id) || 0, interaction.guildId]);
+    return rows[0]?.kind || 'main';
+}
+
+async function bookingHome(interaction, notice = null, kind = 'main') {
     return open(interaction, async () => {
         const su = require('../utils/signupUtils');
+        kind = su.kindOf(kind);
+        const lucha = kind === su.LUCHA_KIND;
         const admin = isAdmin(interaction);
-        const s = await su.latestSignup(interaction.guildId);
+        const s = await su.latestSignup(interaction.guildId, { kind });
         const entries = s ? await su.getEntries(s.id) : [];
         const status = !s ? null : s.status === 'open' ? '🟢 open' : s.status === 'closed' ? '🔒 closed' : '✅ finished';
         const link = s?.channel_id && s?.message_id ? ` · [jump to the post](https://discord.com/channels/${interaction.guildId}/${s.channel_id}/${s.message_id})` : '';
         const lines = [
-            s ? `**Latest signup: ${s.title}** · ${status} · ${entries.length} wrestler${entries.length === 1 ? '' : 's'}${s.deadline ? ` · closes after ${String(s.deadline).slice(0, 10)}` : ''}${link}` : '**No signup yet.**',
+            lucha ? '🟣 **LuchaDerpy sign-ups** are separate from the normal ones: only LuchaDerpy characters can join, and the LuchaDerpy card books from them.' : '**Normal sign-ups:** Men\'s, Women\'s, Custom and Custom Women\'s. 🟣 LuchaDerpy has its own (button below).',
+            '',
+            s ? `**Latest${lucha ? ' LuchaDerpy' : ''} signup: ${s.title}** · ${status} · ${entries.length} wrestler${entries.length === 1 ? '' : 's'}${s.deadline ? ` · closes after ${String(s.deadline).slice(0, 10)}` : ''}${link}` : `**No${lucha ? ' LuchaDerpy' : ''} signup yet.**`,
             '',
             '🙋 **Players:** press the button on the signup post to join with your wrestlers.',
             '🔎 **Suggest opponents** finds good matchups for a wrestler.',
             '📨 **Want a specific match?** Type `/booking request`.'
         ];
         if (admin) lines.push('', '🛠 **Staff:** the buttons below open, close and edit signups. `/card` → 🧰 More tools → ⚡ Auto-build books from the signup.');
-        const embed = new EmbedBuilder().setColor(0x1ABC9C).setTitle('📝 Signups & booking').setDescription(lines.join('\n'));
-        const comps = [row(btn('ui:pg:sug:0:all:0', '🔎 Suggest opponents', P))];
+        const embed = new EmbedBuilder().setColor(lucha ? 0xA855F7 : 0x1ABC9C).setTitle(lucha ? '📝 🟣 LuchaDerpy signups & booking' : '📝 Signups & booking').setDescription(lines.join('\n'));
+        const comps = [row(btn('ui:bk:h:main', 'Normal sign-ups', lucha ? S : P), btn(`ui:bk:h:${su.LUCHA_KIND}`, '🟣 LuchaDerpy sign-ups', lucha ? P : S), btn('ui:pg:sug:0:all:0', '🔎 Suggest opponents'))];
         if (admin) {
             const open_ = s?.status === 'open';
-            comps.push(row(btn('ui:bk:op', '🆕 Open a signup', G), btn(`ui:bk:ls:${s?.id || 0}`, '📋 Who signed up', S, !s),
+            comps.push(row(btn(`ui:bk:op:${kind}`, lucha ? '🆕 Open a LuchaDerpy signup' : '🆕 Open a signup', G), btn(`ui:bk:ls:${s?.id || 0}`, '📋 Who signed up', S, !s),
                 btn(`ui:bk:cl:${s?.id || 0}`, '🔒 Close it', S, !open_), btn(`ui:bk:dn:${s?.id || 0}`, '✅ Mark it finished', S, !s || s.status === 'done')));
-            comps.push(row(btn(`ui:pg:sga:${s?.id || 0}:all:0`, '➕ Sign a wrestler up', S, !open_), btn(`ui:bk:rm:${s?.id || 0}`, '➖ Take a wrestler off', S, !entries.length)));
+            comps.push(row(btn(`ui:pg:sga:${s?.id || 0}:${lucha ? 'luchaderpy' : 'all'}:0`, '➕ Sign a wrestler up', S, !open_), btn(`ui:bk:rm:${s?.id || 0}`, '➖ Take a wrestler off', S, !entries.length)));
         }
         return withNotice({ embeds: [embed], components: withHome(comps) }, notice);
     });
@@ -331,43 +341,47 @@ async function bookingHome(interaction, notice = null) {
 
 async function handleBooking(interaction, a, b, c) {
     const v = interaction.values?.[0];
-    if (a === 'h') return bookingHome(interaction);
+    if (a === 'h') return bookingHome(interaction, null, b);
     if (a === 'se') return suggestFor(interaction, b, c === '1');
     requireAdmin(interaction, 'run signups');
     if (a === 'op') {
-        return interaction.showModal(modal('ui:bkm:op', 'Open a signup (posts in this channel)', [
-            { id: 'title', label: 'Name, e.g. RAW - Nov 3', required: true, max: 80 },
+        const lucha = b === 'luchaderpy';
+        return interaction.showModal(modal(`ui:bkm:op:${lucha ? 'luchaderpy' : 'main'}`, lucha ? 'Open a LuchaDerpy signup (posts here)' : 'Open a signup (posts in this channel)', [
+            { id: 'title', label: lucha ? 'Name, e.g. LuchaDerpy - Nov 20' : 'Name, e.g. RAW - Nov 3', required: true, max: 80 },
             { id: 'deadline', label: 'Close after (YYYY-MM-DD), empty = by hand', max: 10, placeholder: '2026-11-20' }]));
     }
     if (a === 'ls') {
-        return open(interaction, async () => ({ ...await capture(interaction, 'signup', 'list', { signup: b }), components: withHome([row(btn('ui:bk:h', '◀ Back'))]) }), { backRows: [row(btn('ui:bk:h', '◀ Back'))] });
+        const k = await kindOfSignup(interaction, b);
+        return open(interaction, async () => ({ ...await capture(interaction, 'signup', 'list', { signup: b }), components: withHome([row(btn(`ui:bk:h:${k}`, '◀ Back'))]) }), { backRows: [row(btn(`ui:bk:h:${k}`, '◀ Back'))] });
     }
     if (a === 'cl' || a === 'dn') {
         const r = await attempt(() => capture(interaction, 'signup', a === 'cl' ? 'close' : 'done', { signup: b }));
-        return bookingHome(interaction, said(r));
+        return bookingHome(interaction, said(r), await kindOfSignup(interaction, b));
     }
     if (a === 'rm') {
         const entries = await require('../utils/signupUtils').getEntries(b);
-        if (!entries.length) return bookingHome(interaction, '⚠️ Nobody is on that signup.');
+        const k = await kindOfSignup(interaction, b);
+        if (!entries.length) return bookingHome(interaction, '⚠️ Nobody is on that signup.', k);
         return show(interaction, { content: 'Who comes off the signup?', embeds: [], components: withHome([
             select(`ui:bk:rs:${b}`, 'Pick a wrestler', entries.map((e) => ({ label: clip(e.name, 100), value: String(e.character_id), description: clip(DIVISION_LABELS[e.division] || e.division || '', 100) || undefined }))),
-            row(btn('ui:bk:h', '◀ Back'))]) });
+            row(btn(`ui:bk:h:${k}`, '◀ Back'))]) });
     }
     if (a === 'rs') {
         const r = await attempt(() => capture(interaction, 'signup', 'remove', { signup: b, character: v }));
-        return bookingHome(interaction, said(r));
+        return bookingHome(interaction, said(r), await kindOfSignup(interaction, b));
     }
     throw new UserError('That button is from an older version of the bot. Run `/booking signups` again.');
 }
 
-async function handleBookingForm(interaction, a) {
+async function handleBookingForm(interaction, a, b) {
     requireAdmin(interaction, 'run signups');
     if (a === 'op') {
-        const values = { title: field(interaction, 'title') };
+        const kind = b === 'luchaderpy' ? 'luchaderpy' : 'main';
+        const values = { title: field(interaction, 'title'), kind };
         const dl = field(interaction, 'deadline');
         if (dl) values.deadline = dl;
         const r = await attempt(() => capture(interaction, 'signup', 'open', values));
-        return bookingHome(interaction, r.failed ? r.content : `✅ Signup **${values.title}** is posted in this channel.${dl ? ` It closes by itself after ${dl}.` : ' Close it here when you\'re ready.'}`);
+        return bookingHome(interaction, r.failed ? r.content : `✅ ${kind === 'luchaderpy' ? '🟣 LuchaDerpy signup' : 'Signup'} **${values.title}** is posted in this channel.${dl ? ` It closes by itself after ${dl}.` : ' Close it here when you\'re ready.'}`, kind);
     }
     throw new UserError('That form is from an older version of the bot. Run `/booking signups` again.');
 }
@@ -375,7 +389,7 @@ async function handleBookingForm(interaction, a) {
 /** From the wrestler picker (hub.js): sign someone up, or suggest opponents. */
 async function signupAdd(interaction, signupId, characterId) {
     const r = await attempt(() => capture(interaction, 'signup', 'add', { signup: signupId, character: characterId }));
-    return bookingHome(interaction, said(r));
+    return bookingHome(interaction, said(r), await kindOfSignup(interaction, signupId));
 }
 function suggestFor(interaction, characterId, everyone = false) {
     const back = [row(btn('ui:pg:sug:0:all:0', '🔎 Another wrestler'), btn(`ui:bk:se:${characterId}:${everyone ? 0 : 1}`, everyone ? '📝 Only the signup' : '🌐 Ignore the signup'), btn('ui:bk:h', '◀ Signups & booking'))];

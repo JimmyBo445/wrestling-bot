@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.16.0 — Separate LuchaDerpy sign-ups
+- **LuchaDerpy has its own sign-up**, apart from the normal one (Men's, Women's, Custom, Custom Women's). Both can be open at the same time, each with its own post.
+- `/booking signups` has two tabs: **Normal sign-ups** and **🟣 LuchaDerpy sign-ups**. Each tab has its own 🆕 Open, 📋 Who signed up, 🔒 Close, ✅ Mark finished, ➕ and ➖ buttons. Opening a new sign-up only replaces the older one of the same kind.
+- The LuchaDerpy post is purple, marked 🟣, and only lists LuchaDerpy. The normal post no longer has a LuchaDerpy line.
+- Players: on the LuchaDerpy post they can only pick their 🟣 character; on the normal post their 🟣 character isn't offered. Someone without a 🟣 character gets a 🙋 Request a LuchaDerpy character button.
+- Staff can't add a wrestler to the wrong kind of sign-up (the bot says why).
+- ⚡ Auto-build and 🔎 Suggest opponents use the matching sign-up: the LuchaDerpy card books from the LuchaDerpy sign-up, RAW and SmackDown from the normal one.
+- Database change: migration 031. LuchaDerpy characters already on a running normal sign-up are taken off it.
+
 ## 3.15.4
 - The LuchaDerpy roster channel has a new post at the bottom, right above the request buttons: **"What does it take to become a LuchaDerpy wrestler?"** with the four qualification rules, and a reminder to check the character qualifies before requesting it.
 

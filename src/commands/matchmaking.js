@@ -62,7 +62,7 @@ module.exports = {
             if (!rows.length) throw new UserError('No other players\' wrestlers to suggest yet.');
 
             // wrestlers signed up for the current show come first; ones passed over before come before that
-            const signup = await su.activeSignup(guildId);
+            const signup = await su.activeSignup(guildId, su.kindForDivision(me.division)); // 3.16
             const signed = signup ? await su.signedUpIds(signup.id) : new Set();
             const passed = await su.passedOverCounts(guildId, rows.map((r) => r.id));
             for (const r of rows) { r.signed = signed.has(String(r.id)); r.passed = passed.get(String(r.id)) || 0; }
