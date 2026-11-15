@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.17.0 — Easier Request and Switch
+- **Letter buttons instead of ◀ ▶.** The open-character list has buttons like **A–I, I–R, R–W**. One tap jumps to that part of the A–Z list.
+- **The name box opens first.** Pressing 🙋 Request a character (in a division's roster channel) or 🔄 Switch character opens a box right away: type part of a name, or leave it empty to see the whole list.
+- **Search results are buttons.** After a search the matching names show as buttons (up to 15). Tap the name; there is no dropdown to open.
+- **Add another, or switch?** If a player requests a character in a division where they already have one, the bot asks:
+  - **➕ Add**: they keep theirs and the new one is an extra character.
+  - **🔄 Switch**: they give one up and get the new one.
+  The switch screen also says plainly "you give up X" and offers ➕ keep X and add instead.
+- **Clearer staff requests.** An extra character is headed **➕ ADD ANOTHER CHARACTER (not a switch)**, lists what they already have and says approving adds it and they keep the others. A switch is headed **🔄 SWITCH (they do not keep the old one)**.
+- The roster channel's bottom post explains the buttons, and the difference between Request (get one more) and Switch (give yours up).
+
 ## 3.16.0 — Separate LuchaDerpy sign-ups
 - **LuchaDerpy has its own sign-up**, apart from the normal one (Men's, Women's, Custom, Custom Women's). Both can be open at the same time, each with its own post.
 - `/booking signups` has two tabs: **Normal sign-ups** and **🟣 LuchaDerpy sign-ups**. Each tab has its own 🆕 Open, 📋 Who signed up, 🔒 Close, ✅ Mark finished, ➕ and ➖ buttons. Opening a new sign-up only replaces the older one of the same kind.

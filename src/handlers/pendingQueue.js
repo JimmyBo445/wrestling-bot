@@ -31,6 +31,11 @@ async function describeRequest(r) {
         ? await require('../utils/lucha').dualDetails(r.guild_id, r.requested_by, await require('../utils/characterUtils').getCharacterById(r.character_id)) : '';
     const dualText = dual ? `\n\n${dual}` : '';
     if (r.request_type === 'character_claim') {
+        // 3.17: say clearly whether this adds a character or is their first one (a switch is a different request)
+        const have = c && c.division !== 'luchaderpy' && r.status === 'pending' ? await require('../modules/community').mineIn(r.guild_id, r.requested_by, c.division) : [];
+        if (have.length) {
+            return `➕ **ADD ANOTHER CHARACTER** (not a switch)\n<@${r.requested_by}> wants to **add another character**: **${c.name}** (${DIVISION_LABELS[c.division]}).\nThey already have: **${have.map((h) => h.name).join('**, **')}**.\nApproving **adds ${c.name} to their characters**. They **keep** ${have.length > 1 ? 'the others' : `**${have[0].name}**`}.${dualText}${fromSignup}`;
+        }
         if (c?.division === 'luchaderpy') return `<@${r.requested_by}> wants **${c.name}** for their 🟣 **LuchaDerpy** slot. Approving gives them the LuchaDerpy version (separate record from Men's).${dualText}${fromSignup}`;
         return `<@${r.requested_by}> wants to take over **${c?.name || 'Unknown'}** (${DIVISION_LABELS[c?.division] || '?'}), a wrestler with no player right now. Approving moves it to them.${dualText}${fromSignup}`;
     }
@@ -43,7 +48,7 @@ async function describeRequest(r) {
             const lines = old ? U.describePlan(old, await U.unclaimPlan(r.guild_id, old)).filter((l) => !l.startsWith('🏆')) : [];
             if (lines.length) extra = `\n\n**What happens to ${old.name}:**\n${lines.join('\n')}`;
         } catch (_) { extra = ''; }
-        return `<@${r.requested_by}> wants to switch from **${challenger?.name || 'Unknown'}** to **${c?.name || 'Unknown'}** (${c?.division === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[c?.division] || '?'}).\nApproving gives them **${c?.name || 'the new character'}** and makes **${challenger?.name || 'the old one'}** ⚪ open. Card matches that haven't happened yet switch to the new character.${dualText}${extra}`;
+        return `🔄 **SWITCH** (they do not keep the old one)\n<@${r.requested_by}> wants to switch from **${challenger?.name || 'Unknown'}** to **${c?.name || 'Unknown'}** (${c?.division === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[c?.division] || '?'}).\nApproving gives them **${c?.name || 'the new character'}** and **takes ${challenger?.name || 'the old one'} away from them** (it becomes ⚪ open). Card matches that haven't happened yet switch to the new character.${dualText}${extra}`;
     }
     if (r.request_type === 'contender_challenge') {
         const who = t?.name || challenger?.name || 'Unknown';

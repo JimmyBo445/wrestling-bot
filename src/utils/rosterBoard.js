@@ -110,10 +110,11 @@ function infoFor(divs) {
     const make = divs.some((d) => ['custom', 'custom_womens'].includes(d));
     const scope = req.length === 1 ? req[0] : 'mw';
     const lines = [];
+    if (req.length) lines.push('👇 **Press a button under this message.** A box pops up: type part of a name and tap the one you want, or leave it empty to see the whole A–Z list.'); // 3.17
     const normal = req.filter((d) => d !== 'luchaderpy');
     if (normal.length) lines.push(`• **Want a ${normal.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an ⚪ open one. Staff approve it.`);
     if (req.includes('luchaderpy')) lines.push('• **Want a 🟣 LuchaDerpy character?** LuchaDerpy uses the Men\'s roster. Press 🙋 Request a character and pick an ⚪ open superstar. It\'s an extra slot on top of your normal ones. Staff approve it.');
-    if (req.length) lines.push('• **Want to be someone else?** Press 🔄 Switch character to trade yours for an ⚪ open one (same division; staff approve it).');
+    if (req.length) lines.push('• **Want to be someone else?** Press 🔄 Switch character: you **give up** your character and get an ⚪ open one (same division; staff approve it). To keep yours and get one more, use 🙋 Request a character instead.');
     if (make) lines.push('• **Make your own custom wrestler:** press 🆕 Make a custom wrestler. Staff approve it and it shows up here.');
     lines.push('• **Waiting on staff?** 📨 My requests shows where your request stands.', '-# This channel updates by itself whenever someone gets, changes or gives up a character.');
     const buttons = [];

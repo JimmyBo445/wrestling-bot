@@ -211,7 +211,7 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
     await t('🔄 Switch your 🟣: same rules, own 14-day timer separate from Men\'s', async () => {
         // u5's 🟣 Seth → 🟣 Rey
         const sethL = (await lucha(SETH)).id;
-        let i = await click(`ui:sw:o:${sethL}`, priv(P('u5')));
+        let i = await click(`ui:sw:l:${sethL}:0`, priv(P('u5')));
         assert.match(text(i), /🟣 LuchaDerpy \(Men's roster\)/, text(i));
         assert.ok(!json(i).includes('Roman Reigns'));
         i = await click(`ui:sw:t:${sethL}`, priv({ ...P('u5'), values: [String(REY)] }));

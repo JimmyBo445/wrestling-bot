@@ -37,6 +37,7 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
 
     await t('switch flow: only open characters in the same division, then a staff card', async () => {
         let i = await click('ui:sw:h:mw', priv(P('u1')));
+        i = await click(`ui:sw:l:${JEY}:0`, priv(P('u1'))); // 3.17: the name box opens first; empty = this list
         const json = JSON.stringify(i.responses.at(-1).p.components.map((r) => r.toJSON()));
         assert.ok(json.includes(`ui:sw:t:${JEY}`), 'one Men\'s wrestler → straight to the list');
         assert.ok(json.includes('Roman Reigns') && json.includes('CM Punk') && !json.includes('Rhea Ripley'), 'same division, open only');
@@ -136,7 +137,7 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
     await t('3.13.3: search by name in Request a character and Switch character', async () => {
         for (let k = 0; k < 30; k++) await run('character', 'open', { name: `Filler Superstar ${String(k).padStart(2, '0')}`, division: 'mens' }, ADM);
         await run('character', 'open', { name: 'Seth Rollins', division: 'mens' }, ADM);
-        let i = await click('ui:rq:h:mens', priv(P('u7')));
+        let i = await click('ui:rq:l:mens:mens:0', priv(P('u7')));
         assert.ok(ids(i).includes('ui:rq:s:mens:mens'), ids(i).join(' '));
         assert.ok(!JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON())).includes('Seth Rollins'), 'Seth is on page 2');
         i = await click('ui:rq:s:mens:mens', priv(P('u7')));
@@ -150,7 +151,7 @@ const owner = async (id) => (await q(`select u.discord_id, u.is_placeholder from
         assert.match(text(i), /No open Men's character matches/);
         // switch list search
         await f.pool.query(`UPDATE guilds SET switch_cooldown_days = 0 WHERE guild_id = $1`, [G]);
-        i = await click(`ui:sw:o:${ROMAN}`, priv(P('u1')));
+        i = await click(`ui:sw:l:${ROMAN}:0`, priv(P('u1')));
         assert.ok(ids(i).includes(`ui:sw:s:${ROMAN}`));
         i = await click(`ui:swm:${ROMAN}`, priv({ ...P('u1'), fields: { name: 'Rollins' } }));
         assert.ok(JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON())).includes('Seth Rollins'));

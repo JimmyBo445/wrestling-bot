@@ -71,7 +71,7 @@ const btns = (m) => (m.payload.components || []).flatMap((r) => r.toJSON().compo
         assert.match(text(i), /isn't open anymore/);
         i = await click('ui:rq:l:mw:womens', priv(P('u3')));
         assert.match(text(i), /Women's/); assert.ok(JSON.stringify(i.responses.at(-1).p.components.map((x) => x.toJSON())).includes('Rhea Ripley'));
-        i = await click('ui:rq:h:womens', priv(P('u3')));
+        i = await click('ui:rq:l:womens:womens:0', priv(P('u3')));
         assert.ok(!ids(i).includes('ui:rq:l:womens:mens'), 'a Women\'s roster channel only offers Women\'s');
     });
 

@@ -200,41 +200,80 @@ async function openPage(guildId, div, page = 0, search = '', discordId = null) {
          FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where}
          ORDER BY ($3::text IS NOT NULL AND lower(c.name) LIKE lower($4) || '%') DESC, ${SORT('c')}, c.id LIMIT 25 OFFSET $5`,
         [guildId, div, like, String(search || '').trim(), p * 25, me]);
-    return { total, pages, p, rows };
+    // 3.17: the first letter of every open name in order, for the letter buttons
+    const { rows: ls } = search ? { rows: [] } : await pool.query(
+        `SELECT upper(left(${SORT('c')}, 1)) AS l FROM characters c JOIN users u ON u.id = c.owner_id WHERE ${where} AND $4::text IS NOT NULL AND $5::int IS NOT NULL ORDER BY ${SORT('c')}, c.id`,
+        [guildId, div, like, '', 0, me]);
+    return { total, pages, p, rows, letters: ls.map((r) => r.l || '#') };
+}
+
+/**
+ * 3.17: letter buttons instead of ◀ ▶. Up to 5 buttons like "A–D", each jumping to that part of the A–Z list.
+ * With more than 5 pages a button covers several pages (the nav row then also has ◀ ▶).
+ */
+function letterRow(letters, pages, p, idFor) {
+    if (pages <= 1) return null;
+    const n = Math.min(5, pages);
+    const out = [];
+    for (let k = 0; k < n; k++) {
+        const first = Math.floor((k * pages) / n), last = Math.floor(((k + 1) * pages) / n) - 1;
+        const a = letters[first * 25] || '?', z = letters[Math.min(letters.length, (last + 1) * 25) - 1] || a;
+        out.push(btn(idFor(first), a === z ? a : `${a}–${z}`, p >= first && p <= last ? P : S));
+    }
+    return row(...out);
+}
+/** 3.17: search results as buttons (one tap on the name), up to 15. */
+const MAX_RESULT_BUTTONS = 15;
+function resultRows(rows, idFor) {
+    const out = [];
+    const list = rows.slice(0, MAX_RESULT_BUTTONS);
+    for (let i = 0; i < list.length; i += 5) out.push(row(...list.slice(i, i + 5).map((r) => btn(idFor(r.id), clip(`${r.name}${r.overall ? ` (${r.overall})` : ''}`, 80), G))));
+    return out;
+}
+/** 3.17: the player's own approved characters in a division (for "add another, or switch?"). */
+async function mineIn(guildId, discordId, division, client = pool) {
+    const { rows } = await client.query(
+        `SELECT c.id, c.name FROM characters c JOIN users u ON u.id = c.owner_id
+         WHERE c.guild_id = $1 AND u.discord_id = $2 AND NOT u.is_placeholder AND c.status = 'approved' AND c.division = $3 ORDER BY ${SORT('c')}`, [guildId, String(discordId), division]);
+    return rows;
 }
 const optionFor = (r) => ({ label: clip(r.name, 100), value: String(r.id), description: clip([r.overall && `${r.overall} Overall`, r.dual && 'You have them in the other color: staff decide'].filter(Boolean).join(' · '), 100) || undefined });
 const divName = (d) => (d === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[d]);
 
+/** 3.17: the name box is optional: leaving it empty shows the whole A–Z list. */
 function searchForm(id, title) {
     return new ModalBuilder().setCustomId(id).setTitle(clip(title, 45)).addComponents(new ActionRowBuilder().addComponents(
-        new TextInputBuilder().setCustomId('name').setLabel('Name (or part of it)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40).setPlaceholder('Roman')));
+        new TextInputBuilder().setCustomId('name').setLabel('Name, or leave empty for the full list').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(40).setPlaceholder('Roman')));
 }
 const searchText = (interaction) => { try { return String(interaction.fields.getTextInputValue('name') || '').trim(); } catch (_) { return ''; } };
 
 async function requestList(interaction, scope, div, page = 0, search = '') {
     const divs = scopeDivs(scope);
     if (!divs.includes(div)) div = divs[0];
-    const { total, pages, p, rows } = await openPage(interaction.guildId, div, page, search, interaction.user.id);
+    const { total, pages, p, rows, letters } = await openPage(interaction.guildId, div, page, search, interaction.user.id);
     const comps = [];
-    if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, divName(d), d === div ? P : S))));
-    if (rows.length) {
-        comps.push(select(`ui:rq:p:${scope}:${div}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map(optionFor)));
+    if (search) comps.push(...resultRows(rows, (id) => `ui:rq:b:${scope}:${div}:${id}`)); // 3.17: tap the name
+    else {
+        if (divs.length > 1) comps.push(row(...divs.map((d) => btn(`ui:rq:l:${scope}:${d}`, divName(d), d === div ? P : S))));
+        const lr = letterRow(letters, pages, p, (pg) => `ui:rq:l:${scope}:${div}:${pg}:j`);
+        if (lr) comps.push(lr);
+        if (rows.length) comps.push(select(`ui:rq:p:${scope}:${div}`, `Pick the ${DIVISION_LABELS[div]} character you want`, rows.map(optionFor)));
     }
-    const nav = [btn(`ui:rq:s:${scope}:${div}`, '🔎 Search by name', P)];
-    if (search) nav.push(btn(`ui:rq:l:${scope}:${div}:0`, '✖ Clear search'));
-    else if (pages > 1) nav.push(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1));
+    const nav = [btn(`ui:rq:s:${scope}:${div}`, search ? '🔎 Search again' : '🔎 Search by name', P)];
+    if (search) nav.push(btn(`ui:rq:l:${scope}:${div}:0`, '📋 Full list'));
+    else if (pages > 5) nav.push(btn(`ui:rq:l:${scope}:${div}:${p - 1}`, '◀', S, p === 0), btn(`ui:rq:l:${scope}:${div}:${p + 1}`, '▶', S, p >= pages - 1));
     nav.push(btn('ui:mr:h', '📨 My requests'));
     comps.push(row(...nav));
     const lucha = div === 'luchaderpy';
     return show(interaction, {
         content: search
             ? (rows.length
-                ? `🔎 Open ${DIVISION_LABELS[div]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name to narrow it down)` : ''}. Pick one to request it.`
-                : `🔎 No open ${DIVISION_LABELS[div]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
+                ? `🔎 Open ${DIVISION_LABELS[div]} characters matching **${clip(search, 40)}**${total > MAX_RESULT_BUTTONS ? ` (first ${MAX_RESULT_BUTTONS} of ${total}; type more of the name to narrow it down)` : ''}. **Tap the one you want.**`
+                : `🔎 No open ${DIVISION_LABELS[div]} character matches **${clip(search, 40)}**. They may be taken already. Try part of the name with 🔎 Search again, or see the 📋 Full list.`)
             : rows.length
                 ? (lucha
-                    ? `🟣 **Request a LuchaDerpy character.** LuchaDerpy uses the Men's roster: these superstars have no player right now (⚪ open). Pick one for your 🟣 LuchaDerpy slot (on top of your normal ones) and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`
-                    : `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (⚪ open). Pick one and staff will give it to you.${pages > 1 ? ` (${total} open: ◀ ▶ for more, or 🔎 search)` : ''}`)
+                    ? `🟣 **Request a LuchaDerpy character.** LuchaDerpy uses the Men's roster: these superstars have no player right now (⚪ open). Pick one for your 🟣 LuchaDerpy slot (on top of your normal ones) and staff will give it to you.${pages > 1 ? ` (${total} open: tap a letter button to jump, or 🔎 search)` : ''}`
+                    : `🙋 **Request a ${DIVISION_LABELS[div]} character.** These have no player right now (⚪ open). Pick one and staff will give it to you.${pages > 1 ? ` (${total} open: tap a letter button to jump, or 🔎 search)` : ''}`)
                 : `🙋 There are no open ${DIVISION_LABELS[div]} characters right now. Ask staff if you're after someone who isn't on the roster yet.`,
         embeds: [],
         components: withHome(comps)
@@ -261,15 +300,36 @@ async function openChar(interaction, charId, div = null) {
 }
 
 async function handleRequestChar(interaction, a, b, c) {
-    if (a === 'h') return requestList(interaction, b || 'mw', scopeDivs(b || 'mw')[0]);
+    if (a === 'h') {
+        // 3.17: with one division the name box opens straight away (empty = the full list)
+        const divs = scopeDivs(b || 'mw');
+        if (divs.length === 1 && interaction.isButton?.()) return interaction.showModal(searchForm(`ui:rqm:${b}:${divs[0]}`, `Find an open ${DIVISION_LABELS[divs[0]]} character`));
+        return requestList(interaction, b || 'mw', divs[0]);
+    }
     if (a === 'l') return requestList(interaction, b, c, (interaction.customId.split(':')[5]) || 0);
     if (a === 's') return interaction.showModal(searchForm(`ui:rqm:${b}:${c}`, `Search open ${DIVISION_LABELS[c] || ''} characters`));
-    if (a === 'p') {
-        const ch = await openChar(interaction, interaction.values?.[0], c);
+    if (a === 'p' || a === 'b') {
+        const ch = await openChar(interaction, a === 'b' ? interaction.customId.split(':')[5] : interaction.values?.[0], c);
         const lucha = ch.division === 'luchaderpy';
         const both = ch.dual ? `\n⚠️ You already have **${ch.name}** as ${lucha ? '🟢 Men\'s' : '🟣 LuchaDerpy'}. Using the same superstar in both is up to staff.` : '';
+        const again = btn(`ui:rq:l:${b || 'mw'}:${c}:0`, 'Pick another');
+        // 3.17: already have a character in this division → add another, or switch?
+        const mine = await mineIn(interaction.guildId, interaction.user.id, ch.division);
+        if (mine.length && !lucha) {
+            return show(interaction, { embeds: [],
+                content: `You already have **${mine.map((m) => m.name).join('**, **')}** (${DIVISION_LABELS[ch.division]}). What do you want to do with **${ch.name}**?\n`
+                    + `• **➕ Add:** you keep ${mine.length > 1 ? 'your characters' : `**${mine[0].name}**`} and **${ch.name}** becomes an extra character.\n`
+                    + `• **🔄 Switch:** you give up one character and get **${ch.name}** instead. The one you give up becomes open for someone else.\nStaff approve either one.${both}`,
+                components: [row(btn(`ui:rq:y:${ch.id}`, clip(`➕ Add ${ch.name} (keep mine)`, 80), G),
+                    ...mine.slice(0, 3).map((m) => btn(`ui:sw:tb:${m.id}:${ch.id}`, clip(`🔄 Switch: give up ${m.name}`, 80), P)), again)] });
+        }
+        if (lucha && mine.length) {
+            return show(interaction, { embeds: [],
+                content: `You already have a 🟣 LuchaDerpy character: **${mine[0].name}** (1 per player). Do you want to **switch** it for **${ch.name}**? **${mine[0].name}** becomes open for someone else. Staff approve it.${both}`,
+                components: [row(btn(`ui:sw:tb:${mine[0].id}:${ch.id}`, clip(`🔄 Switch: give up ${mine[0].name}`, 80), P), again)] });
+        }
         return show(interaction, { content: `Ask staff to give you **${ch.name}** ${lucha ? 'for your 🟣 **LuchaDerpy** slot' : `(${DIVISION_LABELS[ch.division]})`}?${both}`, embeds: [],
-            components: [row(btn(`ui:rq:y:${ch.id}`, 'Yes, send the request', G), btn(`ui:rq:h:${b || 'mw'}`, 'Pick another'))] });
+            components: [row(btn(`ui:rq:y:${ch.id}`, 'Yes, send the request', G), again)] });
     }
     if (a === 'y') {
         const ch = await openChar(interaction, b);
@@ -286,7 +346,10 @@ async function handleRequestChar(interaction, a, b, c) {
             [interaction.guildId, interaction.user.id, ch.id]);
         if (dupe.length) throw new UserError(`You already asked for **${ch.name}**. Staff will get to it (see 📨 My requests).`);
         await require('../handlers/pendingQueue').postPendingCard(interaction.guild, { type: 'character_claim', characterId: ch.id, requestedBy: interaction.user.id, payload: { from: 'request' }, staffRoom: true });
-        return show(interaction, { content: `🙋 Request sent! Staff will look at it. Once approved, **${ch.name}** is yours${ch.division === 'luchaderpy' ? ' in 🟣 LuchaDerpy' : ''} and you'll get a DM.`, embeds: [],
+        const keep = ch.division === 'luchaderpy' ? [] : await mineIn(interaction.guildId, interaction.user.id, ch.division);
+        return show(interaction, { content: keep.length
+            ? `➕ Request sent to **add ${ch.name}** as another character. You keep **${keep.map((m) => m.name).join('**, **')}**. Staff will look at it and you'll get a DM.`
+            : `🙋 Request sent! Staff will look at it. Once approved, **${ch.name}** is yours${ch.division === 'luchaderpy' ? ' in 🟣 LuchaDerpy' : ''} and you'll get a DM.`, embeds: [],
             components: withHome([row(btn('ui:mr:h', '📨 My requests'))]) });
     }
     throw new UserError('That button is from an older version of the bot.');
@@ -304,29 +367,41 @@ async function switchStart(interaction, scope) {
         return show(interaction, { content: `🔄 You don't have a ${divs.map((d) => DIVISION_LABELS[d]).join(' or ')} character to switch. Press 🙋 Request a character to ask for an open one.`, embeds: [],
             components: withHome([row(btn(`ui:rq:h:${scope}`, '🙋 Request a character', G))]) });
     }
-    if (rows.length === 1) return switchList(interaction, rows[0].id);
+    if (rows.length === 1) return switchFind(interaction, rows[0].id);
     return show(interaction, { content: '🔄 **Switch character.** Which of your characters do you want to give up?', embeds: [],
         components: withHome([select('ui:sw:f', 'Pick the one to switch out', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: DIVISION_LABELS[r.division] })))]) });
+}
+
+/** 3.17: opens the name box straight away (empty = the full list). Checks first that this character can be switched. */
+async function switchFind(interaction, fromId) {
+    const { from } = await require('../utils/characterSwitch').check(interaction.guildId, interaction.user.id, fromId, null);
+    if (!interaction.isButton?.() && !interaction.isStringSelectMenu?.()) return switchList(interaction, from.id);
+    return interaction.showModal(searchForm(`ui:swm:${from.id}`, clip(`Switch ${from.name} for…`, 45)));
 }
 
 async function switchList(interaction, fromId, page = 0, search = '') {
     const CS = require('../utils/characterSwitch');
     const { from } = await CS.check(interaction.guildId, interaction.user.id, fromId, null);
-    const { total, pages, p, rows } = await openPage(interaction.guildId, from.division, page, search, interaction.user.id);
+    const { total, pages, p, rows, letters } = await openPage(interaction.guildId, from.division, page, search, interaction.user.id);
     const comps = [];
-    if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map(optionFor)));
-    const nav = [btn(`ui:sw:s:${from.id}`, '🔎 Search by name', P)];
-    if (search) nav.push(btn(`ui:sw:o:${from.id}`, '✖ Clear search'));
-    else if (pages > 1) nav.push(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1));
+    if (search) comps.push(...resultRows(rows, (id) => `ui:sw:tb:${from.id}:${id}`)); // 3.17: tap the name
+    else {
+        const lr = letterRow(letters, pages, p, (pg) => `ui:sw:l:${from.id}:${pg}:j`);
+        if (lr) comps.push(lr);
+        if (rows.length) comps.push(select(`ui:sw:t:${from.id}`, `Switch ${clip(from.name, 60)} for…`, rows.map(optionFor)));
+    }
+    const nav = [btn(`ui:sw:s:${from.id}`, search ? '🔎 Search again' : '🔎 Search by name', P)];
+    if (search) nav.push(btn(`ui:sw:l:${from.id}:0`, '📋 Full list'));
+    else if (pages > 5) nav.push(btn(`ui:sw:l:${from.id}:${p - 1}`, '◀', S, p === 0), btn(`ui:sw:l:${from.id}:${p + 1}`, '▶', S, p >= pages - 1));
     nav.push(btn('ui:mr:h', '📨 My requests'));
     comps.push(row(...nav));
     return show(interaction, {
         content: search
             ? (rows.length
-                ? `🔎 Open ${DIVISION_LABELS[from.division]} characters matching **${clip(search, 40)}**${total > 25 ? ` (first 25 of ${total}; type more of the name)` : ''}. Pick one to switch **${from.name}** for.`
-                : `🔎 No open ${DIVISION_LABELS[from.division]} character matches **${clip(search, 40)}**. Try part of the name, or ✖ Clear search.`)
+                ? `🔎 Open ${DIVISION_LABELS[from.division]} characters matching **${clip(search, 40)}**${total > MAX_RESULT_BUTTONS ? ` (first ${MAX_RESULT_BUTTONS} of ${total}; type more of the name)` : ''}. **Tap the one you want** to switch **${from.name}** for.`
+                : `🔎 No open ${DIVISION_LABELS[from.division]} character matches **${clip(search, 40)}**. They may be taken already. Try part of the name with 🔎 Search again, or see the 📋 Full list.`)
             : rows.length
-            ? `🔄 **Switch ${from.name}** for an ⚪ open ${from.division === 'luchaderpy' ? '🟣 LuchaDerpy (Men\'s roster)' : DIVISION_LABELS[from.division]} character. Staff approve it, and **${from.name}** becomes open for someone else.`
+            ? `🔄 **Switch ${from.name}** for an ⚪ open ${from.division === 'luchaderpy' ? '🟣 LuchaDerpy (Men\'s roster)' : DIVISION_LABELS[from.division]} character. Staff approve it, and **${from.name}** becomes open for someone else.${pages > 1 ? ' Tap a letter button to jump, or 🔎 search.' : ''}`
             : `🔄 There are no open ${DIVISION_LABELS[from.division]} characters to switch to right now.`,
         embeds: [], components: withHome(comps)
     });
@@ -335,19 +410,23 @@ async function switchList(interaction, fromId, page = 0, search = '') {
 async function handleSwitch(interaction, a, b, c) {
     const CS = require('../utils/characterSwitch');
     if (a === 'h') return switchStart(interaction, b || 'mw');
-    if (a === 'o') return switchList(interaction, b);
-    if (a === 'f') return switchList(interaction, interaction.values?.[0]);
+    if (a === 'o') return switchFind(interaction, b);
+    if (a === 'f') return switchFind(interaction, interaction.values?.[0]);
     if (a === 'l') return switchList(interaction, b, c);
     if (a === 's') return interaction.showModal(searchForm(`ui:swm:${b}`, 'Search open characters'));
-    if (a === 't') {
-        let toId = interaction.values?.[0];
+    if (a === 't' || a === 'tb') {
+        let toId = a === 'tb' ? c : interaction.values?.[0];
         // 3.15: a 🟣 switch picks a Men's superstar; its LuchaDerpy version is what they switch to
         const { rows: fr } = await pool.query(`SELECT division FROM characters WHERE id = $1 AND guild_id = $2`, [b, interaction.guildId]);
         if (fr[0]?.division === 'luchaderpy') toId = (await openChar(interaction, toId, 'luchaderpy')).id;
         const { from, to, dual } = await CS.check(interaction.guildId, interaction.user.id, b, toId);
         const both = dual ? `\n⚠️ You already have **${to.name}** in the other color. Using the same superstar in both is up to staff.` : '';
-        return show(interaction, { content: `Switch **${from.name}** for **${to.name}**? Once staff approve it, **${to.name}** is yours and **${from.name}** becomes open. You can switch again after the cooldown.${both}`, embeds: [],
-            components: [row(btn(`ui:sw:y:${from.id}:${to.id}`, 'Yes, send it to staff', G), btn(`ui:sw:o:${from.id}`, 'Pick another'))] });
+        // 3.17: be clear this is a switch, and offer "add as another" instead (not for the single 🟣 slot)
+        const canAdd = from.division !== 'luchaderpy';
+        return show(interaction, { embeds: [],
+            content: `🔄 **This is a switch:** you **give up ${from.name}** and get **${to.name}**. Once staff approve it, **${from.name}** becomes open for someone else. You can switch again after the cooldown.${canAdd ? `\nWant to keep **${from.name}** too? Press ➕ to ask for **${to.name}** as an extra character instead.` : ''}${both}`,
+            components: [row(btn(`ui:sw:y:${from.id}:${to.id}`, clip(`🔄 Yes, switch (give up ${from.name})`, 80), G),
+                ...(canAdd ? [btn(`ui:rq:y:${to.id}`, clip(`➕ Keep ${from.name}, add ${to.name}`, 80), P)] : []), btn(`ui:sw:l:${from.id}:0`, 'Pick another'))] });
     }
     if (a === 'y') {
         const { from, to } = await CS.check(interaction.guildId, interaction.user.id, b, c);
@@ -355,7 +434,7 @@ async function handleSwitch(interaction, a, b, c) {
             `SELECT 1 FROM pending_requests WHERE guild_id = $1 AND request_type = 'character_switch' AND status = 'pending' AND requested_by = $2`, [interaction.guildId, interaction.user.id]);
         if (dupe.length) throw new UserError('You already have a switch waiting for staff. Cancel it in 📨 My requests to ask for a different one.');
         await require('../handlers/pendingQueue').postPendingCard(interaction.guild, { type: 'character_switch', characterId: to.id, challengerCharacterId: from.id, requestedBy: interaction.user.id, staffRoom: true });
-        return show(interaction, { content: `🔄 Switch request sent! Once staff approve it, you're **${to.name}** and you'll get a DM.`, embeds: [],
+        return show(interaction, { content: `🔄 Switch request sent! Once staff approve it, you're **${to.name}**, **${from.name}** becomes open, and you'll get a DM.`, embeds: [],
             components: withHome([row(btn('ui:mr:h', '📨 My requests'))]) });
     }
     throw new UserError('That button is from an older version of the bot.');
@@ -486,4 +565,4 @@ async function handle(interaction, parts) {
     throw new UserError('That button is from an older version of the bot.');
 }
 
-module.exports = { KINDS, handle, myRequests, menuPanel, usagePanel, cancelRequest };
+module.exports = { KINDS, handle, myRequests, menuPanel, usagePanel, cancelRequest, mineIn };
