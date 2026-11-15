@@ -304,6 +304,27 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         assert.strictEqual((await owner(ROMAN)).discord_id, before, 'players can\'t use it');
     });
 
+    await t('3.18.2: /character picture lists each superstar once and sets both versions; a 🟣-only player can change it', async () => {
+        const { autocompleteCharacters } = require('../src/utils/characterUtils');
+        const fake = { guildId: G, guild: { members: { fetch: async () => new Map() } } };
+        const ac = client.commands.get('character');
+        void ac;
+        assert.strictEqual((await autocompleteCharacters(fake, 'Dragon', { lucha: false })).length, 1);
+        const DL = await id('Dragon Lee'), DLL = (await lucha(DL)).id; // Dragon Lee: 🟣 only, played by u4
+        const mock = require('./mock');
+        const img = require('../src/utils/imageUrl');
+        const { createCanvas } = require('@napi-rs/canvas');
+        const real = img.downloadImage;
+        img.downloadImage = async () => { const c = createCanvas(300, 400); c.getContext('2d').fillRect(0, 0, 300, 400); return c.toBuffer('image/png'); };
+        const att = { url: 'https://cdn.discordapp.com/x/mask.png', contentType: 'image/png', size: 1000, name: 'mask.png' };
+        let i;
+        try { i = await run('character', 'picture', { character: DLL, picture: att }, P('u4')); } finally { img.downloadImage = real; }
+        assert.ok(!/only change the picture/.test(text(i)), text(i));
+        const pics = (await q(`select image_url from characters where id = any($1) order by id`, [[DL, DLL]])).map((r) => r.image_url);
+        assert.deepStrictEqual(pics, [`db:${DL}`, `db:${DL}`]);
+        void mock;
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
     await f.pool.end();

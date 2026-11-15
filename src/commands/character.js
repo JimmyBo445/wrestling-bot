@@ -170,7 +170,7 @@ module.exports = {
         const focused = interaction.options.getFocused();
         const sub = interaction.options.getSubcommand(false);
         // 3.15.1: one overall per superstar, so the overall search lists each superstar once
-        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: !['overall', 'give'].includes(sub), claimed: sub === 'take' }));
+        return interaction.respond(await autocompleteCharacters(interaction, focused, { statuses: STATUS_BY_SUB[sub] || ['approved'], lucha: !['overall', 'give', 'picture'].includes(sub), claimed: sub === 'take' }));
     },
 
     async execute(interaction) {
@@ -364,13 +364,15 @@ module.exports = {
         }
 
         if (sub === 'picture') {
-            const character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired', 'pending'] });
-            const mine = character.owner_discord_id === interaction.user.id;
+            let character = await requireCharacter(guildId, interaction.options.getString('character'), { statuses: ['approved', 'retired', 'pending'] });
+            // 3.18.2: one picture per superstar: a 🟣 LuchaDerpy version always shows its Men's superstar's picture
+            if (character.division === 'luchaderpy' && character.base_character_id) character = await requireCharacter(guildId, character.base_character_id, { statuses: ['approved', 'retired', 'pending'] });
+            const other = await require('../utils/lucha').otherHalf(character);
+            const mine = character.owner_discord_id === interaction.user.id || (other && !other.unclaimed && other.owner_discord_id === interaction.user.id);
             if (!mine && !isAdmin(interaction)) throw new UserError('You can only change the picture of your own characters (admins can change anyone\'s).');
             await interaction.deferReply({ flags: 64 });
             const upload = await readUpload(interaction);
-            await pool.query(`UPDATE characters SET image_url = $1 WHERE id = $2`, [await saveCharacterImage(character.id, upload), character.id]);
-            if (character.division === 'mens') await require('../utils/lucha').syncFromBase(character.id, character); // 3.15: the 🟣 version follows
+            await pool.query(`UPDATE characters SET image_url = $1 WHERE guild_id = $3 AND (id = $2 OR base_character_id = $2)`, [await saveCharacterImage(character.id, upload), character.id, guildId]);
             if (!mine) await logAudit(guildId, interaction.user.id, 'character_edited', { id: character.id, changed: ['picture'] });
             return interaction.editReply({ content: `Updated the picture for **${character.name}**. See it with \`/character profile\`.` });
         }

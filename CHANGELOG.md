@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.18.2
+- `/character picture`: a superstar used in LuchaDerpy no longer shows up twice. Each superstar is listed once, with whoever plays it.
+- One picture per superstar: changing it updates the Men's and LuchaDerpy versions together. A player who only has the superstar as 🟣 LuchaDerpy can change it too.
+
 ## 3.18.1
 - **📣 Post bracket here** now lists the matches to play under the bracket picture, written like a posted card: `1. @player (Wrestler) vs @player (Wrestler)`, grouped by round, and the players are pinged. Only matches that are ready (everyone known, no winner yet) are listed.
 
