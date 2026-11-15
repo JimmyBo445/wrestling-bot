@@ -46,18 +46,20 @@ const card = async (r) => (await require('../src/handlers/pendingQueue').buildPe
         assert.ok(labels(i).includes('A–I') && ids(i).includes(`ui:sw:l:${JEY}:1:j`), labels(i).join(' | '));
     });
 
-    await t('the name box opens first (one division), and empty shows the full list', async () => {
-        let i = await click('ui:rq:h:mens', P('u2'));
-        assert.ok(i.responses.some((r) => r.type === 'modal'), 'request from a Men\'s roster channel');
-        i = await click('ui:rqm:mens:mens', priv({ ...P('u2'), fields: { name: '' } }));
+    await t('3.17.1: the list comes first; the name box only opens from 🔎 Search by name (empty = full list)', async () => {
+        let i = await click('ui:rq:h:mens', priv(P('u2')));
+        assert.ok(!i.responses.some((r) => r.type === 'modal'));
         assert.match(text(i), /Request a Men's character/);
+        assert.ok(labels(i).includes('A–I') && ids(i).includes('ui:rq:s:mens:mens'));
+        i = await click('ui:rq:s:mens:mens', priv(P('u2')));
+        assert.ok(i.responses.some((r) => r.type === 'modal'));
+        i = await click('ui:rqm:mens:mens', priv({ ...P('u2'), fields: { name: '' } }));
         assert.ok(labels(i).includes('A–I'));
-        i = await click('ui:rq:h:mw', priv(P('u2')));
-        assert.ok(!i.responses.some((r) => r.type === 'modal'), 'several divisions → pick the division first');
-        i = await click('ui:sw:h:mens', P('u1'));
-        assert.ok(i.responses.some((r) => r.type === 'modal'), 'switch with one character');
-        i = await click(`ui:sw:o:${JEY}`, P('u1'));
-        assert.ok(i.responses.some((r) => r.type === 'modal'), 'switch from My Wrestlers');
+        for (const b of ['ui:sw:h:mens', `ui:sw:o:${JEY}`]) {
+            i = await click(b, priv(P('u1')));
+            assert.ok(!i.responses.some((r) => r.type === 'modal'), b);
+            assert.ok(ids(i).includes(`ui:sw:s:${JEY}`) && labels(i).includes('A–I'), b);
+        }
     });
 
     await t('search results are buttons: tap the name', async () => {

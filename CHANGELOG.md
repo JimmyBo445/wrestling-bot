@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.17.1
+- Request and Switch show the A–Z list first again (with the letter buttons). The name box only opens when you press 🔎 Search by name.
+
 ## 3.17.0 — Easier Request and Switch
 - **Letter buttons instead of ◀ ▶.** The open-character list has buttons like **A–I, I–R, R–W**. One tap jumps to that part of the A–Z list.
 - **The name box opens first.** Pressing 🙋 Request a character (in a division's roster channel) or 🔄 Switch character opens a box right away: type part of a name, or leave it empty to see the whole list.

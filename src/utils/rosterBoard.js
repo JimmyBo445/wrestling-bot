@@ -110,7 +110,7 @@ function infoFor(divs) {
     const make = divs.some((d) => ['custom', 'custom_womens'].includes(d));
     const scope = req.length === 1 ? req[0] : 'mw';
     const lines = [];
-    if (req.length) lines.push('👇 **Press a button under this message.** A box pops up: type part of a name and tap the one you want, or leave it empty to see the whole A–Z list.'); // 3.17
+    if (req.length) lines.push('👇 **Press a button under this message.** You get the A–Z list of open characters: tap a letter button to jump, or press 🔎 Search by name, type part of a name and tap the one you want.'); // 3.17
     const normal = req.filter((d) => d !== 'luchaderpy');
     if (normal.length) lines.push(`• **Want a ${normal.map((d) => DIVISION_LABELS[d]).join(' or ')} character?** Press 🙋 Request a character and pick an ⚪ open one. Staff approve it.`);
     if (req.includes('luchaderpy')) lines.push('• **Want a 🟣 LuchaDerpy character?** LuchaDerpy uses the Men\'s roster. Press 🙋 Request a character and pick an ⚪ open superstar. It\'s an extra slot on top of your normal ones. Staff approve it.');

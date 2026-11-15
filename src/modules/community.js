@@ -301,10 +301,8 @@ async function openChar(interaction, charId, div = null) {
 
 async function handleRequestChar(interaction, a, b, c) {
     if (a === 'h') {
-        // 3.17: with one division the name box opens straight away (empty = the full list)
-        const divs = scopeDivs(b || 'mw');
-        if (divs.length === 1 && interaction.isButton?.()) return interaction.showModal(searchForm(`ui:rqm:${b}:${divs[0]}`, `Find an open ${DIVISION_LABELS[divs[0]]} character`));
-        return requestList(interaction, b || 'mw', divs[0]);
+        // 3.17.1: the list comes first; 🔎 Search by name is optional
+        return requestList(interaction, b || 'mw', scopeDivs(b || 'mw')[0]);
     }
     if (a === 'l') return requestList(interaction, b, c, (interaction.customId.split(':')[5]) || 0);
     if (a === 's') return interaction.showModal(searchForm(`ui:rqm:${b}:${c}`, `Search open ${DIVISION_LABELS[c] || ''} characters`));
@@ -372,12 +370,8 @@ async function switchStart(interaction, scope) {
         components: withHome([select('ui:sw:f', 'Pick the one to switch out', rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), description: DIVISION_LABELS[r.division] })))]) });
 }
 
-/** 3.17: opens the name box straight away (empty = the full list). Checks first that this character can be switched. */
-async function switchFind(interaction, fromId) {
-    const { from } = await require('../utils/characterSwitch').check(interaction.guildId, interaction.user.id, fromId, null);
-    if (!interaction.isButton?.() && !interaction.isStringSelectMenu?.()) return switchList(interaction, from.id);
-    return interaction.showModal(searchForm(`ui:swm:${from.id}`, clip(`Switch ${from.name} for…`, 45)));
-}
+/** 3.17.1: the list comes first; 🔎 Search by name is optional. */
+const switchFind = (interaction, fromId) => switchList(interaction, fromId);
 
 async function switchList(interaction, fromId, page = 0, search = '') {
     const CS = require('../utils/characterSwitch');
