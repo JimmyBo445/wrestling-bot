@@ -16,10 +16,12 @@ const data = new SlashCommandBuilder()
     .setName('tournament')
     .setDescription('Single-elimination tournaments with a bracket picture')
     .setDMPermission(false)
-    .addSubcommand((s) => s.setName('create').setDescription('[Admin] Create a tournament (4 to 16 singles wrestlers)')
+    .addSubcommand((s) => s.setName('create').setDescription('[Admin] Create a tournament (4 to 16 wrestlers; 6 to 24 with a triple-threat first round)')
         .addStringOption((o) => o.setName('name').setDescription('e.g. King of the Ring').setRequired(true).setMaxLength(50))
         .addStringOption((o) => o.setName('division').setDescription('Division').setRequired(true).addChoices(...DIVS))
-        .addStringOption((o) => o.setName('title').setDescription('Optional: the winner is crowned champion of this singles title').setRequired(false).setAutocomplete(true)))
+        .addStringOption((o) => o.setName('title').setDescription('Optional: the winner is crowned champion of this singles title').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('first_round').setDescription('First round: one-on-one (default) or triple threats (winners then go one-on-one)').setRequired(false)
+            .addChoices({ name: 'One-on-one', value: 'singles' }, { name: 'Triple threats (e.g. 12 wrestlers: 4 triple threats, semi-finals, final)', value: 'triple' })))
     .addSubcommand((s) => {
         s.setName('add').setDescription('[Admin] Add wrestlers to a tournament that has not started').addStringOption((o) => tourOpt(o));
         s.addStringOption((o) => o.setName('wrestler1').setDescription('Wrestler').setRequired(true).setAutocomplete(true));
@@ -34,7 +36,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('advance').setDescription('[Admin] Decide a bracket match without logging a match (forfeit, walkover)')
         .addStringOption((o) => tourOpt(o))
         .addIntegerOption((o) => o.setName('bracket_match').setDescription('Which bracket match').setRequired(true).setAutocomplete(true))
-        .addIntegerOption((o) => o.setName('winner').setDescription('Top or bottom wrestler advances').setRequired(true).addChoices({ name: 'Top wrestler', value: 1 }, { name: 'Bottom wrestler', value: 2 })))
+        .addIntegerOption((o) => o.setName('winner').setDescription('Top or bottom wrestler advances').setRequired(true).addChoices({ name: 'Top wrestler', value: 1 }, { name: 'Bottom / second wrestler', value: 2 }, { name: 'Third wrestler (triple threat)', value: 3 })))
     .addSubcommand((s) => s.setName('cancel').setDescription('[Admin] Cancel a tournament').addStringOption((o) => tourOpt(o)));
 
 async function sendBracket(interaction, tour, extra = {}) {
@@ -62,11 +64,11 @@ module.exports = {
             const tid = interaction.options.getString('tournament');
             if (!tid || !/^\d+$/.test(tid)) return interaction.respond([]);
             const { rows } = await pool.query(
-                `SELECT tm.id, tm.round, tm.slot, a.name AS a, b.name AS b FROM tournament_matches tm
+                `SELECT tm.id, tm.round, tm.slot, a.name AS a, b.name AS b, c.name AS c FROM tournament_matches tm
                  JOIN tournaments t ON t.id = tm.tournament_id
-                 JOIN characters a ON a.id = tm.a_id JOIN characters b ON b.id = tm.b_id
+                 JOIN characters a ON a.id = tm.a_id JOIN characters b ON b.id = tm.b_id LEFT JOIN characters c ON c.id = tm.c_id
                  WHERE t.id = $1 AND t.guild_id = $2 AND tm.winner_id IS NULL ORDER BY tm.round, tm.slot LIMIT 25`, [tid, interaction.guildId]);
-            return interaction.respond(rows.map((r) => ({ name: `Round ${r.round}, match ${r.slot}: ${r.a} vs ${r.b}`.slice(0, 100), value: Number(r.id) })));
+            return interaction.respond(rows.map((r) => ({ name: `Round ${r.round}, match ${r.slot}: ${[r.a, r.b, r.c].filter(Boolean).join(' vs ')}`.slice(0, 100), value: Number(r.id) })));
         }
         if (focused.name === 'wrestler' && interaction.options.getSubcommand(false) === 'remove') {
             const tid = interaction.options.getString('tournament');
@@ -96,11 +98,13 @@ module.exports = {
                 if (title.is_tag_title) throw new UserError('Tournaments are for singles wrestlers, so pick a singles title.');
                 if (title.division !== division) throw new UserError(`The **${title.name}** belongs to a different division.`);
             }
+            const format = interaction.options.getString('first_round') === 'triple' ? 'triple' : 'singles'; // 3.18
             const { rows } = await pool.query(
-                `INSERT INTO tournaments (guild_id, name, division, title_id, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-                [guildId, interaction.options.getString('name').trim(), division, title?.id || null, interaction.user.id]);
-            await logAudit(guildId, interaction.user.id, 'tournament_created', { id: rows[0].id });
-            return respond(interaction, { content: `🏟️ Tournament **${interaction.options.getString('name').trim()}** created${title ? ` (the winner becomes ${title.name} champion)` : ''}. Add ${T.MIN_ENTRANTS} to ${T.MAX_ENTRANTS} wrestlers and start it from \`/tournament view\`.` });
+                `INSERT INTO tournaments (guild_id, name, division, title_id, created_by, format) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+                [guildId, interaction.options.getString('name').trim(), division, title?.id || null, interaction.user.id, format]);
+            await logAudit(guildId, interaction.user.id, 'tournament_created', { id: rows[0].id, format });
+            const fake = { format };
+            return respond(interaction, { content: `🏟️ Tournament **${interaction.options.getString('name').trim()}** created${title ? ` (the winner becomes ${title.name} champion)` : ''}${format === 'triple' ? ', with a **triple-threat first round**' : ''}. Add ${T.minFor(fake)} to ${T.maxFor(fake)} wrestlers and start it from \`/tournament view\`.${format === 'triple' ? ' Before you start, 🎯 Pick first-round matches lets you choose who is in which triple threat.' : ''}` });
         }
 
         if (sub === 'add' || sub === 'remove') {
@@ -118,7 +122,7 @@ module.exports = {
                 const c = await requireCharacter(guildId, v, { statuses: ['approved'], claimed: true });
                 if (c.division !== tour.division) throw new UserError(`**${c.name}** is in a different division than this tournament.`);
                 const { rows: n } = await pool.query(`SELECT COUNT(*)::int AS n FROM tournament_entrants WHERE tournament_id = $1`, [tour.id]);
-                if (n[0].n >= T.MAX_ENTRANTS) throw new UserError(`A tournament holds at most ${T.MAX_ENTRANTS} wrestlers.`);
+                if (n[0].n >= T.maxFor(tour)) throw new UserError(`${T.isTriple(tour) ? 'A tournament with a triple-threat first round' : 'A tournament'} holds at most ${T.maxFor(tour)} wrestlers.`);
                 const { rowCount } = await pool.query(`INSERT INTO tournament_entrants (tournament_id, character_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [tour.id, c.id]);
                 (rowCount ? added : skipped).push(c.name);
             }
@@ -134,7 +138,9 @@ module.exports = {
             await logAudit(guildId, interaction.user.id, 'tournament_started', { id: tour.id, entrants: res.entrants });
             const fresh = (await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [tour.id])).rows[0];
             return interaction.editReply(await sendBracket(interaction, fresh, {
-                content: `🏟️ **${tour.name}** is on! ${res.entrants} wrestlers, ${res.rounds} round${res.rounds === 1 ? '' : 's'}${res.byes ? `, ${res.byes} bye${res.byes === 1 ? '' : 's'}` : ''}. Log each match with \`/match log\` (or through your card) and the bracket advances by itself.`
+                content: res.triple
+                    ? `🏟️ **${tour.name}** is on! ${res.entrants} wrestlers. First round: ${[res.triples && `${res.triples} triple threat${res.triples === 1 ? '' : 's'}`, res.singles && `${res.singles} singles match${res.singles === 1 ? '' : 'es'}`, res.byes && `${res.byes} bye${res.byes === 1 ? '' : 's'}`].filter(Boolean).join(', ')}. The winners then go one-on-one. Log each match with \`/match log\` (Triple Threat for the first round) or through your card, and the bracket advances by itself.`
+                    : `🏟️ **${tour.name}** is on! ${res.entrants} wrestlers, ${res.rounds} round${res.rounds === 1 ? '' : 's'}${res.byes ? `, ${res.byes} bye${res.byes === 1 ? '' : 's'}` : ''}. Log each match with \`/match log\` (or through your card) and the bracket advances by itself.`
             }));
         }
 
@@ -163,7 +169,9 @@ module.exports = {
                 const { rows } = await client.query(`SELECT * FROM tournament_matches WHERE id = $1 AND tournament_id = $2 FOR UPDATE`, [tmId, tour.id]);
                 const tm = rows[0];
                 if (!tm || tm.winner_id || !tm.a_id || !tm.b_id) throw new UserError('Pick an undecided bracket match from the list.');
-                return T.placeWinner(client, tm, interaction.options.getInteger('winner') === 1 ? tm.a_id : tm.b_id);
+                const who = [tm.a_id, tm.b_id, tm.c_id][interaction.options.getInteger('winner') - 1];
+                if (!who) throw new UserError('That match has no third wrestler.');
+                return T.placeWinner(client, tm, who);
             });
             await logAudit(guildId, interaction.user.id, 'tournament_advanced', { id: tour.id, match: tmId });
             const fresh = (await pool.query(`SELECT * FROM tournaments WHERE id = $1`, [tour.id])).rows[0];

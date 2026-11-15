@@ -5,10 +5,21 @@ const { vacateTitle, startReign, setVacancy } = require('./titleLogic');
 
 const MIN_ENTRANTS = 4;
 const MAX_ENTRANTS = 16;
+// 3.18: a triple-threat first round (winners then go one-on-one)
+const TRIPLE_MIN = 6;
+const TRIPLE_MAX = 24;
+const isTriple = (t) => t?.format === 'triple';
+const minFor = (t) => (isTriple(t) ? TRIPLE_MIN : MIN_ENTRANTS);
+const maxFor = (t) => (isTriple(t) ? TRIPLE_MAX : MAX_ENTRANTS);
+/** How many first-round matches a triple-threat tournament with n wrestlers has. */
+const groupCount = (n) => Math.max(2, Math.ceil(n / 3));
+/** Round-1 slots for the groups, spread so an empty slot always sits next to a real match (odd slots first). */
+const slotOrder = (P) => [...Array.from({ length: P / 2 }, (_, i) => 2 * i + 1), ...Array.from({ length: P / 2 }, (_, i) => 2 * i + 2)];
 
 const nextPow2 = (n) => 2 ** Math.ceil(Math.log2(n));
 
-function roundName(round, rounds) {
+function roundName(round, rounds, triple = false) {
+    if (triple && round === 1) return 'First round';
     const fromEnd = rounds - round;
     if (fromEnd === 0) return 'Final';
     if (fromEnd === 1) return 'Semi-finals';
@@ -55,8 +66,13 @@ async function placeWinner(client, tm, winnerId) {
     }
     const nextSlot = Math.ceil(tm.slot / 2);
     const col = tm.slot % 2 === 1 ? 'a_id' : 'b_id';
-    await client.query(`UPDATE tournament_matches SET ${col} = $3 WHERE tournament_id = $1 AND round = $2 AND slot = $4`, [tm.tournament_id, tm.round + 1, winnerId, nextSlot]);
-    return { finished: false, tournament: tour, nextRound: roundName(tm.round + 1, rounds) };
+    const { rows: nx } = await client.query(`UPDATE tournament_matches SET ${col} = $3 WHERE tournament_id = $1 AND round = $2 AND slot = $4 RETURNING *`, [tm.tournament_id, tm.round + 1, winnerId, nextSlot]);
+    // 3.18: if the other half of that match is an empty first-round slot, there is nobody to face: move straight on
+    if (tm.round === 1 && nx[0]) {
+        const { rows: sib } = await client.query(`SELECT a_id FROM tournament_matches WHERE tournament_id = $1 AND round = 1 AND slot = $2`, [tm.tournament_id, tm.slot % 2 === 1 ? tm.slot + 1 : tm.slot - 1]);
+        if (sib[0] && !sib[0].a_id) return placeWinner(client, nx[0], winnerId);
+    }
+    return { finished: false, tournament: tour, nextRound: roundName(tm.round + 1, rounds, isTriple(tour)) };
 }
 
 async function startTournament(guildId, tournamentId) {
@@ -67,7 +83,8 @@ async function startTournament(guildId, tournamentId) {
         if (tour.status !== 'signup') throw new UserError('That tournament has already started.');
         const { rows: ents } = await client.query(
             `SELECT te.character_id FROM tournament_entrants te JOIN characters c ON c.id = te.character_id WHERE te.tournament_id = $1 AND c.status = 'approved'`, [tour.id]);
-        if (ents.length < MIN_ENTRANTS) throw new UserError(`A tournament needs at least ${MIN_ENTRANTS} wrestlers. Add more with \`/tournament view\`.`);
+        if (ents.length < minFor(tour)) throw new UserError(`${isTriple(tour) ? 'A tournament with a triple-threat first round' : 'A tournament'} needs at least ${minFor(tour)} wrestlers. Add more with \`/tournament view\`.`);
+        if (isTriple(tour)) return startTriple(client, tour);
         const order = ents.map((e) => String(e.character_id));
         for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
         const P = nextPow2(order.length);
@@ -87,24 +104,62 @@ async function startTournament(guildId, tournamentId) {
     });
 }
 
-/** Advances the bracket from a logged singles match. Never throws: logging the match matters more. */
+/**
+ * 3.18: draws a triple-threat first round. Wrestlers the staff placed keep their match; the rest are drawn at
+ * random, filling the matches in order. A match with 3 is a triple threat, with 2 a singles match, with 1 a bye.
+ * The winners meet one-on-one from round 2. Runs inside startTournament's transaction.
+ */
+async function startTriple(client, tour) {
+    const { rows: ents } = await client.query(
+        `SELECT te.character_id, te.grp FROM tournament_entrants te JOIN characters c ON c.id = te.character_id WHERE te.tournament_id = $1 AND c.status = 'approved'`, [tour.id]);
+    const G = groupCount(ents.length);
+    const groups = Array.from({ length: G }, () => []);
+    const loose = [];
+    for (const e of ents) {
+        const g = groups[(e.grp || 0) - 1];
+        if (g && g.length < 3) g.push(String(e.character_id)); else loose.push(String(e.character_id));
+    }
+    for (let i = loose.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [loose[i], loose[j]] = [loose[j], loose[i]]; }
+    for (const id of loose) (groups.find((g) => g.length < 3) || groups[groups.length - 1]).push(id); // fill match 1, then 2… so leftovers land in the last match
+    const P = nextPow2(G);
+    const rounds = 1 + Math.log2(P);
+    const order = slotOrder(P);
+    const bySlot = new Map(groups.map((g, i) => [order[i], g]));
+    for (let s = 1; s <= P; s++) {
+        const g = bySlot.get(s) || [];
+        await client.query(`INSERT INTO tournament_matches (tournament_id, round, slot, a_id, b_id, c_id) VALUES ($1, 1, $2, $3, $4, $5)`, [tour.id, s, g[0] || null, g[1] || null, g[2] || null]);
+    }
+    for (let r = 2; r <= rounds; r++) {
+        for (let s = 1; s <= P / 2 ** (r - 1); s++) await client.query(`INSERT INTO tournament_matches (tournament_id, round, slot) VALUES ($1, $2, $3)`, [tour.id, r, s]);
+    }
+    await client.query(`UPDATE tournaments SET status = 'active' WHERE id = $1`, [tour.id]);
+    const { rows: byes } = await client.query(`SELECT * FROM tournament_matches WHERE tournament_id = $1 AND round = 1 AND a_id IS NOT NULL AND b_id IS NULL ORDER BY slot`, [tour.id]);
+    for (const bye of byes) await placeWinner(client, bye, bye.a_id);
+    return { tournament: tour, entrants: ents.length, rounds, byes: byes.length, triple: true,
+        triples: groups.filter((g) => g.length === 3).length, singles: groups.filter((g) => g.length === 2).length };
+}
+
+/** Advances the bracket from a logged singles or triple threat match. Never throws: logging the match matters more. */
 async function advanceFromMatch(guildId, matchId, matchType, characters, winnerIdx, resultType) {
     try {
-        if (matchType !== 'singles' || resultType !== 'decisive' || winnerIdx.length !== 1) return null;
-        const [x, y] = characters.map((c) => String(c.id));
+        const size = { singles: 2, triple_threat: 3 }[matchType];
+        if (!size || characters.length !== size || resultType !== 'decisive' || winnerIdx.length !== 1) return null;
+        const ids = characters.map((c) => String(c.id));
         const winner = String(characters[winnerIdx[0]].id);
         return await withTransaction(async (client) => {
+            // the bracket match with exactly these wrestlers (in any order)
             const { rows } = await client.query(
-                `SELECT tm.*, t.name AS tname FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id
+                `SELECT tm.*, t.name AS tname, t.format FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id
                  WHERE t.guild_id = $1 AND t.status = 'active' AND tm.winner_id IS NULL AND tm.a_id IS NOT NULL AND tm.b_id IS NOT NULL
-                   AND ((tm.a_id::text = $2 AND tm.b_id::text = $3) OR (tm.a_id::text = $3 AND tm.b_id::text = $2))
-                 ORDER BY tm.round LIMIT 1 FOR UPDATE OF tm`, [guildId, x, y]);
+                   AND (SELECT array_agg(x ORDER BY x) FROM unnest(ARRAY[tm.a_id, tm.b_id, tm.c_id]) x WHERE x IS NOT NULL)
+                     = (SELECT array_agg(y ORDER BY y) FROM unnest($2::bigint[]) y)
+                 ORDER BY tm.round LIMIT 1 FOR UPDATE OF tm`, [guildId, ids]);
             const tm = rows[0];
             if (!tm) return null;
             await client.query(`UPDATE tournament_matches SET match_id = $2 WHERE id = $1`, [tm.id, matchId]);
             const { rows: mx } = await client.query(`SELECT MAX(round)::int AS r FROM tournament_matches WHERE tournament_id = $1`, [tm.tournament_id]);
             const res = await placeWinner(client, { ...tm, match_id: matchId }, winner);
-            return { ...res, name: tm.tname, round: roundName(tm.round, mx[0].r), winnerId: winner };
+            return { ...res, name: tm.tname, round: roundName(tm.round, mx[0].r, tm.format === 'triple'), winnerId: winner };
         });
     } catch (err) {
         console.error('Could not advance tournament:', err.message);
@@ -122,11 +177,22 @@ async function revertTournamentMatch(client, matchId) {
         if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/title manage`), then undo the match.');
         await client.query(`UPDATE tournaments SET status = 'active', winner_id = NULL, winner_name = NULL WHERE id = $1`, [tm.tournament_id]);
     } else {
-        const nextSlot = Math.ceil(tm.slot / 2);
-        const { rows: nx } = await client.query(`SELECT * FROM tournament_matches WHERE tournament_id = $1 AND round = $2 AND slot = $3`, [tm.tournament_id, tm.round + 1, nextSlot]);
-        if (nx[0]?.winner_id) throw new UserError('The next round of that bracket has already been decided. Undo that match first.');
-        const col = tm.slot % 2 === 1 ? 'a_id' : 'b_id';
-        await client.query(`UPDATE tournament_matches SET ${col} = NULL WHERE id = $1`, [nx[0].id]);
+        // walk forward: the winner's own place, plus any match they passed straight through (3.18: empty first-round slot)
+        let cur = tm;
+        const chain = [];
+        for (;;) {
+            const { rows: nx } = await client.query(`SELECT * FROM tournament_matches WHERE tournament_id = $1 AND round = $2 AND slot = $3`, [cur.tournament_id, cur.round + 1, Math.ceil(cur.slot / 2)]);
+            const next = nx[0];
+            if (!next) break;
+            const col = cur.slot % 2 === 1 ? 'a_id' : 'b_id';
+            const passedThrough = next.winner_id && !next.match_id && (!next.a_id || !next.b_id) && String(next.winner_id) === String(tm.winner_id);
+            if (next.winner_id && !passedThrough) throw new UserError('The next round of that bracket has already been decided. Undo that match first.');
+            chain.push({ id: next.id, col, passedThrough });
+            if (!passedThrough) break;
+            cur = next;
+        }
+        if (chain.some((c) => c.passedThrough) && tm.status === 'finished') await client.query(`UPDATE tournaments SET status = 'active', winner_id = NULL, winner_name = NULL WHERE id = $1`, [tm.tournament_id]);
+        for (const c of chain) await client.query(`UPDATE tournament_matches SET ${c.col} = NULL${c.passedThrough ? ', winner_id = NULL' : ''} WHERE id = $1`, [c.id]);
     }
     await client.query(`UPDATE tournament_matches SET winner_id = NULL, match_id = NULL WHERE id = $1`, [tm.id]);
 }
@@ -134,26 +200,32 @@ async function revertTournamentMatch(client, matchId) {
 /** Everything the bracket picture needs. */
 async function bracketData(guild, tournament) {
     const { rows } = await pool.query(
-        `SELECT tm.*, a.name AS a_name, b.name AS b_name, a.image_url AS a_img, b.image_url AS b_img
-         FROM tournament_matches tm LEFT JOIN characters a ON a.id = tm.a_id LEFT JOIN characters b ON b.id = tm.b_id
+        `SELECT tm.*, a.name AS a_name, b.name AS b_name, c.name AS c_name, a.image_url AS a_img, b.image_url AS b_img, c.image_url AS c_img
+         FROM tournament_matches tm LEFT JOIN characters a ON a.id = tm.a_id LEFT JOIN characters b ON b.id = tm.b_id LEFT JOIN characters c ON c.id = tm.c_id
          WHERE tm.tournament_id = $1 ORDER BY tm.round, tm.slot`, [tournament.id]);
     const rounds = rows.length ? Math.max(...rows.map((r) => r.round)) : 0;
     const { rows: ch } = tournament.winner_id ? await pool.query(`SELECT name, image_url FROM characters WHERE id = $1`, [tournament.winner_id]) : { rows: [] };
+    const triple = isTriple(tournament);
+    const empty = new Set(rows.filter((r) => r.round === 1 && !r.a_id && triple).map((r) => r.slot)); // 3.18: unused first-round slots
     return {
-        serverName: guild?.name || null,
+        serverName: guild?.name || null, triple,
         name: tournament.name, division: tournament.division, status: tournament.status, rounds,
         titleName: tournament.title_id ? (await pool.query(`SELECT name FROM titles WHERE id = $1`, [tournament.title_id])).rows[0]?.name : null,
         champion: ch[0] ? { name: ch[0].name, imageUrl: ch[0].image_url } : null,
         matches: rows.map((r) => ({
-            round: r.round, slot: r.slot, roundName: roundName(r.round, rounds), bye: r.round === 1 && !r.b_id && Boolean(r.a_id),
+            round: r.round, slot: r.slot, roundName: roundName(r.round, rounds, triple), bye: r.round === 1 && !r.b_id && Boolean(r.a_id),
+            empty: r.round === 1 && empty.has(r.slot),
+            // a round-2 place fed by an unused slot is a bye for whoever comes from the other side
+            aBye: r.round === 2 && empty.has(r.slot * 2 - 1), bBye: r.round === 2 && empty.has(r.slot * 2),
             a: r.a_id ? { id: String(r.a_id), name: r.a_name, imageUrl: r.a_img } : null,
             b: r.b_id ? { id: String(r.b_id), name: r.b_name, imageUrl: r.b_img } : null,
+            c: r.c_id ? { id: String(r.c_id), name: r.c_name, imageUrl: r.c_img } : null,
             winnerId: r.winner_id ? String(r.winner_id) : null
         }))
     };
 }
 
 module.exports = {
-    MIN_ENTRANTS, MAX_ENTRANTS, roundName, requireTournament, autocompleteTournaments, placeWinner,
+    MIN_ENTRANTS, MAX_ENTRANTS, TRIPLE_MIN, TRIPLE_MAX, isTriple, minFor, maxFor, groupCount, roundName, requireTournament, autocompleteTournaments, placeWinner,
     startTournament, advanceFromMatch, revertTournamentMatch, bracketData
 };

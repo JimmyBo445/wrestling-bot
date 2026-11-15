@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.18.0 — Triple-threat tournaments
+- `/tournament create` has a new **first_round** choice: **One-on-one** (as before) or **Triple threats**. With triple threats, the first round is triple threats and the winners then go one-on-one. 12 wrestlers = 4 triple threats, 2 semi-finals, the final.
+- **You pick the matches.** On the tournament screen, **🎯 Pick first-round matches** lets staff choose up to 3 wrestlers for each match. Anyone not placed is drawn at random when you press Start.
+- Works with 6 to 24 wrestlers. If the number doesn't divide by 3, the last match is a singles match (2 left over) or a bye (1 left over). If the number of first-round winners is uneven (for example 9 wrestlers), one winner gets a bye in the next round.
+- Log the first round with `/match log` as a **Triple Threat** (or through your card) and the bracket advances by itself. Only the winner moves on. 🏁 Decide a match has a button for each of the three.
+- The bracket picture shows three names per first-round match.
+- Normal one-on-one tournaments are unchanged.
+- Database change: migration 032.
+
 ## 3.17.1
 - Request and Switch show the A–Z list first again (with the letter buttons). The name box only opens when you press 🔎 Search by name.
 

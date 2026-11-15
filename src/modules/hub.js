@@ -364,7 +364,9 @@ async function tournamentView(interaction, id, notice = null) {
         if (isAdmin(interaction)) {
             if (tour.status === 'signup') {
                 components.push(row(btn(`ui:pg:tn+:${tour.id}:${tour.division}:0`, '➕ Add wrestler', G), btn(`ui:tn:rm:${tour.id}`, '➖ Remove wrestler'),
+                    ...(T.isTriple(tour) ? [btn(`ui:tn:g:${tour.id}`, '🎯 Pick first-round matches', P)] : []),
                     btn(`ui:tn:sq:${tour.id}`, '▶️ Start (draw the bracket)', P), btn(`ui:tn:cq:${tour.id}`, '✖ Cancel', D)));
+                if (T.isTriple(tour)) p.content = [p.content, '_First round is **triple threats**; the winners then go one-on-one. 🎯 lets you choose who is in which match._'].filter(Boolean).join('\n');
             } else if (tour.status === 'active') {
                 components.push(row(btn(`ui:tn:d:${tour.id}:0`, '🏁 Decide a match', P), btn(`ui:tn:post:${tour.id}`, '📣 Post bracket here'), btn(`ui:tn:cq:${tour.id}`, '✖ Cancel', D)));
             } else {
@@ -391,23 +393,47 @@ async function decidePanel(interaction, id, page = 0) {
         const T = require('../utils/tournamentUtils');
         const tour = await T.requireTournament(interaction.guildId, id, { statuses: ['active'] });
         const { rows } = await pool.query(
-            `SELECT tm.id, tm.round, tm.slot, a.name AS a, b.name AS b FROM tournament_matches tm
-             JOIN characters a ON a.id = tm.a_id JOIN characters b ON b.id = tm.b_id
+            `SELECT tm.id, tm.round, tm.slot, a.name AS a, b.name AS b, c.name AS c FROM tournament_matches tm
+             JOIN characters a ON a.id = tm.a_id JOIN characters b ON b.id = tm.b_id LEFT JOIN characters c ON c.id = tm.c_id
              WHERE tm.tournament_id = $1 AND tm.winner_id IS NULL ORDER BY tm.round, tm.slot`, [tour.id]);
         const per = 3;
         const pages = Math.max(1, Math.ceil(rows.length / per));
         const pg = Math.min(Math.max(0, Number(page) || 0), pages - 1);
         const list = rows.slice(pg * per, pg * per + per);
         const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`🏁 ${tour.name}: decide a match`)
-            .setDescription(rows.length ? `Tap who **advances**. Use this for forfeits and walkovers, or results you didn't log as a match.\n\n${list.map((m) => `**Round ${m.round}, match ${m.slot}:** ${m.a} vs ${m.b}`).join('\n')}`
+            .setDescription(rows.length ? `Tap who **advances**. Use this for forfeits and walkovers, or results you didn't log as a match.\n\n${list.map((m) => `**Round ${m.round}, match ${m.slot}:** ${[m.a, m.b, m.c].filter(Boolean).join(' vs ')}`).join('\n')}`
                 : 'No bracket matches are waiting right now. The next round fills in as matches are decided.');
-        const components = list.map((m) => row(btn(`ui:tn:w:${tour.id}:${m.id}:1`, clip(`R${m.round} M${m.slot}: ${m.a} advances`, 80), G), btn(`ui:tn:w:${tour.id}:${m.id}:2`, clip(`${m.b} advances`, 80), G)));
+        const components = list.map((m) => row(btn(`ui:tn:w:${tour.id}:${m.id}:1`, clip(`R${m.round} M${m.slot}: ${m.a} advances`, 80), G), btn(`ui:tn:w:${tour.id}:${m.id}:2`, clip(`${m.b} advances`, 80), G),
+            ...(m.c ? [btn(`ui:tn:w:${tour.id}:${m.id}:3`, clip(`${m.c} advances`, 80), G)] : [])));
         const nav = [btn(`ui:tn:v:${tour.id}`, '◀ Bracket')];
         if (pages > 1) nav.push(btn(`ui:tn:d:${tour.id}:${pg - 1}`, '◀', S, pg === 0), btn(`ui:tn:d:${tour.id}:${pg + 1}`, '▶', S, pg >= pages - 1));
         components.push(row(...nav));
         return { embeds: [embed], components: withHome(components) };
     });
 }
+
+/** 3.18 staff: who is in which first-round match of a triple-threat tournament (before it starts). */
+async function groupsPanel(interaction, id, notice = null) {
+    requireAdmin(interaction, 'set up tournaments');
+    return open(interaction, async () => {
+        const T = require('../utils/tournamentUtils');
+        const tour = await T.requireTournament(interaction.guildId, id, { statuses: ['signup'] });
+        const { rows } = await pool.query(`SELECT c.id, c.name, te.grp FROM tournament_entrants te JOIN characters c ON c.id = te.character_id WHERE te.tournament_id = $1 ORDER BY regexp_replace(lower(c.name), '^the +', '')`, [tour.id]);
+        const G = T.groupCount(rows.length);
+        const inG = (n) => rows.filter((r) => r.grp === n);
+        const loose = rows.filter((r) => !(r.grp >= 1 && r.grp <= G));
+        const kind = (k) => (k === 3 ? 'triple threat' : k === 2 ? 'singles match unless you add a third' : k === 1 ? 'needs more wrestlers' : 'empty');
+        const lines = Array.from({ length: G }, (_, i) => { const g = inG(i + 1); return `**Match ${i + 1}** (${kind(g.length)}): ${g.length ? g.map((r) => r.name).join(' vs ') : '_nobody yet_'}`; });
+        const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`🎯 ${tour.name}: first-round matches`)
+            .setDescription(rows.length < T.minFor(tour)
+                ? `Add at least ${T.minFor(tour)} wrestlers first (${rows.length} so far).`
+                : `${rows.length} wrestlers → **${G} first-round matches**. Press a match and pick up to 3 wrestlers for it.\n\n${lines.join('\n')}\n\n**Not placed yet (${loose.length}):** ${loose.length ? loose.map((r) => r.name).join(', ') : '_everyone is placed_'}\n-# Anyone not placed when you press Start is drawn at random, filling the matches in order. If the numbers don't divide by 3, the last match is a singles match (2 wrestlers) or a bye (1 wrestler).`);
+        const comps = rows.length < T.minFor(tour) ? [] : require('../utils/panelKit').rows5(Array.from({ length: G }, (_, i) => btn(`ui:tn:gm:${tour.id}:${i + 1}`, `Match ${i + 1} (${inG(i + 1).length}/3)`, inG(i + 1).length === 3 ? G_ : P)));
+        comps.push(row(btn(`ui:tn:gc:${tour.id}`, '🔀 Clear my picks', S, !rows.some((r) => r.grp)), btn(`ui:tn:v:${tour.id}`, '◀ Back to the tournament')));
+        return withNotice({ embeds: [embed], files: [], attachments: [], components: withHome(comps) }, notice);
+    });
+}
+const G_ = ButtonStyle.Success;
 
 // ================================================================== match result buttons
 
@@ -817,6 +843,26 @@ async function handle(interaction, parts) {
         if (a === 'o') return tournamentView(interaction, v);
         if (a === 'v') return tournamentView(interaction, b);
         if (a === 'd') return decidePanel(interaction, b, c);
+        if (a === 'g') return groupsPanel(interaction, b);
+        if (a === 'gm' || a === 'gs' || a === 'gc') { // 3.18: pick who is in a first-round match
+            requireAdmin(interaction, 'set up tournaments');
+            const T = require('../utils/tournamentUtils');
+            const tour = await T.requireTournament(interaction.guildId, b, { statuses: ['signup'] });
+            if (a === 'gc') { await pool.query(`UPDATE tournament_entrants SET grp = NULL WHERE tournament_id = $1`, [tour.id]); return groupsPanel(interaction, b, 'Cleared. Everyone is drawn at random unless you place them.'); }
+            const n = Number(c);
+            const { rows } = await pool.query(`SELECT c.id, c.name, te.grp FROM tournament_entrants te JOIN characters c ON c.id = te.character_id WHERE te.tournament_id = $1 ORDER BY regexp_replace(lower(c.name), '^the +', '') LIMIT 25`, [tour.id]);
+            if (!(n >= 1 && n <= T.groupCount(rows.length))) return groupsPanel(interaction, b, '⚠️ That match doesn\'t exist anymore (the number of wrestlers changed).');
+            if (a === 'gm') {
+                const menu = new StringSelectMenuBuilder().setCustomId(`ui:tn:gs:${tour.id}:${n}`).setPlaceholder(`Who is in match ${n}? (up to 3)`).setMinValues(0).setMaxValues(Math.min(3, rows.length))
+                    .addOptions(rows.map((r) => ({ label: clip(r.name, 100), value: String(r.id), default: r.grp === n, description: r.grp && r.grp !== n ? `Now in match ${r.grp}` : undefined })));
+                return show(interaction, { content: `🎯 **Match ${n}:** pick up to 3 wrestlers, then press outside the menu. Picking someone from another match moves them here.`, embeds: [], files: [], attachments: [],
+                    components: withHome([new ActionRowBuilder().addComponents(menu), row(btn(`ui:tn:g:${tour.id}`, '◀ Back'))]) });
+            }
+            const picked = (interaction.values || []).filter((x) => rows.some((r) => String(r.id) === String(x))).slice(0, 3);
+            await pool.query(`UPDATE tournament_entrants SET grp = NULL WHERE tournament_id = $1 AND grp = $2`, [tour.id, n]);
+            if (picked.length) await pool.query(`UPDATE tournament_entrants SET grp = $2 WHERE tournament_id = $1 AND character_id = ANY($3::bigint[])`, [tour.id, n, picked]);
+            return groupsPanel(interaction, b, `Match ${n}: ${picked.length ? rows.filter((r) => picked.includes(String(r.id))).map((r) => r.name).join(' vs ') : 'emptied'}.`);
+        }
         if (a === 'w') return tournamentAction(interaction, b, () => capture(interaction, 'tournament', 'advance', { tournament: b, bracket_match: c, winner: d }));
         if (a === 'rm') {
             requireAdmin(interaction, 'change tournament entrants');
@@ -828,7 +874,8 @@ async function handle(interaction, parts) {
         if (a === 'sq' || a === 'cq') {
             requireAdmin(interaction, 'run tournaments');
             const start = a === 'sq';
-            return show(interaction, { content: start ? 'Start the tournament? The bracket is drawn at random and nobody else can join after this.' : 'Cancel this tournament? This can\'t be undone.', embeds: [], files: [], attachments: [],
+            const triple = start && require('../utils/tournamentUtils').isTriple(await require('../utils/tournamentUtils').requireTournament(interaction.guildId, b));
+            return show(interaction, { content: start ? (triple ? 'Start the tournament? The first round uses the matches you picked (🎯); anyone you didn\'t place is drawn at random. Nobody else can join after this.' : 'Start the tournament? The bracket is drawn at random and nobody else can join after this.') : 'Cancel this tournament? This can\'t be undone.', embeds: [], files: [], attachments: [],
                 components: [row(btn(`ui:tn:${start ? 'sy' : 'cy'}:${b}`, start ? 'Yes, start it' : 'Yes, cancel it', start ? G : D), btn(`ui:tn:v:${b}`, 'Go back'))] });
         }
         if (a === 'sy') return tournamentAction(interaction, b, () => capture(interaction, 'tournament', 'start', { tournament: b }));

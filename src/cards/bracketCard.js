@@ -10,8 +10,9 @@ async function renderBracketCard(data) {
     const rounds = data.rounds || 1;
     const firstRound = data.matches.filter((m) => m.round === 1);
     const BOX_W = 220, ROW_H = 34, BLOCK_H = ROW_H * 2 + 4, GAP_Y = 18, COL_GAP = 56;
+    const BLOCK1 = data.triple ? ROW_H * 3 + 8 : BLOCK_H; // 3.18: three names per first-round match
     const HEAD = 166, FOOT = 50;
-    const bodyH = firstRound.length * BLOCK_H + (firstRound.length - 1) * GAP_Y;
+    const bodyH = firstRound.length * BLOCK1 + (firstRound.length - 1) * GAP_Y;
     const champW = 230;
     const W = 40 + rounds * (BOX_W + COL_GAP) + champW + 10;
     const H = HEAD + bodyH + FOOT;
@@ -32,7 +33,7 @@ async function renderBracketCard(data) {
     for (let r = 1; r <= rounds; r++) {
         const ms = data.matches.filter((m) => m.round === r);
         for (const m of ms) {
-            if (r === 1) centre.set(`${r}:${m.slot}`, HEAD + (m.slot - 1) * (BLOCK_H + GAP_Y) + BLOCK_H / 2);
+            if (r === 1) centre.set(`${r}:${m.slot}`, HEAD + (m.slot - 1) * (BLOCK1 + GAP_Y) + BLOCK1 / 2);
             else centre.set(`${r}:${m.slot}`, (centre.get(`${r - 1}:${m.slot * 2 - 1}`) + centre.get(`${r - 1}:${m.slot * 2}`)) / 2);
         }
     }
@@ -48,7 +49,7 @@ async function renderBracketCard(data) {
     // connectors first (under the boxes)
     ctx.strokeStyle = C.line; ctx.lineWidth = 2;
     for (let r = 1; r < rounds; r++) {
-        for (const m of data.matches.filter((x) => x.round === r)) {
+        for (const m of data.matches.filter((x) => x.round === r && !x.empty)) {
             const cy = centre.get(`${r}:${m.slot}`);
             const ny = centre.get(`${r + 1}:${Math.ceil(m.slot / 2)}`);
             const x1 = xOf(r) + BOX_W, x2 = xOf(r + 1), mid = x1 + COL_GAP / 2;
@@ -63,7 +64,7 @@ async function renderBracketCard(data) {
 
     const arts = new Map();
     const ids = new Set();
-    for (const m of data.matches) for (const s of [m.a, m.b]) if (s && !ids.has(s.id)) { ids.add(s.id); arts.set(s.id, loadArt(s.imageUrl)); }
+    for (const m of data.matches) for (const s of [m.a, m.b, m.c]) if (s && !ids.has(s.id)) { ids.add(s.id); arts.set(s.id, loadArt(s.imageUrl)); }
     for (const [k, v] of arts) arts.set(k, await v);
 
     const drawRow = (slot, x, y, won, lost, bye) => {
@@ -85,11 +86,21 @@ async function renderBracketCard(data) {
         fitText(ctx, slot.name, x + s + 12, y + ROW_H / 2 + 6, BOX_W - s - 20, 16, 'bold', 10);
     };
 
+    const won = (m, s) => Boolean(m.winnerId && s && m.winnerId === s.id);
+    const lost = (m, s) => Boolean(m.winnerId && s && m.winnerId !== s.id);
     for (const m of data.matches) {
+        if (m.empty) continue; // an unused first-round slot
         const cy = centre.get(`${m.round}:${m.slot}`);
-        const x = xOf(m.round), y = cy - BLOCK_H / 2;
-        drawRow(m.a, x, y, m.winnerId && m.a && m.winnerId === m.a.id, m.winnerId && m.a && m.winnerId !== m.a.id, false);
-        drawRow(m.b, x, y + ROW_H + 4, m.winnerId && m.b && m.winnerId === m.b.id, m.winnerId && m.b && m.winnerId !== m.b.id, m.bye);
+        const x = xOf(m.round);
+        if (m.round === 1 && data.triple) {
+            const rows = m.c ? [m.a, m.b, m.c] : [m.a, m.b];        // 3 = triple threat, 2 = singles, 1 = bye
+            const h = rows.length * ROW_H + (rows.length - 1) * 4;
+            rows.forEach((s, i) => drawRow(s, x, cy - h / 2 + i * (ROW_H + 4), won(m, s), lost(m, s), m.bye));
+            continue;
+        }
+        const y = cy - BLOCK_H / 2;
+        drawRow(m.a, x, y, won(m, m.a), lost(m, m.a), m.aBye);
+        drawRow(m.b, x, y + ROW_H + 4, won(m, m.b), lost(m, m.b), m.bye || m.bBye);
     }
 
     // champion

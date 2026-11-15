@@ -237,6 +237,14 @@ async function seed() {
     const tn = (await f.pool.query(`SELECT id FROM tournaments`)).rows[0].id;
     for (const c of [W.ace, W.bolt, W.cruz, W.dax]) await run('tournament', 'add', { tournament: tn, character: c }, A);
     await run('tournament', 'start', { tournament: tn }, A);
+    // 3.18: one triple-threat tournament still being set up, one running
+    for (const nm of ['Lucha Cup (setup)', 'Triple Crown']) {
+        await run('tournament', 'create', { name: nm, division: 'mens', first_round: 'triple' }, A);
+        const tid = (await f.pool.query(`SELECT id FROM tournaments WHERE name = $1`, [nm])).rows[0].id;
+        const { rows: men } = await f.pool.query(`SELECT c.id FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.division = 'mens' AND c.status = 'approved' AND NOT u.is_placeholder ORDER BY c.id LIMIT 8`);
+        for (const m of men) await run('tournament', 'add', { tournament: tid, wrestler1: String(m.id) }, A);
+        if (nm === 'Triple Crown') await run('tournament', 'start', { tournament: tid }, A);
+    }
     await run('contract', 'offer', { character: W.bolt, months: 6, salary: 1000 }, A);
     await run('contract', 'offer', { character: W.ace, months: 3, salary: 500 }, A);
     await run('legacy', 'award', { accolade: 'mitb', character: W.ace, year: 2025, announce: false }, A);
