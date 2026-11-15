@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.18.1
+- **📣 Post bracket here** now lists the matches to play under the bracket picture, written like a posted card: `1. @player (Wrestler) vs @player (Wrestler)`, grouped by round, and the players are pinged. Only matches that are ready (everyone known, no winner yet) are listed.
+
 ## 3.18.0 — Triple-threat tournaments
 - `/tournament create` has a new **first_round** choice: **One-on-one** (as before) or **Triple threats**. With triple threats, the first round is triple threats and the winners then go one-on-one. 12 wrestlers = 4 triple threats, 2 semi-finals, the final.
 - **You pick the matches.** On the tournament screen, **🎯 Pick first-round matches** lets staff choose up to 3 wrestlers for each match. Anyone not placed is drawn at random when you press Start.

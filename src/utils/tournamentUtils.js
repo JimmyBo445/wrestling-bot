@@ -225,7 +225,40 @@ async function bracketData(guild, tournament) {
     };
 }
 
+/**
+ * 3.18.1: the matches that are ready to be played (everyone in them is known, no winner yet), written like a
+ * posted show card: "**1.** @player (Wrestler) vs @player (Wrestler)". Returns { content, userIds } or null.
+ */
+async function matchList(tournament) {
+    const { rows } = await pool.query(
+        `SELECT tm.round, tm.slot, tm.a_id, tm.b_id, tm.c_id FROM tournament_matches tm
+         WHERE tm.tournament_id = $1 AND tm.winner_id IS NULL AND tm.a_id IS NOT NULL AND tm.b_id IS NOT NULL ORDER BY tm.round, tm.slot`, [tournament.id]);
+    if (!rows.length) return null;
+    const { rows: mx } = await pool.query(`SELECT MAX(round)::int AS r FROM tournament_matches WHERE tournament_id = $1`, [tournament.id]);
+    const ids = [...new Set(rows.flatMap((r) => [r.a_id, r.b_id, r.c_id]).filter(Boolean).map(String))];
+    const { rows: chars } = await pool.query(`SELECT c.id, c.name, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [ids]);
+    const byId = new Map(chars.map((c) => [String(c.id), c]));
+    const userIds = new Set();
+    const who = (id) => {
+        const c = byId.get(String(id));
+        if (!c) return 'TBD';
+        if (c.is_placeholder) return c.name;
+        userIds.add(c.discord_id);
+        return `<@${c.discord_id}> (${c.name})`;
+    };
+    const { DIVISION_LABELS } = require('./discordHelpers');
+    const lines = [`📣 **${tournament.name}** · ${DIVISION_LABELS[tournament.division] || tournament.division} · matches to play`];
+    let round = null, n = 0;
+    for (const r of rows) {
+        if (r.round !== round) { round = r.round; n = 0; lines.push(`__${roundName(r.round, mx[0].r, isTriple(tournament))}__`); }
+        const names = [r.a_id, r.b_id, r.c_id].filter(Boolean);
+        lines.push(`**${++n}.** ${names.map(who).join(' vs ')}${names.length === 3 ? ' _(Triple Threat)_' : ''}`);
+    }
+    return { content: lines.join('\n').slice(0, 1950), userIds: [...userIds] };
+}
+
 module.exports = {
+    matchList,
     MIN_ENTRANTS, MAX_ENTRANTS, TRIPLE_MIN, TRIPLE_MAX, isTriple, minFor, maxFor, groupCount, roundName, requireTournament, autocompleteTournaments, placeWinner,
     startTournament, advanceFromMatch, revertTournamentMatch, bracketData
 };

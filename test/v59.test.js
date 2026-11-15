@@ -73,6 +73,18 @@ const newTour = async (name, chars, extra = {}) => {
         fs.writeFileSync('/tmp/bracket12.png', await require('../src/cards/bracketCard').renderBracketCard(d));
     });
 
+    await t('3.18.1: 📣 Post bracket lists the matches to play like a card, pinging the players', async () => {
+        const { sent } = require('./mock');
+        const s0 = sent.length;
+        const i = await click(`ui:tn:post:${TID}`, priv(ADM));
+        assert.match(text(i), /with the matches to play \(players pinged\)/);
+        const post = sent.slice(s0).at(-1).payload;
+        assert.match(post.content, /^📣 \*\*Twelve\*\* · Men's · matches to play\n__First round__\n\*\*1\.\*\* <@a\d+> \(A \d+\) vs <@a\d+> \(A \d+\) vs <@a\d+> \(A \d+\) _\(Triple Threat\)_/);
+        assert.strictEqual((post.content.match(/Triple Threat/g) || []).length, 4);
+        assert.strictEqual(post.allowedMentions.users.length, 12);
+        assert.ok(post.files.length === 1);
+    });
+
     await t('logging a Triple Threat with those three advances the winner; undo reopens it', async () => {
         const m = await tm(TID);
         const trio = [m[0].a, m[0].b, m[0].c];

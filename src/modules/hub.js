@@ -887,8 +887,12 @@ async function handle(interaction, parts) {
         if (a === 'post') {
             requireAdmin(interaction, 'post brackets');
             const p = await capture(interaction, 'tournament', 'bracket', { tournament: b });
+            // 3.18.1: under the picture, the matches to play, written like a posted card (players are pinged)
+            const TU = require('../utils/tournamentUtils');
+            const list = await TU.matchList(await TU.requireTournament(interaction.guildId, b));
+            if (list) { p.content = list.content; p.allowedMentions = { users: list.userIds }; }
             const ch = await postPublic(interaction, p); // keeps the staff-only 🏁 button
-            return tournamentView(interaction, b, `📣 Posted the bracket in <#${ch}>.`);
+            return tournamentView(interaction, b, `📣 Posted the bracket in <#${ch}>${list ? ' with the matches to play (players pinged)' : ''}.`);
         }
     }
 
