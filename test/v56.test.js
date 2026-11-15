@@ -246,7 +246,7 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         assert.strictEqual(ov.length, 1, JSON.stringify(ov));
         assert.match(ov[0].name, /\(🟣 LuchaDerpy\)/, 'shows who plays it in LuchaDerpy, not "Unclaimed"');
         const all = await autocompleteCharacters(fake, 'Rey');
-        assert.strictEqual(all.length, 2);
+        assert.strictEqual(all.length, 1, 'Men\'s Rey is unplayed, so only the 🟣 one shows (3.18.3)');
         assert.ok(all.some((o) => /🟣 LuchaDerpy/.test(o.name)));
         assert.ok(!(await autocompleteCharacters(fake, 'Seth')).some((o) => /LuchaDerpy/.test(o.name)), 'a 🟣 version nobody plays is hidden');
         let i = await run('character', 'edit', { character: reyL, name: 'Rey Two' }, ADM);
@@ -323,6 +323,18 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         const pics = (await q(`select image_url from characters where id = any($1) order by id`, [[DL, DLL]])).map((r) => r.image_url);
         assert.deepStrictEqual(pics, [`db:${DL}`, `db:${DL}`]);
         void mock;
+    });
+
+    await t('3.18.3: searches no longer show "@Unclaimed (Men\'s)" for a superstar someone plays in 🟣', async () => {
+        const { autocompleteCharacters } = require('../src/utils/characterUtils');
+        const fake = { guildId: G, guild: { members: { fetch: async () => new Map() } } };
+        const dl = await autocompleteCharacters(fake, 'Dragon');
+        assert.strictEqual(dl.length, 1, JSON.stringify(dl));
+        assert.match(dl[0].name, /\(🟣 LuchaDerpy\)/);
+        const roman = await autocompleteCharacters(fake, 'Roman Reigns'); // u2 has both colors
+        assert.deepStrictEqual(roman.map((o) => o.name.replace(/ — .*\(/, ' (')).sort(), ['Roman Reigns (🟢 Men\'s)', 'Roman Reigns (🟣 LuchaDerpy)']);
+        const open = await autocompleteCharacters(fake, 'Sami');
+        assert.ok(open.length === 1 && /Men's/.test(open[0].name), 'a truly open superstar still shows');
     });
 
     console.log(`\n${passed} passed, ${failed} failed`);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.18.3
+- Wrestler searches everywhere (`/character profile`, `/match log`, `/stats` and the rest) no longer show a superstar twice as "@Unclaimed (Men's)" plus the 🟣 LuchaDerpy version. If someone plays them only in LuchaDerpy, only the 🟣 version is listed.
+- If one player has the superstar in both colors, both stay (their records are separate), marked 🟢 Men's and 🟣 LuchaDerpy.
+
 ## 3.18.2
 - `/character picture`: a superstar used in LuchaDerpy no longer shows up twice. Each superstar is listed once, with whoever plays it.
 - One picture per superstar: changing it updates the Men's and LuchaDerpy versions together. A player who only has the superstar as 🟣 LuchaDerpy can change it too.

@@ -35,9 +35,12 @@ async function autocompleteCharacters(interaction, focusedValue, { statuses = ['
         if (lucha || !r.lucha_discord_id) continue;
         if (r.is_placeholder) { r.discord_id = r.lucha_discord_id; r.division = 'luchaderpy'; } else r.both = true;
     }
-    const names = await getDisplayNames(interaction.guild, rows.map((r) => r.discord_id));
-    return rows.map((r) => ({
-        name: `${r.name} — @${names.get(r.discord_id)} (${r.both ? '🟢🟣 Men\'s + LuchaDerpy' : r.division === 'luchaderpy' ? '🟣 LuchaDerpy' : DIVISION_LABELS[r.division]})${r.status !== 'approved' ? ` [${r.status}]` : ''}`.slice(0, 100),
+    // 3.18.3: a Men's superstar nobody plays in Men's but someone plays in 🟣 isn't "unclaimed": list only the 🟣 version.
+    // When one player has both colors, both stay (separate records) and the Men's one is marked 🟢.
+    const shown = lucha ? rows.filter((r) => !(r.division === 'mens' && r.is_placeholder && r.lucha_discord_id)) : rows;
+    const names = await getDisplayNames(interaction.guild, shown.map((r) => r.discord_id));
+    return shown.map((r) => ({
+        name: `${r.name} — @${names.get(r.discord_id)} (${r.both ? '🟢🟣 Men\'s + LuchaDerpy' : r.division === 'luchaderpy' ? '🟣 LuchaDerpy' : r.division === 'mens' && r.lucha_discord_id ? '🟢 Men\'s' : DIVISION_LABELS[r.division]})${r.status !== 'approved' ? ` [${r.status}]` : ''}`.slice(0, 100),
         value: String(r.id)
     }));
 }
