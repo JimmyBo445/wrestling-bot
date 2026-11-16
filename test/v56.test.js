@@ -337,6 +337,24 @@ const json = (i) => JSON.stringify(i.responses.at(-1).p.components.map((r) => (r
         assert.ok(open.length === 1 && /Men's/.test(open[0].name), 'a truly open superstar still shows');
     });
 
+    await t('3.18.4: Approve answers Discord first (no "Unknown interaction"), edits the card at the end, and errors never replace the card', async () => {
+        await run('character', 'submit', { name: 'Monique Test', division: 'custom_womens' }, P('u30'));
+        const r = (await q(`select id from pending_requests where request_type='character_submission' order by id desc limit 1`))[0];
+        let i = await click(`pending_approve_${r.id}`, ADM);
+        assert.strictEqual(i.responses[0]?.type, 'edit', JSON.stringify(i.responses.map((x) => x.type)));
+        assert.match(JSON.stringify(i.responses[0].p.embeds[0]), /Approved by <@admin1>/);
+        i = await click(`pending_approve_${r.id}`, ADM);
+        assert.strictEqual(i.responses.at(-1).type, 'followUp');
+        assert.match(i.responses.at(-1).p.content, /already approved/);
+        // a staff error (claim no longer possible) is answered privately, the card is not deleted or overwritten
+        await click('ui:rq:y:' + (await id('Sami Zayn')), priv(P('u31')));
+        const claim = (await q(`select id from pending_requests where requested_by='u31' order by id desc limit 1`))[0];
+        await run('character', 'give', { character: await id('Sami Zayn'), player: 'u32', slot: 'normal' }, ADM);
+        i = await click(`pending_approve_${claim.id}`, ADM);
+        assert.ok(!i.responses.some((x) => x.type === 'delete' || x.type === 'edit'), JSON.stringify(i.responses.map((x) => x.type)));
+        assert.match(i.responses.at(-1).p.content, /already has a player/);
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
     await f.pool.end();

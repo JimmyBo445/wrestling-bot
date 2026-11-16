@@ -39,7 +39,7 @@ const isPrivateErr = (i) => i.responses.some((r) => (r.p?.flags & 64) && /⚠️
         const nonAdmin = await click(customId, { admin: false, user: 'u8' });
         assert.match(text(nonAdmin), /Only admins/);
         const ok = await click(customId, { message: { embeds: [{ ...card.payload.embeds[0], data: card.payload.embeds[0].data, toJSON: () => card.payload.embeds[0].data }], components: [] } });
-        assert.ok(ok.responses.some((r) => r.type === 'update'), text(ok));
+        assert.ok(ok.responses.some((r) => r.type === 'edit'), text(ok));
         const again = await click(customId);
         assert.match(text(again), /already approved/);
         const { rows } = await f.pool.query(`select status from characters where name='Rookie'`);
@@ -279,7 +279,7 @@ const isPrivateErr = (i) => i.responses.some((r) => (r.p?.flags & 64) && /⚠️
         const steal = await run('contender', 'challenge', { title: pend, character: ids.Wolf }, PLAYER('u2'));
         assert.ok(isPrivateErr(steal), 'cannot challenge with someone else\'s character');
         const ok = await click(card.payload.components[0].components[0].data.custom_id);
-        assert.ok(ok.responses.some((r) => r.type === 'update'), text(ok));
+        assert.ok(ok.responses.some((r) => r.type === 'edit'), text(ok));
         const bad = await run('contender', 'award', { title: pend, character: ids.Wendy }, ADM);
         assert.ok(isPrivateErr(bad), text(bad));
         const aw = await run('contender', 'award', { title: pend, character: ids.Wolf }, ADM);

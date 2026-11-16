@@ -16,6 +16,9 @@ async function reportError(interaction, err) {
     const payload = { content, flags: EPHEMERAL, embeds: [], files: [], components: [], allowedMentions: { parse: [] } };
     try {
         if (interaction.isAutocomplete?.()) return;
+        // 3.18.4: a button that deferred an update: its "reply" IS the message the button sits on (e.g. a staff
+        // request card). Never edit or delete that; answer privately underneath instead.
+        if (interaction.deferred && !interaction.replied && interaction.isMessageComponent?.()) return await interaction.followUp(payload);
         if (interaction.deferred && !interaction.replied) {
             if (interaction.ephemeral) { const { flags, ...edit } = payload; return await interaction.editReply(edit); } // eslint-disable-line no-unused-vars
             // the "thinking..." message was public; remove it and answer privately instead

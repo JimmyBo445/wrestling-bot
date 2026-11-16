@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.18.4
+- Fixed "Unknown interaction" on the staff **Approve / Deny** buttons. Discord gives a bot 3 seconds to answer a button; approving a request (DMs, sign-up updates) could take longer. The bot now answers Discord first and updates the card after.
+- If a button that edits a message hits a problem, the bot answers privately underneath and no longer risks deleting or overwriting that message (for example a staff request card).
+
 ## 3.18.3
 - Wrestler searches everywhere (`/character profile`, `/match log`, `/stats` and the rest) no longer show a superstar twice as "@Unclaimed (Men's)" plus the 🟣 LuchaDerpy version. If someone plays them only in LuchaDerpy, only the 🟣 version is listed.
 - If one player has the superstar in both colors, both stay (their records are separate), marked 🟢 Men's and 🟣 LuchaDerpy.

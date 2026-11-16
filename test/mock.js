@@ -52,7 +52,7 @@ function makeInteraction({ kind = 'command', commandName, sub = null, group = nu
         deferred: false, replied: false, ephemeral: false, responses,
         inGuild: () => true, isRepliable: () => true,
         isChatInputCommand: () => kind === 'command', isAutocomplete: () => kind === 'autocomplete',
-        isButton: () => kind === 'button', isStringSelectMenu: () => kind === 'select',
+        isButton: () => kind === 'button', isStringSelectMenu: () => kind === 'select', isMessageComponent: () => ['button', 'select', 'channel'].includes(kind),
         isAnySelectMenu: () => kind === 'select' || kind === 'channel', isChannelSelectMenu: () => kind === 'channel', isModalSubmit: () => kind === 'modal',
         fields: { getTextInputValue: (k) => (fields[k] === undefined ? '' : String(fields[k])) },
         showModal: async (m) => { i.replied = true; responses.push({ type: 'modal', p: m }); },

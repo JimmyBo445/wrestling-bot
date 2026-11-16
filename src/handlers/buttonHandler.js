@@ -33,6 +33,9 @@ async function handlePending(interaction) {
     const id = parseInt(idStr, 10);
     const approve = action === 'approve';
     let line = '';
+    // 3.18.4: answer Discord right away. Approving can take longer than Discord's 3-second limit
+    // (DMs, sign-up updates), which showed up as "Unknown interaction". The card is edited at the end.
+    await interaction.deferUpdate();
 
     const request = await withTransaction(async (client) => {
         const r = await claimRequest(client, id, interaction.guildId, approve ? 'approved' : 'denied', interaction.user.id);
@@ -73,8 +76,8 @@ async function handlePending(interaction) {
 
     if (!request) {
         const { rows } = await pool.query(`SELECT status FROM pending_requests WHERE id = $1 AND guild_id = $2`, [id, interaction.guildId]);
-        if (interaction.message?.components?.length && rows[0]) await interaction.update({ components: [] }).catch(() => {});
-        return respond(interaction, { content: rows[0] ? `That request was already ${rows[0].status}.` : 'That request no longer exists.', flags: EPHEMERAL });
+        if (interaction.message?.components?.length && rows[0]) await interaction.editReply({ components: [] }).catch(() => {});
+        return interaction.followUp({ content: rows[0] ? `That request was already ${rows[0].status}.` : 'That request no longer exists.', flags: EPHEMERAL });
     }
 
     await logAudit(interaction.guildId, interaction.user.id, `request_${approve ? 'approved' : 'denied'}`, { id, type: request.request_type });
@@ -87,7 +90,7 @@ async function handlePending(interaction) {
     }
     const who = approve ? `Approved by <@${interaction.user.id}>` : `Denied by <@${interaction.user.id}>`;
     const result = [who, line].filter(Boolean).join(' · ');
-    await interaction.update({ embeds: [resolvedEmbed(interaction, approve, result)], components: [], allowedMentions: NO_MENTIONS });
+    await interaction.editReply({ embeds: [resolvedEmbed(interaction, approve, result)], components: [], allowedMentions: NO_MENTIONS });
 
     // let the requester know about decisions that otherwise they'd never see
     if (['match_request', 'contender_challenge'].includes(request.request_type)) {
