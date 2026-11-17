@@ -6,7 +6,7 @@ const { FINISH_LABEL, CARD_BRANDS, DIVISION_THEME } = require('./constants');
 const OPENERS = ['Opening the show,', 'Up next,', 'Then,', 'After that,', 'Later on,', 'Moving on,', 'Next,', 'Following that,', 'Back in the ring,', 'Continuing the night,'];
 const MAIN = ['In the main event,', 'Closing the show,', 'The main event saw'];
 const FINISH_PHRASE = {
-    pinfall: 'by pinfall', submission: 'by submission', dq: 'by disqualification', countout: 'by count-out',
+    walkover: 'by walkover', pinfall: 'by pinfall', submission: 'by submission', dq: 'by disqualification', countout: 'by count-out',
     knockout: 'by knockout', interference: 'after outside interference', escape: 'by escaping', forfeit: 'by forfeit'
 };
 const ord = (n) => { const v = n % 100; return `${n}${(v >= 11 && v <= 13) ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'}`; };

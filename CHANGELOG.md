@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.21.0 — How did they win?
+- **Logging from the card now asks how they won.** After you tap the winner on the card screen, a second screen shows a button for every finish: 🤼 Pinfall, 🔒 Submission, 🟥 DQ, 🔟 Count-out, 💥 Knockout, 🫸 Interference, 🪜 Escape / Retrieve, 🏳️ Forfeit and 🚶 Walkover. **⏭ Skip** logs it with no finish, like before. **◀ Pick the winner again** goes back. Draw and No contest still log straight away.
+- **New finish: 🚶 Walkover** (for a no-show). The winner gets a win; whoever didn't show gets **no loss**. It doesn't count against their record, win %, streak or form. 🏳️ Forfeit still counts like a normal win and loss.
+  - A Walkover never changes a belt or a #1 contender spot. On a title or #1 contender match it's logged as a normal match and the champion keeps the belt.
+  - Not offered for tag matches.
+  - Also available anywhere else you pick a finish (`/match` and the buttons under a result). Changing a finish to or from Walkover later fixes the record.
+- Database change: migration 035.
+
 ## 3.20.0 — Double booking, #1 contender card matches, ✏️ Edit bracket
 - **Book someone twice on one card.** When `/card add`, a `/card edit` swap or `/card request` (or 📨 Add a match request) would put a wrestler in a second match in the same division, the bot now warns ("X is already booked on this card") with a **✅ Book anyway** button and a **✖ No** button, instead of just refusing. The button works for 15 minutes.
 - **#1 contender matches on the card.** `/card add`, `/card request` and `/card edit` have a new `contender_for` belt option (`-` in `/card edit` removes it). Any match type works; a tag belt needs a tag match. A match is a title match *or* a #1 contender match: setting one clears the other. The card text, the posted picture and the ping list show "🎯 #1 Contender: <belt>". When the match is logged (from the card, or with `/match log`), the winner becomes #1 contender.

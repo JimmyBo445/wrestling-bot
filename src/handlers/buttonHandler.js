@@ -226,19 +226,22 @@ async function handleButtonInteraction(interaction) {
                 const { MATCH_CONFIG } = require('../utils/constants');
                 const cfg = MATCH_CONFIG[slot.match_type];
                 const decisive = !['d', 'n'].includes(code);
+                if (decisive && !d) return await show(await cardUi.finishPanel(guildId, draftId, pos, code)); // 3.21: how did they win?
+                const finish = decisive && d && d !== 'skip' ? d : null;
                 const result = await require('../utils/matchService').logMatch({
                     guildId, matchType: slot.match_type, slotCharacterIds: slot.character_ids.map(String),
                     winnerIndex: decisive && cfg.winnerMode === 'single' ? Number(code) - 1 : null,
                     winningTeam: decisive && cfg.winnerMode === 'team' ? Number(code) : null,
                     resultType: decisive ? 'decisive' : code === 'd' ? 'draw' : 'no_contest',
-                    titleValue: slot.title_id ? String(slot.title_id) : null, stipulation: slot.stipulation,
+                    titleValue: slot.title_id ? String(slot.title_id) : null, stipulation: slot.stipulation, finish,
                     overrideCooldown: true, actor: interaction.user.id
                 });
                 const { presentMatch, postToResultsChannel } = require('../utils/matchPresenter');
                 const { payload } = await presentMatch(interaction, result);
                 const channel = await postToResultsChannel(interaction, payload);
                 await require('../utils/showRecap').maybeAutoRecap(interaction, result);
-                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `✅ Recorded ${svc.divisionLabel(draft.division)} match ${pos} (#${result.matchId}). The result picture was posted in <#${channel.id}>. Undo it with the buttons under the result.` }));
+                const wo = result.walkoverDropped ? ` It was a Walkover, so no belt or #1 contender spot changed.` : '';
+                return await show(await cardUi.viewMessage(guildId, draft.brand, { notice: `✅ Recorded ${svc.divisionLabel(draft.division)} match ${pos} (#${result.matchId}).${wo} The result picture was posted in <#${channel.id}>. Undo it with the buttons under the result.` }));
             }
             if (act === 'ed') return await show(await cardUi.editPanel(guildId, draftId, pos));
             if (act === 'sl') return await show(await cardUi.editPanel(guildId, draftId, pos, { slot: Number(interaction.values[0]) }));

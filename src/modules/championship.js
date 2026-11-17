@@ -158,7 +158,7 @@ async function defensesEmbed(title, want = null) {
     const { rows: defs } = await pool.query(
         `SELECT m.id, m.created_at,
                 (SELECT string_agg(c.name, ' & ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id
-                  WHERE mp.match_id = m.id AND NOT mp.is_winner) AS opponents
+                  WHERE mp.match_id = m.id AND mp.is_winner IS NOT TRUE) AS opponents
          FROM matches m WHERE m.title_id = $1 AND m.title_effect->>'type' = 'defense' AND m.title_effect->>'reign_id' = $2
          ORDER BY m.created_at, m.id`, [title.id, String(reign.id)]);
     const { rows: manual } = await pool.query(`SELECT * FROM reign_defenses WHERE reign_id = $1 ORDER BY defended_on NULLS LAST, id`, [reign.id]);

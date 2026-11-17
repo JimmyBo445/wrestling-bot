@@ -39,6 +39,7 @@ async function characterRows(guildId, days) {
     const by = new Map();
     for (const r of rows) {
         if (!by.has(r.id)) by.set(r.id, { id: r.id, name: r.name, discord_id: r.discord_id, results: [] });
+        if ((r.result_type === 'decisive' && r.is_winner === null)) continue; // 3.21: a Walkover no-show has no loss
         by.get(r.id).results.push(r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L');
     }
     return [...by.values()].map((c) => {

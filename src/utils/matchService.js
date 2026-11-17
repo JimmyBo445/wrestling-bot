@@ -50,10 +50,10 @@ async function singlesCooldownHoursLeft(guildId, charA, charB, settings, client 
 async function logMatch(input) {
     const {
         guildId, matchType, slotCharacterIds, winnerIndex = null, winningTeam = null,
-        resultType = 'decisive', notes = null, titleValue = null,
+        resultType = 'decisive', notes = null,
         actor, overrideCooldown = false, stipulation = null, finish = null, score = null
     } = input;
-    let { contenderTitleValue = null } = input;
+    let { contenderTitleValue = null, titleValue = null } = input;
     let fromCard = false;
     const config = MATCH_CONFIG[matchType];
     if (!config) throw new UserError('Unknown match type.');
@@ -61,6 +61,14 @@ async function logMatch(input) {
     if (!titleValue && !contenderTitleValue && resultType === 'decisive') {
         const slot = await require('./cardService').findCardSlot(guildId, matchType, slotCharacterIds).catch(() => null);
         if (slot?.contender_title_id) { contenderTitleValue = String(slot.contender_title_id); fromCard = true; }
+    }
+    // 3.21: a Walkover (the other side didn't show) never moves a belt or a #1 contender spot
+    let walkoverDropped = null;
+    if (finish === 'walkover') {
+        if (resultType !== 'decisive') throw new UserError('A Walkover needs a winner.');
+        if (config.winnerMode === 'team') throw new UserError('A Walkover is for singles and multi-person matches, not tag matches.');
+        walkoverDropped = titleValue ? 'title' : contenderTitleValue ? 'contender' : null;
+        titleValue = null; contenderTitleValue = null; fromCard = false;
     }
     if (titleValue && contenderTitleValue) throw new UserError('A match can be a title match or a #1 contender match, not both.');
     if (notes && notes.length > 300) throw new UserError('Notes are limited to 300 characters.');
@@ -167,7 +175,7 @@ async function logMatch(input) {
             await client.query(
                 `INSERT INTO match_participants (match_id, character_id, team_number, team_id, is_winner, owner_id, division)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [mId, characters[i].id, side, side && sideTeams[side] ? sideTeams[side].id : null, winnerIdx.includes(i), characters[i].owner_id, characters[i].division]
+                [mId, characters[i].id, side, side && sideTeams[side] ? sideTeams[side].id : null, winnerIdx.includes(i) ? true : (finish === 'walkover' ? null : false), characters[i].owner_id, characters[i].division]
             );
         }
 
@@ -224,7 +232,7 @@ async function logMatch(input) {
     return {
         matchId, matchType, label: config.label, config, characters, winnerIdx, resultType, notes,
         title, contenderTitle, sideTeams, winnerSubject, effect, cooldownOverridden, teamMode, card, defenseNumber, injuryNotes,
-        stipulation: finalStip, finish, score: scoreText, rematch, tournament
+        stipulation: finalStip, finish, score: scoreText, rematch, tournament, walkoverDropped
     };
 }
 
@@ -382,6 +390,14 @@ async function editMatch(guildId, matchId, actor, { notes, winnerIndex = null, w
             changes.score = v;
         }
         if (!Object.keys(changes).length) throw new UserError('Nothing to change. Provide notes, stipulation, finish, score, a new winner, or a new result type.');
+        // 3.21: a Walkover leaves the no-show(s) with no loss (is_winner NULL); any other finish is a normal loss
+        const { rows: now } = await client.query(`SELECT result_type, finish FROM matches WHERE id = $1`, [matchId]);
+        const walkover = now[0].result_type === 'decisive' && now[0].finish === 'walkover';
+        if (walkover) {
+            if (match.is_title_match || match.is_contender_match) throw new UserError('A title or #1 contender match can\'t be a Walkover (belts don\'t change on a no-show). Undo it with 🛠 and log it again without the title.');
+            if (MATCH_CONFIG[match.match_type]?.winnerMode === 'team') throw new UserError('A Walkover is for singles and multi-person matches, not tag matches.');
+        }
+        await client.query(`UPDATE match_participants SET is_winner = CASE WHEN is_winner IS TRUE THEN true WHEN $2 THEN NULL ELSE false END WHERE match_id = $1`, [matchId, walkover]);
         await client.query(`UPDATE matches SET edited_at = now() WHERE id = $1`, [matchId]);
         await logAudit(guildId, actor, 'match_edited', { matchId, ...changes }, client);
         return { match, changes };

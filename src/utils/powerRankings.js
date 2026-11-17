@@ -14,11 +14,12 @@ const recency = (at, now) => { const d = (now - new Date(at).getTime()) / DAY; r
 
 /** Ranked rows for one division: [{ id, name, discord_id, score, w, l, d, champ, contender }]. */
 async function computePower(guildId, division, now = Date.now()) {
-    const { rows } = await pool.query(
+    const { rows: all } = await pool.query(
         `SELECT m.id AS match_id, m.result_type, m.is_title_match, m.created_at, mp.character_id, mp.is_winner, mp.team_number
          FROM matches m JOIN match_participants mp ON mp.match_id = m.id
          WHERE m.guild_id = $1 AND m.created_at >= to_timestamp($2 / 1000.0) - ($3 || ' days')::interval AND m.created_at <= to_timestamp($2 / 1000.0)
          ORDER BY m.created_at, m.id`, [guildId, now, String(WINDOW_DAYS)]);
+    const rows = all.filter((r) => !(r.result_type === 'decisive' && r.is_winner === null)); // 3.21: a Walkover no-show has no loss
     const byMatch = new Map();
     for (const r of rows) {
         if (!byMatch.has(r.match_id)) byMatch.set(r.match_id, []);

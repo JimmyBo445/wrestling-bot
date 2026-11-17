@@ -18,7 +18,7 @@ async function characterTimeline(characterId, days = null, ownerId = null) {
          ORDER BY m.created_at ASC, m.id ASC`,
         ownerId ? [characterId, ownerId] : [characterId]
     );
-    return rows.map((r) => ({
+    return rows.filter((r) => !(r.result_type === 'decisive' && r.is_winner === null)).map((r) => ({ // 3.21: a Walkover no-show has no loss
         ...r,
         result: r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L'
     }));
@@ -126,7 +126,7 @@ async function recentMatches(guildId, { characterId = null, teamId = null, limit
                 (SELECT string_agg(c.name, ', ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id
                   WHERE mp.match_id = m.id AND mp.is_winner) AS winners,
                 (SELECT string_agg(c.name, ', ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id
-                  WHERE mp.match_id = m.id AND NOT mp.is_winner) AS others
+                  WHERE mp.match_id = m.id AND mp.is_winner IS NOT TRUE) AS others
          FROM matches m
          LEFT JOIN titles t ON t.id = m.title_id
          LEFT JOIN titles ct ON ct.id = m.contender_title_id
@@ -165,7 +165,7 @@ async function userSummary(guildId, ownerId) {
          WHERE mp.owner_id = $2 AND m.guild_id = $1
          ORDER BY m.created_at ASC, m.id ASC`, [guildId, ownerId]);
     const toResult = (r) => (r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L');
-    const all = rows.map((r) => ({ ...r, result: toResult(r) }));
+    const all = rows.filter((r) => !(r.result_type === 'decisive' && r.is_winner === null)).map((r) => ({ ...r, result: toResult(r) }));
     const seen = new Set();
     const merged = all.filter((r) => (seen.has(r.match_id) ? false : seen.add(r.match_id)));
     const summarize = (list) => {
@@ -206,7 +206,7 @@ async function stipulationBreakdown(characterId, ownerId = null, days = null) {
     for (const r of rows) {
         if (r.stipulation && r.result_type === 'decisive') {
             const b = (bySip[r.stipulation] ||= { w: 0, l: 0 });
-            if (r.is_winner) b.w++; else b.l++;
+            if (r.is_winner) b.w++; else if (r.is_winner === false) b.l++;
         }
         if (r.finish && r.is_winner && r.result_type === 'decisive') winFinishes[r.finish] = (winFinishes[r.finish] || 0) + 1;
     }

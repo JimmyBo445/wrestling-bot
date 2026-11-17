@@ -35,7 +35,7 @@ async function getCharacterResults(characterId, client = pool) {
          ORDER BY m.created_at ASC, m.id ASC`,
         [characterId]
     );
-    return rows.map(rowToResult);
+    return rows.filter((r) => !(r.result_type === 'decisive' && r.is_winner === null)).map(rowToResult); // 3.21: a Walkover no-show has no loss
 }
 
 /** Oldest -> newest list of results for a registered team (counted once per match). */

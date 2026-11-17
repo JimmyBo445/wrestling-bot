@@ -32,7 +32,7 @@ async function topWrestlers(guildId, start, end, limit = 3) {
 async function bestMatch(guildId, start, end) {
     const base = `SELECT m.id, m.stars, m.match_type, m.is_title_match, m.created_at, t.name AS title_name,
                          (SELECT string_agg(c.name, ' & ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id WHERE mp.match_id = m.id AND mp.is_winner) AS winners,
-                         (SELECT string_agg(c.name, ' & ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id WHERE mp.match_id = m.id AND NOT mp.is_winner) AS others
+                         (SELECT string_agg(c.name, ' & ' ORDER BY mp.id) FROM match_participants mp JOIN characters c ON c.id = mp.character_id WHERE mp.match_id = m.id AND mp.is_winner IS NOT TRUE) AS others
                   FROM matches m LEFT JOIN titles t ON t.id = m.title_id
                   WHERE m.guild_id = $1 AND m.created_at >= $2 AND m.created_at < $3`;
     const rated = await pool.query(`${base} AND m.stars IS NOT NULL ORDER BY m.stars DESC, m.created_at DESC, m.id DESC LIMIT 1`, [guildId, start, end]);

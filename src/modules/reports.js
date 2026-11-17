@@ -76,7 +76,7 @@ function parseFinish(text) {
     if (!t) return null;
     const exact = FINISHES.find((f) => f.value === t || f.name.toLowerCase() === t);
     if (exact) return exact.value;
-    const map = [[/^pin/, 'pinfall'], [/^sub|tap/, 'submission'], [/dq|disq/, 'dq'], [/count/, 'countout'], [/^ko|knock|stopp/, 'knockout'], [/interf/, 'interference'], [/escape|retriev|ladder|elimin/, 'escape'], [/forfeit/, 'forfeit']];
+    const map = [[/^pin/, 'pinfall'], [/^sub|tap/, 'submission'], [/dq|disq/, 'dq'], [/count/, 'countout'], [/^ko|knock|stopp/, 'knockout'], [/interf/, 'interference'], [/escape|retriev|ladder|elimin/, 'escape'], [/forfeit/, 'forfeit'], [/walk ?over|no.?show/, 'walkover']];
     return map.find(([re]) => re.test(t))?.[1] || null;
 }
 

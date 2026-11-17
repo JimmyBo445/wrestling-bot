@@ -188,7 +188,7 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
         c = await click(`cardui:rc:${d.id}:1`);
         assert.match(text(c), /Who won/); assert.ok(ids(c).includes(`cardui:rw:${d.id}:1:2`) && ids(c).includes(`cardui:rw:${d.id}:1:d`));
         const before = sent.length;
-        c = await click(`cardui:rw:${d.id}:1:2`);
+        c = await click(`cardui:rw:${d.id}:1:2:skip`);
         assert.ok(!isErr(c), text(c)); assert.match(text(c), /Recorded/);
         const posted = sent.slice(before).filter((m) => m.channelId === 'matches1' && (m.payload.embeds || []).length);
         assert.strictEqual(posted.length, 1, JSON.stringify(sent.slice(before).map((m) => m.channelId)));
@@ -199,15 +199,15 @@ const q = async (sql, a) => (await f.pool.query(sql, a)).rows;
         const win = await q(`select character_id from match_participants where match_id=$1 and is_winner`, [slot.match_id]);
         assert.deepStrictEqual(win.map((x) => String(x.character_id)), [C.W11]);
         // can't record twice
-        c = await click(`cardui:rw:${d.id}:1:1`);
+        c = await click(`cardui:rw:${d.id}:1:1:skip`);
         assert.match(text(c), /already recorded/);
         // team match: winning team 1, and draw
-        c = await click(`cardui:rw:${d.id}:2:1`);
+        c = await click(`cardui:rw:${d.id}:2:1:skip`);
         assert.ok(!isErr(c), text(c));
         const [t2] = await q(`select match_id from card_draft_matches where draft_id=$1 and position=2`, [d.id]);
         assert.deepStrictEqual((await q(`select character_id from match_participants where match_id=$1 and is_winner order by 1`, [t2.match_id])).map((x) => String(x.character_id)).sort(), [C.W12, C.W13].sort());
         // players can't use it
-        c = await click(`cardui:rw:${d.id}:1:1`, { admin: false, user: 'u9' });
+        c = await click(`cardui:rw:${d.id}:1:1:skip`, { admin: false, user: 'u9' });
         assert.match(text(c), /Only admins/);
     });
     await t('help knows /title (which holds the reign tools since 2.20); commands load', async () => {

@@ -23,7 +23,7 @@ async function detectMilestones(guildId, result) {
             const { rows: res } = await pool.query(
                 `SELECT mp.is_winner, m.result_type FROM match_participants mp JOIN matches m ON m.id = mp.match_id
                  WHERE mp.character_id = $1 ORDER BY m.created_at, m.id`, [c.id]);
-            const results = res.map((r) => (r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L'));
+            const results = res.filter((r) => !(r.result_type === 'decisive' && r.is_winner === null)).map((r) => (r.result_type === 'draw' ? 'D' : r.result_type === 'no_contest' ? 'NC' : r.is_winner ? 'W' : 'L'));
             const { current, direction } = computeStreaks(results);
             if (direction === 'win' && current >= STREAK_STEP && current % STREAK_STEP === 0) {
                 lines.push(`🔥 **${c.name}** just won their **${ord(current)}** match in a row!`);

@@ -109,8 +109,36 @@ async function recordPanel(guildId, draftId, position) {
     const rows2 = [new ActionRowBuilder().addComponents(buttons.slice(0, 5)),
         new ActionRowBuilder().addComponents(btn(id('d'), 'Draw'), btn(id('n'), 'No contest'), btn(`cardui:mp:${draft.id}:${position}`, '↩ Cancel'))];
     const [name] = await slotNames([slot]);
-    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}**\n${cfg.label}: ${name}${slot.stipulation ? ` _(${slot.stipulation})_` : ''}${slot.title_id ? ' 🏆 title match' : ''}\n\n**Who won?** The result picture goes to the match results channel. Add a finish, score or notes afterwards with the buttons under the result.`;
+    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}**\n${cfg.label}: ${name}${slot.stipulation ? ` _(${slot.stipulation})_` : ''}${slot.title_id ? ' 🏆 title match' : ''}\n\n**Who won?** The result picture goes to the match results channel. Next you pick how they won (pinfall, submission, DQ, walkover…). Add a score or notes afterwards with the buttons under the result.`;
     return { content, components: rows2, files: [], embeds: [], allowedMentions: { parse: [] } };
+}
+
+/** 3.21: after tapping the winner, how did they win? (or ⏭ Skip). */
+async function finishPanel(guildId, draftId, position, code) {
+    const draft = await getDraftById(guildId, draftId);
+    const slot = (await svc.getDraftMatches(draft.id))[position - 1];
+    if (!slot) return viewMessage(guildId, draft.brand, { notice: 'That match is gone.' });
+    if (slot.match_id) return matchPanel(guildId, draftId, position, { notice: 'That match is already recorded.' });
+    const { FINISHES, FINISH_LABEL } = require('./constants');
+    const cfg = MATCH_CONFIG[slot.match_type];
+    const team = cfg.winnerMode === 'team';
+    const ids = slot.character_ids.map(String);
+    const { rows } = await pool.query(`SELECT id, name FROM characters WHERE id = ANY($1::bigint[])`, [ids]);
+    const nm = new Map(rows.map((r) => [String(r.id), r.name]));
+    const half = ids.length / 2;
+    const winner = team ? (Number(code) === 1 ? ids.slice(0, half) : ids.slice(half)).map((x) => nm.get(x)).join(' & ') : nm.get(ids[Number(code) - 1]);
+    const id = (f) => `cardui:rw:${draft.id}:${position}:${code}:${f}`;
+    const EMOJI = { pinfall: '🤼', submission: '🔒', dq: '🟥', countout: '🔟', knockout: '💥', interference: '🫸', escape: '🪜', forfeit: '🏳️', walkover: '🚶' };
+    const options = FINISHES.filter((f) => !(team && f.value === 'walkover'));
+    const btns = options.map((f) => btn(id(f.value), `${EMOJI[f.value] || ''} ${FINISH_LABEL[f.value]}`.trim(), f.value === 'walkover' ? ButtonStyle.Success : ButtonStyle.Secondary));
+    const rows2 = [];
+    for (let i = 0; i < btns.length; i += 5) rows2.push(new ActionRowBuilder().addComponents(btns.slice(i, i + 5)));
+    rows2.push(new ActionRowBuilder().addComponents(btn(id('skip'), '⏭ Skip (no finish)', ButtonStyle.Primary), btn(`cardui:rc:${draft.id}:${position}`, '◀ Pick the winner again')));
+    const belt = slot.title_id || slot.contender_title_id;
+    const content = `**Record ${svc.divisionLabel(draft.division)} match ${position}:** 🏆 **${winner}** won.\n\n**How did they win?**\n` +
+        `🏳️ **Forfeit** counts like a normal match: a win for ${winner}, a loss for the other side.\n` +
+        (team ? '' : `🚶 **Walkover** is for a no-show: a win for ${winner}, and **no loss** for whoever didn't show.${belt ? ' On this match a Walkover doesn\'t change any belt or #1 contender spot.' : ''}\n`);
+    return { content, components: rows2.slice(0, 5), files: [], embeds: [], allowedMentions: { parse: [] } };
 }
 
 function removeConfirm(draftId, position, brand) {
@@ -182,5 +210,5 @@ async function editPanel(guildId, draftId, position, { slot = null, page = 0, no
 
 function isTag(matchType) { return MATCH_CONFIG[matchType]?.winnerMode === 'team'; }
 
-module.exports = {
+module.exports = { finishPanel,
     recordPanel, viewMessage, matchPanel, editPanel, removeConfirm, getDraftById };

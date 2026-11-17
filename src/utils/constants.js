@@ -57,9 +57,10 @@ const FINISHES = [
     { name: 'Knockout / Referee stoppage', value: 'knockout' },
     { name: 'Outside interference', value: 'interference' },
     { name: 'Escape / retrieve / last eliminated', value: 'escape' },
-    { name: 'Forfeit', value: 'forfeit' }
+    { name: 'Forfeit', value: 'forfeit' },
+    { name: 'Walkover (no-show gets no loss)', value: 'walkover' }
 ];
-const FINISH_LABEL = Object.fromEntries(FINISHES.map((f) => [f.value, f.name.replace(/ \(DQ\)/, '').replace('Knockout / Referee stoppage', 'Knockout').replace('Escape / retrieve / last eliminated', 'Escape / Retrieve')]));
+const FINISH_LABEL = Object.fromEntries(FINISHES.map((f) => [f.value, f.name.replace(/ \(DQ\)/, '').replace('Knockout / Referee stoppage', 'Knockout').replace('Escape / retrieve / last eliminated', 'Escape / Retrieve').replace(' (no-show gets no loss)', '')]));
 
 const MAX_CHARACTERS_PER_USER = 4;
 const MAX_CARD_MATCHES = 15; // per division, so up to 60 on one show
