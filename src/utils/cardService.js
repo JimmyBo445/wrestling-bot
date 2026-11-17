@@ -462,7 +462,7 @@ async function autoSettings(guildId) {
  */
 async function planCard(guildId, division, count, { signupIds = null, priority = null, rematches: allowRematches = true, matchTypes = false, records = false } = {}) {
     let { rows: pool_ } = await pool.query(
-        `SELECT c.id, c.name, c.owner_id FROM characters c JOIN users uo ON uo.id = c.owner_id WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT uo.is_placeholder
+        `SELECT c.id, c.name, c.owner_id, uo.discord_id FROM characters c JOIN users uo ON uo.id = c.owner_id WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT uo.is_placeholder
            AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
         [guildId, division]
     );
@@ -718,6 +718,18 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
 
     // main event last: title matches in reverse catalogue order (top title closes the show)
     const result = [...fresh, ...multi, ...rematches, ...titleMatches.reverse()].slice(0, count);
+    // 3.19.2: who could have been booked but wasn't, and why
+    const booked = new Set(result.flatMap((m) => m.character_ids.map(String)));
+    result.leftOff = [...chars.values()].filter((c) => !booked.has(String(c.id)))
+        .map((c) => ({ id: String(c.id), name: c.name, discordId: c.discord_id, reason: skipped.has(String(c.id)) ? 'faced' : 'room' }));
+    if (signupIds) {
+        const { rows: hurt } = await pool.query(
+            `SELECT c.id, c.name, u.discord_id FROM characters c JOIN users u ON u.id = c.owner_id
+             WHERE c.guild_id = $1 AND c.division = $2 AND c.id = ANY($3::bigint[])
+               AND EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
+            [guildId, division, [...signupIds]]);
+        for (const h of hurt) result.leftOff.push({ id: String(h.id), name: h.name, discordId: h.discord_id, reason: 'injured' });
+    }
     result.signupMode = signupMode;
     result.signedCount = signupMode === 'used' ? chars.size : 0;
     return result;
@@ -757,7 +769,7 @@ async function autoShow(guildId, brand, createdBy, perDivision, name = null, { s
             await saveMatches(client, d.id, plan);
             drafts.push(d);
         }
-        return { drafts, results: plans.map((p) => ({ division: p.division, planned: p.plan.length, wanted: perDivision })), skipped, signupMode, signedCount };
+        return { drafts, results: plans.map((p) => ({ division: p.division, planned: p.plan.length, wanted: perDivision, leftOff: p.plan.leftOff || [] })), skipped, signupMode, signedCount };
     });
 }
 

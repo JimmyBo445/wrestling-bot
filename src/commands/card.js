@@ -75,6 +75,22 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => s.setName('vote-close').setDescription('Close the open Match of the Night vote and announce the winner'))
     .addSubcommand((s) => divOpt(brandOpt(s.setName('clear').setDescription('Delete the card (or just one division of it)')), false, 'Only this division (default: the whole card)'));
 
+/** 3.19.2: "Left off the RAW card" message for ⚡ Auto-build, per division. Empty string when nobody was left off. */
+function leftOffText(BL, out, signup) {
+    const why = { room: 'no room on the card', faced: 'already faced everyone left in the last 21 days (rematches off)', injured: 'injured' };
+    const parts = [];
+    for (const r of out.results) {
+        if (!r.leftOff.length) continue;
+        const lines = r.leftOff.slice(0, 40).map((w) => `• ${w.name}${w.discordId ? ` (<@${w.discordId}>)` : ''}: ${why[w.reason] || w.reason}`);
+        if (r.leftOff.length > 40) lines.push(`…and ${r.leftOff.length - 40} more`);
+        parts.push(`**${svc.divisionLabel(r.division)}** (${r.leftOff.length})\n${lines.join('\n')}`);
+    }
+    for (const x of out.skipped) parts.push(`**${svc.divisionLabel(x.division)}**: nobody booked. ${x.reason}`);
+    if (!parts.length) return '';
+    const from = out.signupMode === 'used' && signup ? `signed up for **${signup.title}**` : 'could have been booked';
+    return `🪑 **Left off the ${BL} card:** wrestlers who ${from} but aren't on it.\n\n${parts.join('\n\n')}`.slice(0, 1990);
+}
+
 module.exports = {
     data,
 
@@ -194,7 +210,11 @@ module.exports = {
             const ui = await cardUi.viewMessage(guildId, brand, {
                 notice: `Booked the **${BL}** card from recent matches. ${lines.join(' · ')}${via}${skipped.length ? `\n${skipped.join('\n')}` : ''}\nChange anything with the buttons below, or add a match with \`/card add\`.`
             });
-            return respond(interaction, ui);
+            await respond(interaction, ui);
+            // 3.19.2: a separate private message: who was left off the card, and why
+            const left = leftOffText(BL, out, signup);
+            if (left) await interaction.followUp({ content: left, flags: 64, allowedMentions: { parse: [] }, [require('../utils/panelKit').SEPARATE]: true });
+            return;
         }
 
         if (sub === 'add') {

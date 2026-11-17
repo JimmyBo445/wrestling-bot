@@ -71,11 +71,16 @@ const command = (interaction, name) => {
  * The panels use this to show a command's answer inside the panel, with their own buttons.
  * All the command's own checks (admin only, owner only...) still apply.
  */
+/** 3.19.2: a follow-up marked with this stays its own message when a panel captures a command (see EXTRA). */
+const SEPARATE = Symbol('separate');
+const EXTRA = Symbol('extra');
 async function capture(interaction, name, sub, values = {}) {
     const cmd = command(interaction, name);
     let payload = null;
+    const extra = [];
     const take = async (x = {}) => {
         const p = typeof x === 'string' ? { content: x } : { ...x };
+        if (p[SEPARATE]) { extra.push(p); return { id: 'captured' }; }
         if (!payload) payload = p;
         else payload = { ...payload, content: [payload.content, p.content].filter(Boolean).join('\n') || payload.content };
         return { id: 'captured' };
@@ -94,6 +99,7 @@ async function capture(interaction, name, sub, values = {}) {
     await cmd.execute(fake);
     const out = payload || {};
     delete out.flags;
+    if (extra.length) out[EXTRA] = extra;
     return out;
 }
 
@@ -125,4 +131,4 @@ function withNotice(payload, notice) {
     return { ...payload, content: [notice, payload.content].filter(Boolean).join('\n').slice(0, 1900) };
 }
 
-module.exports = { NOPING, btn, row, rows5, clip, homeRow, onPrivateMessage, show, privately, command, capture, open, problem, withNotice, ButtonStyle };
+module.exports = { SEPARATE, EXTRA, NOPING, btn, row, rows5, clip, homeRow, onPrivateMessage, show, privately, command, capture, open, problem, withNotice, ButtonStyle };

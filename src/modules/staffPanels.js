@@ -571,7 +571,10 @@ async function runAuto(interaction, brand, st, name) {
     if (!st.s) values.use_signup = false;
     const r = await attempt(() => capture(interaction, 'card', 'auto', values));
     if (r.failed) return autoPanel(interaction, brand, st, r.content);
-    return open(interaction, async () => r); // /card auto answers with the card screen
+    const { EXTRA } = require('../utils/panelKit');
+    const extra = r[EXTRA] || [];
+    await open(interaction, async () => r); // /card auto answers with the card screen
+    for (const x of extra) await interaction.followUp({ content: x.content, flags: EPHEMERAL, allowedMentions: { parse: [] } }).catch(() => {}); // 3.19.2: who was left off
 }
 
 async function handleCardForm(interaction, a, b) {
@@ -590,7 +593,9 @@ async function handleCardForm(interaction, a, b) {
         if (/^n/.test(yn)) values.use_signup = false;
         const r = await attempt(() => capture(interaction, 'card', 'auto', values));
         if (r.failed) return cardTools(interaction, brand, r.content);
-        return open(interaction, async () => r); // /card auto already answers with the card screen
+        const extra = r[require('../utils/panelKit').EXTRA] || [];
+        await open(interaction, async () => r); // /card auto already answers with the card screen
+        for (const x of extra) await interaction.followUp({ content: x.content, flags: EPHEMERAL, allowedMentions: { parse: [] } }).catch(() => {});
     }
     if (a === 'sc') {
         const r = await attempt(() => capture(interaction, 'card', 'schedule', { brand, date: field(interaction, 'date') }));

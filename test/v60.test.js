@@ -110,6 +110,32 @@ const pk = (a, b) => [String(a), String(b)].sort().join(':');
         assert.match(text(i), /Rematches \*\*off.*Other match types \*\*on\*\* · Pair by records \*\*off\*\*/);
     });
 
+    await t('3.19.2: a separate private message lists who was left off the card, and why', async () => {
+        let i = await click('ui:ct:ab:raw:2:0010', priv(ADM));
+        const fu = i.responses.filter((r) => r.type === 'followUp').at(-1);
+        assert.ok(fu, JSON.stringify(i.responses.map((r) => r.type)));
+        assert.strictEqual(fu.p.flags, 64);
+        assert.match(fu.p.content, /^🪑 \*\*Left off the RAW card:\*\*/);
+        assert.match(fu.p.content, /\*\*Men's\*\* \(8\)/, fu.p.content);
+        assert.match(fu.p.content, /• W\d\d \(<@p\d+>\): no room on the card/);
+        assert.deepStrictEqual(fu.p.allowedMentions, { parse: [] }, 'nobody gets pinged');
+        assert.match(text({ responses: i.responses.filter((r) => r.type !== 'followUp') }), /Booked the \*\*RAW\*\* card/);
+        // the slash command sends it too; with a full card there is no message
+        i = await run('card', 'auto', { brand: 'raw', matches: 2, use_signup: false, rematches: false, match_types: false }, ADM);
+        assert.ok(i.responses.some((r) => r.type === 'followUp' && /Left off the RAW card/.test(r.p.content)));
+        i = await run('card', 'auto', { brand: 'raw', matches: 10, use_signup: false, rematches: true, match_types: false }, ADM);
+        assert.ok(!i.responses.some((r) => r.type === 'followUp' && /Left off/.test(r.p.content || '')), 'everyone fits');
+        // injured signed-up wrestlers are listed as injured
+        await run('booking', 'signup-open', { title: 'RAW Night' }, ADM);
+        const sid = (await q(`select id from signups order by id desc limit 1`))[0].id;
+        for (const c of W.slice(0, 4)) await run('booking', 'signup-add', { signup: sid, character: c }, ADM);
+        await f.pool.query(`insert into injuries (guild_id, character_id, returns_at, created_by) values ($2, $1, current_date + 7, 'adm')`, [W[3], G]);
+        i = await run('card', 'auto', { brand: 'raw', matches: 1, rematches: true }, ADM);
+        const m = i.responses.filter((r) => r.type === 'followUp').at(-1).p.content;
+        assert.match(m, /signed up for \*\*RAW Night\*\*/);
+        assert.match(m, /W03 \(<@p3>\): injured/);
+    });
+
     console.log(`\n${passed} passed, ${failed} failed`);
     if (failed) process.exitCode = 1;
     await f.pool.end();

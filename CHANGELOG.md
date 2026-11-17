@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.19.2
+- After ⚡ Auto-build, staff get a **separate private message: "Left off the card"**. It lists, per division, every wrestler who signed up (or could have been booked) but isn't on the card, with the reason: no room on the card, already faced everyone left in the last 21 days (rematches off), or injured. Nobody is pinged. No message when everyone made it.
+
 ## 3.19.1
 - **`/card remove`** is now listed in Discord. Pick the brand, then the match from a list ("Men's #2: Roman Reigns vs Seth Rollins"); start typing a wrestler's name to narrow it down. The reply shows what was taken off and the card as it is now.
 
