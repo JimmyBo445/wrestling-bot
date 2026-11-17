@@ -50,11 +50,18 @@ async function singlesCooldownHoursLeft(guildId, charA, charB, settings, client 
 async function logMatch(input) {
     const {
         guildId, matchType, slotCharacterIds, winnerIndex = null, winningTeam = null,
-        resultType = 'decisive', notes = null, titleValue = null, contenderTitleValue = null,
+        resultType = 'decisive', notes = null, titleValue = null,
         actor, overrideCooldown = false, stipulation = null, finish = null, score = null
     } = input;
+    let { contenderTitleValue = null } = input;
+    let fromCard = false;
     const config = MATCH_CONFIG[matchType];
     if (!config) throw new UserError('Unknown match type.');
+    // 3.20: a match planned on the card as a #1 contender match counts as one when it's logged (even with /match log)
+    if (!titleValue && !contenderTitleValue && resultType === 'decisive') {
+        const slot = await require('./cardService').findCardSlot(guildId, matchType, slotCharacterIds).catch(() => null);
+        if (slot?.contender_title_id) { contenderTitleValue = String(slot.contender_title_id); fromCard = true; }
+    }
     if (titleValue && contenderTitleValue) throw new UserError('A match can be a title match or a #1 contender match, not both.');
     if (notes && notes.length > 300) throw new UserError('Notes are limited to 300 characters.');
     const stip = stipulation ? String(stipulation).trim() : null;
@@ -135,7 +142,12 @@ async function logMatch(input) {
     if (contenderTitleValue) {
         contenderTitle = await requireTitle(guildId, contenderTitleValue);
         if (resultType !== 'decisive') throw new UserError('A #1 contender match needs a winner (not a draw or no contest).');
-        validateContenderMatch({ contenderTitle, characters, teamMode, sideTeams, matchType });
+        try {
+            validateContenderMatch({ contenderTitle, characters, teamMode, sideTeams, matchType });
+        } catch (err) {
+            if (!fromCard) throw err;
+            contenderTitle = null; // planned on the card but no longer fits (e.g. not registered teams): log it as a normal match
+        }
     }
 
     // ---- write it all ----

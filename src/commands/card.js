@@ -43,17 +43,20 @@ const data = new SlashCommandBuilder()
         }
         return s
             .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true))
-            .addStringOption((o) => o.setName('stipulation').setDescription('e.g. No DQ, Steel Cage, Main Event').setRequired(false).setMaxLength(40));
+            .addStringOption((o) => o.setName('stipulation').setDescription('e.g. No DQ, Steel Cage, Main Event').setRequired(false).setMaxLength(40))
+            .addStringOption((o) => o.setName('contender_for').setDescription('Make it a #1 contender match: the winner becomes #1 contender for this belt').setRequired(false).setAutocomplete(true));
     })
     .addSubcommand((s) => brandOpt(s.setName('request').setDescription('Put an approved player match request on the card as a singles match'))
         .addStringOption((o) => o.setName('request').setDescription('Approved match request').setRequired(true).setAutocomplete(true))
-        .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true)))
+        .addStringOption((o) => o.setName('title').setDescription('Make it a title match for this belt').setRequired(false).setAutocomplete(true))
+        .addStringOption((o) => o.setName('contender_for').setDescription('Make it a #1 contender match: the winner becomes #1 contender for this belt').setRequired(false).setAutocomplete(true)))
     .addSubcommand((s) => divOpt(brandOpt(s.setName('edit').setDescription('Change a match: swap a wrestler, set the title or stipulation')))
         .addIntegerOption((o) => o.setName('number').setDescription('Match number in that division').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
         .addStringOption((o) => o.setName('swap_out').setDescription('Wrestler to take out').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('swap_in').setDescription('Wrestler to put in their place').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('title').setDescription('Belt for this match (type a single - to remove it)').setRequired(false).setAutocomplete(true))
-        .addStringOption((o) => o.setName('stipulation').setDescription('Stipulation (type a single - to clear it)').setRequired(false).setMaxLength(40)))
+        .addStringOption((o) => o.setName('stipulation').setDescription('Stipulation (type a single - to clear it)').setRequired(false).setMaxLength(40))
+        .addStringOption((o) => o.setName('contender_for').setDescription('#1 contender match for this belt (type a single - to remove it)').setRequired(false).setAutocomplete(true)))
     // 3.19.1: pick the match from a list (the old division + number still work inside the bot)
     .addSubcommand((s) => brandOpt(s.setName('remove').setDescription('[Admin] Take a match off a card'))
         .addStringOption((o) => o.setName('match').setDescription('Start typing a wrestler\'s name, or pick from the list').setRequired(true).setAutocomplete(true)))
@@ -76,6 +79,29 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => divOpt(brandOpt(s.setName('clear').setDescription('Delete the card (or just one division of it)')), false, 'Only this division (default: the whole card)'));
 
 /** 3.19.2: "Left off the RAW card" message for ⚡ Auto-build, per division. Empty string when nobody was left off. */
+/** 3.20: someone is already on the card. Remember what was asked and offer a ✅ Book anyway button. */
+const OPTION_NAMES = {
+    add: ['brand', 'match_type', ...Array.from({ length: MAX_SLOTS }, (_, i) => `wrestler${i + 1}`), 'title', 'stipulation', 'contender_for'],
+    request: ['brand', 'request', 'title', 'contender_for'],
+    edit: ['brand', 'division', 'number', 'swap_out', 'swap_in', 'title', 'stipulation', 'contender_for']
+};
+function askTwice(interaction, sub, err) {
+    const values = {};
+    for (const n of OPTION_NAMES[sub]) {
+        const v = n === 'number' ? interaction.options.getInteger(n) : interaction.options.getString(n);
+        if (v !== null) values[n] = v;
+    }
+    const token = svc.rememberTwice(sub, values);
+    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    return respond(interaction, {
+        content: `⚠️ ${err.message}\nA wrestler is normally in only one match per card. Book them in this match too?`,
+        components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`ui:ct:dbl:${values.brand}:${token}`).setLabel('✅ Book anyway').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`ui:ct:dbn:${values.brand}`).setLabel('✖ No').setStyle(ButtonStyle.Secondary))],
+        allowedMentions: NO_MENTIONS
+    });
+}
+
 function leftOffText(BL, out, signup) {
     const why = { room: 'no room on the card', faced: 'already faced everyone left in the last 21 days (rematches off)', injured: 'injured' };
     const parts = [];
@@ -106,7 +132,8 @@ module.exports = {
                 division = rows[0]?.division || null;
             }
         }
-        if (focused.name === 'title') {
+        if (focused.name === 'title' || focused.name === 'contender_for') {
+            if (!division && sub === 'edit') division = interaction.options.getString('division');
             const params = [interaction.guildId, `%${String(focused.value).replace(/[%_]/g, '')}%`];
             let extra = '';
             if (division) { params.push(division); extra = 'AND division = $3'; }
@@ -225,9 +252,16 @@ module.exports = {
                 const v = interaction.options.getString(`wrestler${i}`);
                 if (v !== null) characterIds.push(v);
             }
-            const res = await svc.addMatchToCard(guildId, brand, {
-                matchType, characterIds, titleId: interaction.options.getString('title'), stipulation: interaction.options.getString('stipulation'), createdBy: interaction.user.id
-            });
+            let res;
+            try {
+                res = await svc.addMatchToCard(guildId, brand, {
+                    matchType, characterIds, titleId: interaction.options.getString('title'), stipulation: interaction.options.getString('stipulation'), createdBy: interaction.user.id,
+                    contenderTitleId: interaction.options.getString('contender_for'), allowTwice: Boolean(interaction.options.getBoolean('allow_twice'))
+                });
+            } catch (err) {
+                if (err instanceof svc.DoubleBooked) return askTwice(interaction, 'add', err);
+                throw err;
+            }
             const draft = await svc.requireDraft(guildId, brand, res.division);
             return respond(interaction, {
                 content: `Added as **${svc.divisionLabel(res.division)}** match **${res.number}** on the ${BL} card.${res.warnings.length ? `\n⚠️ ${res.warnings.join('\n⚠️ ')}` : ''}\n\n${await svc.describeCard(draft)}\n\n${res.number >= MAX_CARD_MATCHES ? `The ${svc.divisionLabel(res.division)} part of the card is full.` : `${MAX_CARD_MATCHES - res.number} spot${MAX_CARD_MATCHES - res.number === 1 ? '' : 's'} left in ${svc.divisionLabel(res.division)}.`} See everything with \`/card view\`.`,
@@ -243,10 +277,17 @@ module.exports = {
             const req = rows[0];
             if (!req) throw new UserError('Pick one of the approved match requests from the list.');
             if (req.payload?.booked === 'yes') throw new UserError('That request is already on a card.');
-            const res = await svc.addMatchToCard(guildId, brand, {
-                matchType: 'singles', characterIds: [String(req.character_id), String(req.challenger_character_id)],
-                titleId: interaction.options.getString('title'), stipulation: req.payload?.note ? String(req.payload.note).slice(0, 40) : null, createdBy: interaction.user.id
-            });
+            let res;
+            try {
+                res = await svc.addMatchToCard(guildId, brand, {
+                    matchType: 'singles', characterIds: [String(req.character_id), String(req.challenger_character_id)],
+                    titleId: interaction.options.getString('title'), stipulation: req.payload?.note ? String(req.payload.note).slice(0, 40) : null, createdBy: interaction.user.id,
+                    contenderTitleId: interaction.options.getString('contender_for'), allowTwice: Boolean(interaction.options.getBoolean('allow_twice'))
+                });
+            } catch (err) {
+                if (err instanceof svc.DoubleBooked) return askTwice(interaction, 'request', err);
+                throw err;
+            }
             await pool.query(`UPDATE pending_requests SET payload = COALESCE(payload, '{}'::jsonb) || '{"booked":"yes"}'::jsonb WHERE id = $1`, [id]);
             const draft = await svc.requireDraft(guildId, brand, res.division);
             return respond(interaction, {
@@ -262,13 +303,20 @@ module.exports = {
             const inn = interaction.options.getString('swap_in');
             const titleRaw = interaction.options.getString('title');
             const stipRaw = interaction.options.getString('stipulation');
-            if (out === null && inn === null && titleRaw === null && stipRaw === null) throw new UserError('Nothing to change: fill in `swap_out` and `swap_in`, `title` or `stipulation`.');
+            const contRaw = interaction.options.getString('contender_for');
+            if (out === null && inn === null && titleRaw === null && stipRaw === null && contRaw === null) throw new UserError('Nothing to change: fill in `swap_out` and `swap_in`, `title`, `stipulation` or `contender_for`.');
             if ((out === null) !== (inn === null)) throw new UserError('To swap a wrestler, fill in both `swap_out` (who leaves) and `swap_in` (who replaces them).');
             const edits = {};
             if (inn !== null) { edits.swapOut = out; edits.swapIn = inn; }
             if (titleRaw !== null) edits.titleId = titleRaw.trim() === '-' ? null : titleRaw;
             if (stipRaw !== null) edits.stipulation = stipRaw.trim() === '-' ? null : stipRaw;
-            const res = await svc.editMatchOnCard(guildId, brand, division, n, edits);
+            if (contRaw !== null) edits.contenderTitleId = contRaw.trim() === '-' ? null : contRaw;
+            edits.allowTwice = Boolean(interaction.options.getBoolean('allow_twice'));
+            let res;
+            try { res = await svc.editMatchOnCard(guildId, brand, division, n, edits); } catch (err) {
+                if (err instanceof svc.DoubleBooked) return askTwice(interaction, 'edit', err);
+                throw err;
+            }
             const draft = await svc.requireDraft(guildId, brand, division);
             return respond(interaction, { content: `Updated ${DL} match **${n}**.${res.warnings.length ? `\n⚠️ ${res.warnings.join('\n⚠️ ')}` : ''}\n\n${await svc.describeCard(draft)}`, allowedMentions: NO_MENTIONS });
         }

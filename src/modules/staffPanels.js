@@ -444,6 +444,15 @@ async function handleCard(interaction, a, b, c) {
     const L = BRANDS[brand];
     if (a === 'h') return cardTools(interaction, brand);
     if (a === 'v') return cardView(interaction, brand);
+    if (a === 'dbn') return interaction.update({ content: 'OK, nothing was changed.', components: [] });
+    if (a === 'dbl') { // 3.20: ✅ Book anyway (a wrestler in two matches on one card)
+        const ask = require('../utils/cardService').takeTwice(c);
+        if (!ask) return interaction.update({ content: '⚠️ That button has expired. Run the command again.', components: [] });
+        return open(interaction, async () => {
+            const r = await capture(interaction, 'card', ask.sub, { ...ask.values, allow_twice: true });
+            return { ...r, components: [row(btn(`ui:ct:v:${brand}`, `📋 Open the ${L} card`))] };
+        });
+    }
     if (a === 'nw') return interaction.showModal(modal(`ui:ctm:nw:${brand}`, `New ${L} card (replaces the current one)`, [{ id: 'name', label: 'Show name (optional)', max: 40, placeholder: 'Monday Night Mayhem' }]));
     if (a === 'au') return autoPanel(interaction, brand); // 3.19: a screen with switches instead of a form
     if (['ap', 'apn', 'ab', 'abn', 'as'].includes(a)) {
@@ -490,6 +499,7 @@ async function handleCard(interaction, a, b, c) {
     }
     if (a === 'rqs') {
         const r = await attempt(() => capture(interaction, 'card', 'request', { brand, request: v }));
+        if (JSON.stringify(r.components || []).includes('ui:ct:dbl:')) return interaction.update({ content: r.content, components: r.components, embeds: [], files: [] });
         return cardView(interaction, brand, clip(r.failed ? r.content : (r.content || '').split('\n')[0], 600));
     }
     if (a === 'rc' || a === 'vo') {

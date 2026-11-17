@@ -368,7 +368,9 @@ async function tournamentView(interaction, id, notice = null) {
                     btn(`ui:tn:sq:${tour.id}`, '▶️ Start (draw the bracket)', P), btn(`ui:tn:cq:${tour.id}`, '✖ Cancel', D)));
                 if (T.isTriple(tour)) p.content = [p.content, '_First round is **triple threats**; the winners then go one-on-one. 🎯 lets you choose who is in which match._'].filter(Boolean).join('\n');
             } else if (tour.status === 'active') {
-                components.push(row(btn(`ui:tn:d:${tour.id}:0`, '🏁 Decide a match', P), btn(`ui:tn:post:${tour.id}`, '📣 Post bracket here'), btn(`ui:tn:cq:${tour.id}`, '✖ Cancel', D)));
+                components.push(row(btn(`ui:tn:d:${tour.id}:0`, '🏁 Decide a match', P), btn(`ui:tn:e:${tour.id}`, '✏️ Edit bracket'), btn(`ui:tn:post:${tour.id}`, '📣 Post bracket here'), btn(`ui:tn:cq:${tour.id}`, '✖ Cancel', D)));
+            } else if (tour.status === 'finished') {
+                components.push(row(btn(`ui:tn:post:${tour.id}`, '📣 Post bracket here'), btn(`ui:tn:e:${tour.id}`, '✏️ Edit bracket')));
             } else {
                 components.push(row(btn(`ui:tn:post:${tour.id}`, '📣 Post bracket here')));
             }
@@ -410,6 +412,41 @@ async function decidePanel(interaction, id, page = 0) {
         components.push(row(...nav));
         return { embeds: [embed], components: withHome(components) };
     });
+}
+
+/** 3.20 staff: fix a running bracket with buttons (replace, swap, undo, change who advanced). */
+async function bracketEditPanel(interaction, id, notice = null) {
+    requireAdmin(interaction, 'edit brackets');
+    const back = row(btn(`ui:tn:v:${id}`, '◀ Bracket'));
+    return open(interaction, async () => {
+        const T = require('../utils/tournamentUtils');
+        const tour = await T.requireTournament(interaction.guildId, id, { statuses: ['active', 'finished'] });
+        const all = await T.bracketRows(tour.id);
+        const rounds = Math.max(0, ...all.map((m) => m.round));
+        const lines = [];
+        for (let r = 1; r <= rounds; r++) {
+            lines.push(`**${T.roundName(r, rounds, T.isTriple(tour))}**`);
+            for (const m of all.filter((x) => x.round === r)) {
+                const names = [m.a_name, m.b_name, m.c_name].filter(Boolean);
+                lines.push(`${m.winner_id ? '✅' : '▫️'} M${m.slot}: ${names.length ? names.join(' vs ') : '_waiting_'}${m.winner_id ? ` → **${m.w_name}**` : ''}`);
+            }
+        }
+        const spots = (await T.openSpots(tour.id)).length;
+        const decided = all.some((m) => m.winner_id);
+        const embed = new EmbedBuilder().setColor(0xE8BF4A).setTitle(`✏️ ${tour.name}: edit the bracket`)
+            .setDescription(clip(`${lines.join('\n')}\n\n🔁 **Replace** someone in a match that isn't decided yet · ↔️ **Swap** two wrestlers · ↩️ **Undo or change** a result.`, 4000));
+        const components = [row(btn(`ui:tn:er:${tour.id}`, '🔁 Replace a wrestler', S, !spots), btn(`ui:tn:es:${tour.id}`, '↔️ Swap two spots', S, spots < 2),
+            btn(`ui:tn:eu:${tour.id}`, '↩️ Undo or change a result', S, !decided)), back];
+        return withNotice({ content: null, embeds: [embed], files: [], attachments: [], components: withHome(components) }, notice);
+    }, { backRows: [back] });
+}
+
+/** Runs a bracket edit and goes back to the edit screen with what happened (or the problem). */
+async function bracketEdit(interaction, id, run) {
+    requireAdmin(interaction, 'edit brackets');
+    let notice;
+    try { notice = await run(); } catch (e) { if (!(e instanceof UserError)) throw e; notice = `⚠️ ${e.message}`; }
+    return bracketEditPanel(interaction, id, notice);
 }
 
 /** 3.18 staff: who is in which first-round match of a triple-threat tournament (before it starts). */
@@ -864,6 +901,67 @@ async function handle(interaction, parts) {
             return groupsPanel(interaction, b, `Match ${n}: ${picked.length ? rows.filter((r) => picked.includes(String(r.id))).map((r) => r.name).join(' vs ') : 'emptied'}.`);
         }
         if (a === 'w') return tournamentAction(interaction, b, () => capture(interaction, 'tournament', 'advance', { tournament: b, bracket_match: c, winner: d }));
+        // ---- 3.20: ✏️ Edit bracket
+        if (a === 'e') return bracketEditPanel(interaction, b);
+        if (['er', 'er1', 'erp', 'er2', 'es', 'es2', 'eu', 'eu1', 'eux'].includes(a)) {
+            requireAdmin(interaction, 'edit brackets');
+            const T = require('../utils/tournamentUtils');
+            const tour = await T.requireTournament(interaction.guildId, b, { statuses: ['active', 'finished'] });
+            const rounds = Math.max(0, ...(await T.bracketRows(tour.id)).map((m) => m.round));
+            const where = (tm) => `${T.roundName(tm.round, rounds, T.isTriple(tour))} M${tm.slot}`;
+            const backBtn = row(btn(`ui:tn:e:${tour.id}`, '◀ Back'));
+            const screen = (content, rows) => show(interaction, { content, embeds: [], files: [], attachments: [], components: withHome([...rows, backBtn]) });
+            if (a === 'er' || a === 'es') {
+                const spots = await T.openSpots(tour.id);
+                if (!spots.length) return bracketEditPanel(interaction, b, '⚠️ Every match that has wrestlers in it is already decided.');
+                const opts = spots.slice(0, 25).map((x) => ({ label: clip(x.name, 100), value: x.key, description: clip(where(x.tm), 100) }));
+                if (a === 'er') return screen('🔁 **Who comes out?** Pick the spot to fill with someone new.', [select(`ui:tn:er1:${tour.id}`, 'Pick a wrestler in the bracket', opts)]);
+                const menu = new StringSelectMenuBuilder().setCustomId(`ui:tn:es2:${tour.id}`).setPlaceholder('Pick the two wrestlers to swap').setMinValues(2).setMaxValues(2).addOptions(opts);
+                return screen('↔️ **Pick two wrestlers** in different matches. They trade places.', [new ActionRowBuilder().addComponents(menu)]);
+            }
+            if (a === 'es2') {
+                const [k1, k2] = interaction.values || [];
+                return bracketEdit(interaction, b, async () => { const r = await T.swapInBracket(interaction.guildId, tour.id, k1, k2); return `↔️ Swapped **${r.a}** and **${r.b}**.`; });
+            }
+            if (a === 'er1' || a === 'erp') { // who comes in (pages of 25)
+                const key = a === 'er1' ? v : c;
+                const page = a === 'erp' ? Math.max(0, Number(d) || 0) : 0;
+                const { rows: cands } = await pool.query(
+                    `SELECT c.id, c.name FROM characters c JOIN users u ON u.id = c.owner_id
+                     WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT u.is_placeholder
+                       AND NOT EXISTS (SELECT 1 FROM tournament_entrants te WHERE te.tournament_id = $3 AND te.character_id = c.id)
+                     ORDER BY regexp_replace(lower(c.name), '^the +', '')`, [interaction.guildId, tour.division, tour.id]);
+                if (!cands.length) return bracketEditPanel(interaction, b, '⚠️ Everyone in that division is already in the tournament.');
+                const pages = Math.ceil(cands.length / 25);
+                const pg = Math.min(page, pages - 1);
+                const out = (await T.openSpots(tour.id)).find((x) => x.key === key);
+                const rows = [select(`ui:tn:er2:${tour.id}:${key}`, 'Who comes in?', cands.slice(pg * 25, pg * 25 + 25).map((x) => ({ label: clip(x.name, 100), value: String(x.id) })))];
+                if (pages > 1) rows.push(row(btn(`ui:tn:erp:${tour.id}:${key}:${pg - 1}`, '◀ Previous', S, pg === 0), btn(`ui:tn:erp:${tour.id}:${key}:${pg + 1}`, 'Next ▶', S, pg >= pages - 1)));
+                return screen(`🔁 **Who replaces ${out ? `${out.name}` : 'them'}${out ? ` (${where(out.tm)})` : ''}?**${pages > 1 ? ` Page ${pg + 1} of ${pages}.` : ''}`, rows);
+            }
+            if (a === 'er2') return bracketEdit(interaction, b, async () => { const r = await T.replaceInBracket(interaction.guildId, tour.id, c, v); return `🔁 **${r.in}** replaces **${r.out}** (round ${r.round}, match ${r.slot}).`; });
+            if (a === 'eu') {
+                const done = (await T.bracketRows(tour.id)).filter((m) => m.winner_id).reverse().slice(0, 25);
+                if (!done.length) return bracketEditPanel(interaction, b, '⚠️ No results to undo yet.');
+                return screen('↩️ **Which result?** The latest ones are at the top. A result can only be changed while the next round\'s match hasn\'t been decided.',
+                    [select(`ui:tn:eu1:${tour.id}`, 'Pick a decided match', done.map((m) => ({ label: clip(`${where(m)}: ${m.w_name} advanced`, 100), value: String(m.id), description: clip([m.a_name, m.b_name, m.c_name].filter(Boolean).join(' vs '), 100) })))]);
+            }
+            if (a === 'eu1') {
+                const m = (await T.bracketRows(tour.id)).find((x) => String(x.id) === String(v));
+                if (!m || !m.winner_id) return bracketEditPanel(interaction, b, '⚠️ That match isn\'t decided anymore.');
+                const others = [['a', m.a_id, m.a_name], ['b', m.b_id, m.b_name], ['c', m.c_id, m.c_name]].filter(([, x]) => x && String(x) !== String(m.winner_id));
+                return screen(`**${where(m)}:** ${[m.a_name, m.b_name, m.c_name].filter(Boolean).join(' vs ')}\n**${m.w_name}** advanced.${m.match_id ? `\n_It was logged as match #${m.match_id}. That stays in everyone's records; this only changes the bracket._` : ''}`,
+                    [row(btn(`ui:tn:eux:${tour.id}:${m.id}:0`, '↩️ Undo (not decided yet)', D), ...others.map(([, x, n]) => btn(`ui:tn:eux:${tour.id}:${m.id}:${x}`, clip(`🔀 ${n} advances instead`, 80), G)))]);
+            }
+            if (a === 'eux') {
+                return bracketEdit(interaction, b, async () => {
+                    const r = await T.redoBracketResult(interaction.guildId, tour.id, c, d && d !== '0' ? d : null);
+                    if (!r.placed) return `↩️ Round ${r.round}, match ${r.slot} is back to not decided.`;
+                    const { rows: w } = await pool.query(`SELECT name FROM characters WHERE id = $1`, [d]);
+                    return `🔀 **${w[0]?.name || 'They'}** advances${r.placed.finished ? ` instead and wins the tournament${r.placed.crowned ? ` (new ${r.placed.crowned} champion)` : ''}` : ` to the ${r.placed.nextRound} instead`}.`;
+                });
+            }
+        }
         if (a === 'rm') {
             requireAdmin(interaction, 'change tournament entrants');
             const { rows } = await pool.query(`SELECT c.id, c.name FROM tournament_entrants te JOIN characters c ON c.id = te.character_id JOIN tournaments t ON t.id = te.tournament_id WHERE t.id = $1 AND t.guild_id = $2 ORDER BY c.name LIMIT 25`, [b, interaction.guildId]);

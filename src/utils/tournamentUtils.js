@@ -168,10 +168,12 @@ async function advanceFromMatch(guildId, matchId, matchType, characters, winnerI
 }
 
 /** Undoing a bracket match reopens it (only if the next round hasn't been decided yet). Runs in the undo transaction. */
-async function revertTournamentMatch(client, matchId) {
-    const { rows } = await client.query(`SELECT tm.*, t.status, t.title_id FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id WHERE tm.match_id = $1`, [matchId]);
+async function revertTournamentMatch(client, matchId, { bracketMatchId = null } = {}) {
+    const { rows } = bracketMatchId
+        ? await client.query(`SELECT tm.*, t.status, t.title_id FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id WHERE tm.id = $1`, [bracketMatchId])
+        : await client.query(`SELECT tm.*, t.status, t.title_id FROM tournament_matches tm JOIN tournaments t ON t.id = tm.tournament_id WHERE tm.match_id = $1`, [matchId]);
     const tm = rows[0];
-    if (!tm) return;
+    if (!tm || !tm.winner_id) return;
     const { rows: mx } = await client.query(`SELECT MAX(round)::int AS r FROM tournament_matches WHERE tournament_id = $1`, [tm.tournament_id]);
     if (tm.round === mx[0].r) {
         if (tm.status === 'finished' && tm.title_id) throw new UserError('That match crowned the tournament winner as champion. Fix the title first (`/title manage`), then undo the match.');
@@ -257,7 +259,107 @@ async function matchList(tournament) {
     return { content: lines.join('\n').slice(0, 1950), userIds: [...userIds] };
 }
 
+
+// ------------------------------------------------------------------ 3.20: editing a running bracket (staff)
+const SPOT_COLS = { a: 'a_id', b: 'b_id', c: 'c_id' };
+
+/** Every bracket match of a tournament, with names, in round/slot order. */
+async function bracketRows(tournamentId, client = pool) {
+    const { rows } = await client.query(
+        `SELECT tm.*, a.name AS a_name, b.name AS b_name, c.name AS c_name, w.name AS w_name FROM tournament_matches tm
+         LEFT JOIN characters a ON a.id = tm.a_id LEFT JOIN characters b ON b.id = tm.b_id LEFT JOIN characters c ON c.id = tm.c_id LEFT JOIN characters w ON w.id = tm.winner_id
+         WHERE tm.tournament_id = $1 ORDER BY tm.round, tm.slot`, [tournamentId]);
+    return rows;
+}
+
+/** The filled spots in matches that haven't been decided yet: [{ key: 'tmid.col', tm, col, id, name }]. */
+async function openSpots(tournamentId, client = pool) {
+    const out = [];
+    for (const tm of await bracketRows(tournamentId, client)) {
+        if (tm.winner_id) continue;
+        for (const col of ['a', 'b', 'c']) if (tm[SPOT_COLS[col]]) out.push({ key: `${tm.id}.${col}`, tm, col, id: String(tm[SPOT_COLS[col]]), name: tm[`${col}_name`] });
+    }
+    return out;
+}
+
+async function lockActive(client, guildId, tournamentId) {
+    const { rows } = await client.query(`SELECT * FROM tournaments WHERE id = $1 AND guild_id = $2 FOR UPDATE`, [tournamentId, guildId]);
+    if (!rows[0]) throw new UserError('I could not find that tournament.');
+    if (rows[0].status !== 'active') throw new UserError('Only a running tournament\'s bracket can be edited.');
+    return rows[0];
+}
+const parseSpot = (key) => { const [id, col] = String(key).split('.'); if (!SPOT_COLS[col] || !/^\d+$/.test(id)) throw new UserError('Pick a spot from the list.'); return { id, col: SPOT_COLS[col] }; };
+
+/** Puts a different wrestler in an undecided spot. They take over the old wrestler's place in the tournament. */
+async function replaceInBracket(guildId, tournamentId, spotKey, newCharId) {
+    return withTransaction(async (client) => {
+        const tour = await lockActive(client, guildId, tournamentId);
+        const { id, col } = parseSpot(spotKey);
+        const { rows } = await client.query(`SELECT * FROM tournament_matches WHERE id = $1 AND tournament_id = $2`, [id, tour.id]);
+        const tm = rows[0];
+        if (!tm || !tm[col]) throw new UserError('That spot is empty now. Open the edit screen again.');
+        if (tm.winner_id) throw new UserError('That match has already been decided. Undo the result first.');
+        const { rows: ch } = await client.query(`SELECT id, name, division, status FROM characters WHERE id = $1 AND guild_id = $2`, [newCharId, guildId]);
+        const c = ch[0];
+        if (!c || c.status !== 'approved') throw new UserError('Pick an approved wrestler from the list.');
+        if (c.division !== tour.division) throw new UserError(`**${c.name}** isn't in this tournament's division.`);
+        const { rows: inIt } = await client.query(`SELECT 1 FROM tournament_entrants WHERE tournament_id = $1 AND character_id = $2`, [tour.id, c.id]);
+        if (inIt.length) throw new UserError(`**${c.name}** is already in this tournament. Use ↔️ Swap two spots to move them.`);
+        const oldId = tm[col];
+        const { rows: on } = await client.query(`SELECT name FROM characters WHERE id = $1`, [oldId]);
+        await client.query(`UPDATE tournament_matches SET ${col} = $2 WHERE id = $1`, [tm.id, c.id]);
+        await client.query(`UPDATE tournament_entrants SET character_id = $3 WHERE tournament_id = $1 AND character_id = $2`, [tour.id, oldId, c.id]);
+        return { out: on[0]?.name || 'someone', in: c.name, round: tm.round, slot: tm.slot };
+    });
+}
+
+/** Swaps two wrestlers between spots in undecided matches. */
+async function swapInBracket(guildId, tournamentId, keyA, keyB) {
+    return withTransaction(async (client) => {
+        const tour = await lockActive(client, guildId, tournamentId);
+        const x = parseSpot(keyA), y = parseSpot(keyB);
+        if (x.id === y.id) throw new UserError('Those two are in the same match, so swapping them changes nothing. Pick spots in two different matches.');
+        const { rows } = await client.query(`SELECT * FROM tournament_matches WHERE id = ANY($1::bigint[]) AND tournament_id = $2`, [[x.id, y.id], tour.id]);
+        const mx = rows.find((r) => String(r.id) === x.id), my = rows.find((r) => String(r.id) === y.id);
+        if (!mx || !my || !mx[x.col] || !my[y.col]) throw new UserError('One of those spots is empty now. Open the edit screen again.');
+        if (mx.winner_id || my.winner_id) throw new UserError('One of those matches has already been decided. Undo the result first.');
+        const ix = mx[x.col], iy = my[y.col];
+        await client.query(`UPDATE tournament_matches SET ${x.col} = $2 WHERE id = $1`, [mx.id, iy]);
+        await client.query(`UPDATE tournament_matches SET ${y.col} = $2 WHERE id = $1`, [my.id, ix]);
+        const { rows: n } = await client.query(`SELECT id, name FROM characters WHERE id = ANY($1::bigint[])`, [[ix, iy]]);
+        const name = (id) => n.find((r) => String(r.id) === String(id))?.name || 'someone';
+        return { a: name(ix), b: name(iy) };
+    });
+}
+
+/**
+ * Reopens a decided bracket match (it goes back to "not decided"). With newWinnerId, someone else advances instead.
+ * A logged match stays in the records; only the bracket changes.
+ */
+async function redoBracketResult(guildId, tournamentId, bracketMatchId, newWinnerId = null) {
+    return withTransaction(async (client) => {
+        const { rows: t } = await client.query(`SELECT * FROM tournaments WHERE id = $1 AND guild_id = $2 FOR UPDATE`, [tournamentId, guildId]);
+        const tour = t[0];
+        if (!tour) throw new UserError('I could not find that tournament.');
+        if (!['active', 'finished'].includes(tour.status)) throw new UserError('That tournament isn\'t running.');
+        const { rows } = await client.query(`SELECT * FROM tournament_matches WHERE id = $1 AND tournament_id = $2`, [bracketMatchId, tour.id]);
+        const tm = rows[0];
+        if (!tm || !tm.winner_id) throw new UserError('That match hasn\'t been decided, so there\'s nothing to undo.');
+        if (newWinnerId && ![tm.a_id, tm.b_id, tm.c_id].filter(Boolean).map(String).includes(String(newWinnerId))) throw new UserError('That wrestler isn\'t in that match.');
+        if (newWinnerId && String(newWinnerId) === String(tm.winner_id)) throw new UserError('They already advanced from that match.');
+        const loggedMatch = tm.match_id;
+        await revertTournamentMatch(client, null, { bracketMatchId: tm.id });
+        let placed = null;
+        if (newWinnerId) {
+            const { rows: fresh } = await client.query(`SELECT * FROM tournament_matches WHERE id = $1`, [tm.id]);
+            placed = await placeWinner(client, fresh[0], newWinnerId);
+        }
+        return { loggedMatch, placed, round: tm.round, slot: tm.slot };
+    });
+}
+
 module.exports = {
+    bracketRows, openSpots, replaceInBracket, swapInBracket, redoBracketResult,
     matchList,
     MIN_ENTRANTS, MAX_ENTRANTS, TRIPLE_MIN, TRIPLE_MAX, isTriple, minFor, maxFor, groupCount, roundName, requireTournament, autocompleteTournaments, placeWinner,
     startTournament, advanceFromMatch, revertTournamentMatch, bracketData

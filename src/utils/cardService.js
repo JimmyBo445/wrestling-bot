@@ -112,9 +112,9 @@ async function saveMatches(client, draftId, list) {
     for (let i = 0; i < list.length; i++) {
         const m = list[i];
         await client.query(
-            `INSERT INTO card_draft_matches (draft_id, position, match_type, character_ids, title_id, stipulation, match_id)
-             VALUES ($1, $2, $3, $4::bigint[], $5, $6, $7)`,
-            [draftId, i + 1, m.match_type, m.character_ids, m.title_id || null, m.stipulation || null, m.match_id || null]
+            `INSERT INTO card_draft_matches (draft_id, position, match_type, character_ids, title_id, stipulation, match_id, contender_title_id)
+             VALUES ($1, $2, $3, $4::bigint[], $5, $6, $7, $8)`,
+            [draftId, i + 1, m.match_type, m.character_ids, m.title_id || null, m.stipulation || null, m.match_id || null, m.contender_title_id || null]
         );
     }
     await client.query(`UPDATE card_drafts SET updated_at = now() WHERE id = $1`, [draftId]);
@@ -128,6 +128,27 @@ async function saveMatches(client, draftId, list) {
  * with the same sides for tag matches) and marks that slot as done. Returns { brand, division, name, position } or null.
  * Never throws: a card is a nice-to-have, logging the match matters more.
  */
+/** 3.20: the unlogged card match with exactly these wrestlers (same sides for tag matches), or null. */
+async function findCardSlot(guildId, matchType, characterIds) {
+    const config = MATCH_CONFIG[matchType];
+    if (!config) return null;
+    const idList = ids(characterIds);
+    const { rows } = await pool.query(
+        `SELECT cdm.id, cdm.character_ids, cdm.position, cdm.stipulation, cdm.contender_title_id, cdm.title_id, cd.brand, cd.division, cd.name
+         FROM card_draft_matches cdm JOIN card_drafts cd ON cd.id = cdm.draft_id
+         WHERE cd.guild_id = $1 AND cdm.match_type = $2 AND cdm.match_id IS NULL
+           AND cdm.character_ids <@ $3::bigint[] AND cdm.character_ids @> $3::bigint[]
+         ORDER BY cd.updated_at DESC, cdm.id`, [guildId, matchType, idList]);
+    const half = idList.length / 2;
+    const eq = (set, arr) => arr.length === set.size && arr.every((v) => set.has(v));
+    return rows.find((r) => {
+        if (config.winnerMode !== 'team') return true;
+        const a = new Set(idList.slice(0, half)), b = new Set(idList.slice(half));
+        const x = ids(r.character_ids).slice(0, half), y = ids(r.character_ids).slice(half);
+        return (eq(a, x) && eq(b, y)) || (eq(a, y) && eq(b, x));
+    }) || null;
+}
+
 async function linkMatchToCard(guildId, matchId, matchType, characterIds) {
     try {
         const config = MATCH_CONFIG[matchType];
@@ -207,6 +228,40 @@ async function checkMatch(guildId, matchType, characterIds, titleId) {
     return { chars, title, warnings, division };
 }
 
+/** 3.20: what a staff member asked for, kept for 15 minutes so the ✅ Book anyway button can redo it. */
+const twiceAsks = new Map();
+function rememberTwice(sub, values) {
+    const now = Date.now();
+    for (const [k, v] of twiceAsks) if (now - v.at > 15 * 60 * 1000) twiceAsks.delete(k);
+    const token = Math.random().toString(36).slice(2, 10);
+    twiceAsks.set(token, { sub, values, at: now });
+    return token;
+}
+function takeTwice(token) {
+    const v = twiceAsks.get(token);
+    twiceAsks.delete(token);
+    return v && Date.now() - v.at <= 15 * 60 * 1000 ? v : null;
+}
+
+/** 3.20: someone is already in another match on this card. Staff can book them anyway (a button asks). */
+class DoubleBooked extends UserError {
+    constructor(names) {
+        super(`${names.map((n) => `**${n}**`).join(', ')} ${names.length > 1 ? 'are' : 'is'} already booked on this card.`);
+        this.names = names;
+    }
+}
+
+/** 3.20: checks a #1 contender belt for a match. Returns the title, or null for none. */
+async function checkContender(guildId, division, matchType, contenderTitleId, titleId) {
+    if (!contenderTitleId) return null;
+    if (titleId) throw new UserError('A match can be a title match or a #1 contender match, not both.');
+    const t = await requireTitle(guildId, contenderTitleId);
+    if (t.division !== division) throw new UserError(`The **${t.name}** is a ${divisionLabel(t.division)} title, so this ${divisionLabel(division)} match can't decide its #1 contender.`);
+    if (t.is_tag_title && !isTeamMatch(matchType)) throw new UserError(`The **${t.name}** is a tag title, so its #1 contender match has to be a tag match.`);
+    if (!t.is_tag_title && isTeamMatch(matchType)) throw new UserError(`The **${t.name}** is a singles title, so its #1 contender match can't be a tag match.`);
+    return t;
+}
+
 function checkStip(stipulation) {
     if (stipulation && stipulation.length > 40) throw new UserError('Keep the stipulation under 40 characters (for example "No DQ" or "Steel Cage").');
 }
@@ -216,10 +271,11 @@ function checkStip(stipulation) {
  * Returns { number, division, warnings:[string] } where number is the match's number within its division.
  * Only plans a match: nothing is logged and no stats change until the match is logged with /match.
  */
-async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId = null, stipulation = null, createdBy = 'system' }) {
+async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId = null, stipulation = null, createdBy = 'system', contenderTitleId = null, allowTwice = false }) {
     checkStip(stipulation);
     const { chars, title, warnings, division } = await checkMatch(guildId, matchType, characterIds, titleId);
     checkBrandDivision(brand, division);
+    const cont = await checkContender(guildId, division, matchType, contenderTitleId, titleId);
     return withTransaction(async (client) => {
         const draft = await ensureDraft(guildId, brand, division, createdBy, client);
         await client.query(`SELECT id FROM card_drafts WHERE id = $1 FOR UPDATE`, [draft.id]);
@@ -230,10 +286,9 @@ async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId
         const onCard = new Set();
         for (const m of matches) for (const id of m.character_ids) onCard.add(id);
         const dupes = chars.filter((c) => onCard.has(String(c.id)));
-        if (dupes.length) {
-            throw new UserError(`${dupes.map((c) => `**${c.name}**`).join(', ')} ${dupes.length > 1 ? 'are' : 'is'} already booked on this card. A wrestler can only be in one match per card.`);
-        }
-        matches.push({ match_type: matchType, character_ids: ids(chars.map((c) => c.id)), title_id: title?.id || null, stipulation: stipulation?.trim() || null });
+        if (dupes.length && !allowTwice) throw new DoubleBooked(dupes.map((c) => c.name));
+        if (dupes.length) warnings.push(`${dupes.map((c) => `**${c.name}**`).join(', ')} ${dupes.length > 1 ? 'are' : 'is'} now booked twice on this card.`);
+        matches.push({ match_type: matchType, character_ids: ids(chars.map((c) => c.id)), title_id: title?.id || null, stipulation: stipulation?.trim() || null, contender_title_id: cont?.id || null });
         await saveMatches(client, draft.id, matches);
         await client.query(`UPDATE card_drafts SET recap_posted = false WHERE guild_id = $1 AND brand = $2`, [guildId, brand]);
         return { number: matches.length, division, warnings };
@@ -247,7 +302,7 @@ async function addMatchToCard(guildId, brand, { matchType, characterIds, titleId
  *  stipulation        text to set, or null to clear it
  * Returns { number, division, warnings }.
  */
-async function editMatchOnCard(guildId, brand, division, number, { swapOut, swapIn, titleId, stipulation } = {}) {
+async function editMatchOnCard(guildId, brand, division, number, { swapOut, swapIn, titleId, stipulation, contenderTitleId, allowTwice = false } = {}) {
     if (stipulation !== undefined) checkStip(stipulation);
     return withTransaction(async (client) => {
         const draft = await requireDraft(guildId, brand, division, client, true);
@@ -263,15 +318,18 @@ async function editMatchOnCard(guildId, brand, division, number, { swapOut, swap
             const at = characterIds.indexOf(String(swapOut));
             if (at < 0) throw new UserError('The wrestler to replace isn\'t in that match.');
             characterIds[at] = String(inChar.id);
-            for (let i = 0; i < matches.length; i++) {
-                if (i === number - 1) continue;
-                if (matches[i].character_ids.includes(String(inChar.id))) throw new UserError(`**${inChar.name}** is already booked in another match on this card.`);
-            }
+            const twice = matches.some((x, i) => i !== number - 1 && x.character_ids.includes(String(inChar.id)));
+            if (twice && !allowTwice) throw new DoubleBooked([inChar.name]);
         }
-        const newTitleId = titleId === undefined ? m.title_id : titleId;
+        // 3.20: a belt or a #1 contender spot, not both: setting one clears the other
+        let newTitleId = titleId === undefined ? m.title_id : titleId;
+        let newCont = contenderTitleId === undefined ? m.contender_title_id : contenderTitleId;
+        if (titleId) newCont = null;
+        if (contenderTitleId) newTitleId = null;
         const { title, warnings } = await checkMatch(guildId, m.match_type, characterIds, newTitleId);
         if (division !== (await getCharacterById(characterIds[0])).division) throw new UserError('That wrestler is in a different division.');
-        matches[number - 1] = { ...m, character_ids: ids(characterIds), title_id: title?.id || null, stipulation: stipulation === undefined ? m.stipulation : (stipulation ? stipulation.trim() : null) };
+        const cont = await checkContender(guildId, division, m.match_type, newCont, null);
+        matches[number - 1] = { ...m, character_ids: ids(characterIds), title_id: title?.id || null, contender_title_id: cont?.id || null, stipulation: stipulation === undefined ? m.stipulation : (stipulation ? stipulation.trim() : null) };
         await saveMatches(client, draft.id, matches);
         return { number, division, warnings };
     });
@@ -325,7 +383,7 @@ async function buildShowData(guild, draft) {
         : { rows: [] };
     const owners = await getDisplayNames(guild, chars.map((c) => c.discord_id), 2500);
     const byId = new Map(chars.map((c) => [String(c.id), c]));
-    const titleIds = [...new Set(matches.map((m) => m.title_id).filter(Boolean))];
+    const titleIds = [...new Set(matches.flatMap((m) => [m.title_id, m.contender_title_id]).filter(Boolean))];
     const { rows: titles } = titleIds.length ? await pool.query(`SELECT id, name FROM titles WHERE id = ANY($1::bigint[])`, [titleIds]) : { rows: [] };
     const titleName = new Map(titles.map((t) => [String(t.id), t.name]));
 
@@ -338,7 +396,9 @@ async function buildShowData(guild, draft) {
     for (const m of matches) {
         const config = MATCH_CONFIG[m.match_type];
         const base = {
-            number: m.position, matchId: m.match_id || null, label: config?.label || m.match_type, stipulation: m.stipulation,
+            number: m.position, matchId: m.match_id || null, label: config?.label || m.match_type,
+            // 3.20: a #1 contender match says so where the stipulation goes
+            stipulation: [m.contender_title_id ? `#1 Contender: ${titleName.get(String(m.contender_title_id)) || 'title'}` : null, m.stipulation].filter(Boolean).join(' · ') || null,
             title: m.title_id ? titleName.get(String(m.title_id)) || null : null
         };
         if (!config) continue;
@@ -425,7 +485,7 @@ async function describeCard(draft) {
     const allIds = [...new Set(matches.flatMap((m) => m.character_ids))];
     const { rows: chars } = await pool.query(`SELECT id, name FROM characters WHERE id = ANY($1::bigint[])`, [allIds]);
     const nm = new Map(chars.map((c) => [String(c.id), c.name]));
-    const titleIds = [...new Set(matches.map((m) => m.title_id).filter(Boolean))];
+    const titleIds = [...new Set(matches.flatMap((m) => [m.title_id, m.contender_title_id]).filter(Boolean))];
     const { rows: titles } = titleIds.length ? await pool.query(`SELECT id, name FROM titles WHERE id = ANY($1::bigint[])`, [titleIds]) : { rows: [] };
     const tn = new Map(titles.map((t) => [String(t.id), t.name]));
     const n = (id) => nm.get(String(id)) || 'TBD';
@@ -437,7 +497,7 @@ async function describeCard(draft) {
             who = `${m.character_ids.slice(0, half).map(n).join(' & ')} vs ${m.character_ids.slice(half).map(n).join(' & ')}`;
         } else if (m.character_ids.length === 2) who = `${n(m.character_ids[0])} vs ${n(m.character_ids[1])}`;
         else who = m.character_ids.map(n).join(', ');
-        return `**${m.position}.**${m.match_id ? ' ✅' : ''} ${matchLabel(m.match_type)}: ${who}${m.title_id ? ` 🏆 ${tn.get(String(m.title_id)) || 'title'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
+        return `**${m.position}.**${m.match_id ? ' ✅' : ''} ${matchLabel(m.match_type)}: ${who}${m.title_id ? ` 🏆 ${tn.get(String(m.title_id)) || 'title'}` : ''}${m.contender_title_id ? ` 🎯 #1 Contender: ${tn.get(String(m.contender_title_id)) || 'title'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
     }).join('\n');
 }
 
@@ -455,7 +515,8 @@ async function autoSettings(guildId) {
 
 /**
  * Plans a card from what has happened lately:
- *  1. title matches for current champions (vs their #1 contender, or the best recent winner)
+ *  1. title matches for current champions vs their #1 contender; a belt with no #1 contender gets a
+ *     #1 contender match between the best free wrestlers or teams instead (3.20)
  *  2. rematches of recent decisive matches (a repeat that has happened 2+ times is tagged "Rivalry")
  *  3. fresh matchups for wrestlers who are not booked yet (least-faced opponents, different players first)
  * Returns matches in running order: fresh first, then rematches, then title matches last.
@@ -566,30 +627,45 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
                 const mem = await getTeamMembers(cont.team_id);
                 if (mem.length === size && mem.every((c) => free(c.id)) && String(cont.team_id) !== String(reign.team_id)) challengerIds = mem.map((c) => String(c.id));
             }
+            if (!challengerIds && cont) continue; // there is a #1 contender team, it just isn't free this time
             if (!challengerIds) {
+                // 3.20: no #1 contender yet: the two best free teams fight to become #1 contender
                 const { rows: teams } = await pool.query(`SELECT id FROM teams WHERE guild_id = $1 AND division = $2 AND status = 'active' AND id <> $3`, [guildId, division, reign.team_id]);
-                let best = null;
+                const ranked = [];
                 for (const t of teams) {
                     const mem = await getTeamMembers(t.id);
                     if (mem.length !== size || !mem.every((c) => free(c.id))) continue;
-                    const score = mem.reduce((s, c) => s + (wins.get(String(c.id)) || 0), 0);
-                    if (!best || score > best.score) best = { score, ids: mem.map((c) => String(c.id)) };
+                    ranked.push({ score: mem.reduce((s, c) => s + (wins.get(String(c.id)) || 0), 0), ids: mem.map((c) => String(c.id)) });
                 }
-                if (best) challengerIds = best.ids;
+                ranked.sort((x, y) => y.score - x.score);
+                const [t1, t2] = ranked.filter((t, i, all) => all.findIndex((u) => u.ids.some((id) => t.ids.includes(id))) === i);
+                if (t1 && t2) {
+                    take(t1.ids); take(t2.ids);
+                    titleMatches.push({ match_type: size === 2 ? 'tag2v2' : 'tag3v3', character_ids: [...t1.ids, ...t2.ids], title_id: null, contender_title_id: title.id, stipulation: null });
+                }
+                continue;
             }
-            if (!challengerIds) continue;
             const mine = champs.map((c) => String(c.id));
             take(mine); take(challengerIds);
-            titleMatches.push({ match_type: size === 2 ? 'tag2v2' : 'tag3v3', character_ids: [...mine, ...challengerIds], title_id: title.id, stipulation: cont?.team_id ? null : 'Open Challenge' });
+            titleMatches.push({ match_type: size === 2 ? 'tag2v2' : 'tag3v3', character_ids: [...mine, ...challengerIds], title_id: title.id, stipulation: null });
         } else if (reign?.character_id && !reign.team_id) {
             const champ = chars.get(String(reign.character_id));
             if (!champ || !free(champ.id)) continue;
-            let opp = cont?.character_id && free(cont.character_id) && String(cont.character_id) !== String(champ.id) ? chars.get(String(cont.character_id)) : null;
-            const viaContender = Boolean(opp);
-            if (!opp) opp = bestFree([String(champ.id)], champ.owner_id);
-            if (!opp) continue;
-            take([champ.id, opp.id]);
-            titleMatches.push({ match_type: 'singles', character_ids: [String(champ.id), String(opp.id)], title_id: title.id, stipulation: viaContender ? null : 'Open Challenge' });
+            const opp = cont?.character_id && free(cont.character_id) && String(cont.character_id) !== String(champ.id) ? chars.get(String(cont.character_id)) : null;
+            if (opp) {
+                take([champ.id, opp.id]);
+                titleMatches.push({ match_type: 'singles', character_ids: [String(champ.id), String(opp.id)], title_id: title.id, stipulation: null });
+                continue;
+            }
+            if (cont) continue; // there is a #1 contender, they just aren't free this time
+            // 3.20: no #1 contender yet: the two best free wrestlers (not the champion, different players) fight to become #1 contender
+            const a = bestFree([String(champ.id)], champ.owner_id);
+            if (!a || String(a.owner_id) === String(champ.owner_id)) continue;
+            const b = [...chars.values()].filter((c) => free(c.id) && ![String(champ.id), String(a.id)].includes(String(c.id)) && String(c.owner_id) !== String(a.owner_id) && String(c.owner_id) !== String(champ.owner_id))
+                .sort((x, y) => (wins.get(String(y.id)) || 0) - (wins.get(String(x.id)) || 0))[0];
+            if (!b) continue;
+            take([a.id, b.id]);
+            titleMatches.push({ match_type: 'singles', character_ids: [String(a.id), String(b.id)], title_id: null, contender_title_id: title.id, stipulation: null });
         }
         // vacant titles are skipped on purpose: an admin leaves them vacant deliberately
     }
@@ -793,7 +869,7 @@ async function pingLines(draft) {
         ? await pool.query(`SELECT c.id, c.name, u.discord_id, u.is_placeholder FROM characters c JOIN users u ON u.id = c.owner_id WHERE c.id = ANY($1::bigint[])`, [allIds])
         : { rows: [] };
     const byId = new Map(chars.map((c) => [String(c.id), c]));
-    const titleIds = [...new Set(slots.map((m) => m.title_id).filter(Boolean))];
+    const titleIds = [...new Set(slots.flatMap((m) => [m.title_id, m.contender_title_id]).filter(Boolean))];
     const { rows: titles } = titleIds.length ? await pool.query(`SELECT id, name FROM titles WHERE id = ANY($1::bigint[])`, [titleIds]) : { rows: [] };
     const tn = new Map(titles.map((t) => [String(t.id), t.name]));
     const userIds = new Set();
@@ -812,7 +888,7 @@ async function pingLines(draft) {
             text = `${m.character_ids.slice(0, half).map(who).join(' & ')} vs ${m.character_ids.slice(half).map(who).join(' & ')}`;
         } else if (m.character_ids.length === 2) text = `${who(m.character_ids[0])} vs ${who(m.character_ids[1])}`;
         else text = m.character_ids.map(who).join(', ');
-        return `**${m.position}.** ${text}${m.title_id ? `, 🏆 ${tn.get(String(m.title_id)) || 'Title match'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
+        return `**${m.position}.** ${text}${m.title_id ? `, 🏆 ${tn.get(String(m.title_id)) || 'Title match'}` : ''}${m.contender_title_id ? `, 🎯 #1 Contender: ${tn.get(String(m.contender_title_id)) || 'title'}` : ''}${m.stipulation ? ` _(${m.stipulation})_` : ''}`;
     });
     return { lines, userIds: [...userIds] };
 }
@@ -830,7 +906,7 @@ function chunkLines(header, lines, max = 1900) {
 }
 
 module.exports = {
-    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, checkBrandDivision, autoSettings, NO_REMATCH_DAYS, getDraft, requireDraft, startDraft, getDraftMatches,
+    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, checkBrandDivision, autoSettings, NO_REMATCH_DAYS, DoubleBooked, findCardSlot, rememberTwice, takeTwice, getDraft, requireDraft, startDraft, getDraftMatches,
     getShow, brandDrafts, filledDrafts, startShow, ensureDraft, setShowName, editMatchOnCard, autoShow, describeShow, pingLines, chunkLines,
     tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard
 };

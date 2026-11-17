@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.20.0 — Double booking, #1 contender card matches, ✏️ Edit bracket
+- **Book someone twice on one card.** When `/card add`, a `/card edit` swap or `/card request` (or 📨 Add a match request) would put a wrestler in a second match in the same division, the bot now warns ("X is already booked on this card") with a **✅ Book anyway** button and a **✖ No** button, instead of just refusing. The button works for 15 minutes.
+- **#1 contender matches on the card.** `/card add`, `/card request` and `/card edit` have a new `contender_for` belt option (`-` in `/card edit` removes it). Any match type works; a tag belt needs a tag match. A match is a title match *or* a #1 contender match: setting one clears the other. The card text, the posted picture and the ping list show "🎯 #1 Contender: <belt>". When the match is logged (from the card, or with `/match log`), the winner becomes #1 contender.
+- **⚡ Auto-build books #1 contender matches.** A belt whose champion has no #1 contender now gets a #1 contender match between the best free wrestlers (or the best two free tag teams) instead of an "Open Challenge" title match. Once someone is #1 contender, auto-build books the title match like before.
+- **✏️ Edit bracket** (staff, on the tournament screen of a running or finished tournament):
+  - 🔁 **Replace a wrestler** in a match that isn't decided yet. The new wrestler also takes their place in the tournament.
+  - ↔️ **Swap two spots** between two undecided matches.
+  - ↩️ **Undo or change a result**: put a decided match back to "not decided", or tap who advances instead. This works while the next round's match hasn't been decided. A logged match stays in everyone's records; only the bracket changes.
+- Database change: migration 034.
+
 ## 3.19.2
 - After ⚡ Auto-build, staff get a **separate private message: "Left off the card"**. It lists, per division, every wrestler who signed up (or could have been booked) but isn't on the card, with the reason: no room on the card, already faced everyone left in the last 21 days (rematches off), or injured. Nobody is pinged. No message when everyone made it.
 
