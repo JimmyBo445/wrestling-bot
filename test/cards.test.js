@@ -105,9 +105,18 @@ const base = { brand: 'raw', division: 'mens' };
         const { rows } = await f.pool.query(`select position, match_type from card_draft_matches where draft_id=$1 order by position`, [draft.id]);
         assert.deepStrictEqual(rows.map((r) => r.match_type), ['tag2v2', 'singles', 'singles']);
         i = await run('card', 'remove', { ...base, number: 2 }, ADM);
-        assert.match(text(i), /Removed Men's match 2/, text(i));
+        assert.match(text(i), /Took this off the RAW card \(Men's\):\n\*\*2\.\*\*/, text(i));
         i = await run('card', 'remove', { ...base, number: 9 }, ADM);
         assert.ok(isPrivateErr(i, /1 to 2/), text(i));
+        // 3.19.1: listed in Discord; pick the match from a list
+        const { client } = require('./mock');
+        assert.ok(client.commands.get('card').data.toJSON().options.some((o) => o.name === 'remove'));
+        const choices = await auto('card', 'remove', 'match', 'M5', { brand: 'raw' }, ADM);
+        assert.ok(choices.some((c) => /^Men's #1: M5 & M6 vs M7 & M8$/.test(c.name) && c.value === 'mens:1'), JSON.stringify(choices));
+        await run('card', 'add', { brand: 'raw', match_type: 'singles', wrestler1: C.M1, wrestler2: C.M2 }, ADM); // a spare to take off
+        i = await run('card', 'remove', { brand: 'raw', match: 'mens:3' }, ADM);
+        assert.match(text(i), /Took this off the RAW card \(Men's\):\n\*\*3\.\*\*.*M1/, text(i));
+        assert.strictEqual((await f.pool.query(`select count(*)::int n from card_draft_matches where draft_id=$1`, [draft.id])).rows[0].n, 2);
     });
     await t('post: one message per division with the wrestlers pinged underneath', async () => {
         // add a women's match to the same RAW card

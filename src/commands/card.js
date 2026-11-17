@@ -3,7 +3,7 @@ const { pool } = require('../db/pool');
 const { requireAdmin, respond, NO_MENTIONS } = require('../utils/discordHelpers');
 const { UserError } = require('../utils/errors');
 const { autocompleteCharacters } = require('../utils/characterUtils');
-const { MATCH_CONFIG, CARD_BRANDS, MAX_CARD_MATCHES, DIVISION_THEME } = require('../utils/constants');
+const { MATCH_CONFIG, CARD_BRANDS, MAX_CARD_MATCHES, DIVISION_THEME, isTeamMatch } = require('../utils/constants');
 const { renderTapeCard } = require('../cards/tapeCard');
 const { buildTapeData } = require('../utils/cardData');
 const svc = require('../utils/cardService');
@@ -54,8 +54,9 @@ const data = new SlashCommandBuilder()
         .addStringOption((o) => o.setName('swap_in').setDescription('Wrestler to put in their place').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('title').setDescription('Belt for this match (type a single - to remove it)').setRequired(false).setAutocomplete(true))
         .addStringOption((o) => o.setName('stipulation').setDescription('Stipulation (type a single - to clear it)').setRequired(false).setMaxLength(40)))
-    .addSubcommand((s) => divOpt(brandOpt(s.setName('remove').setDescription('Take a match off the card')))
-        .addIntegerOption((o) => o.setName('number').setDescription('Match number in that division').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
+    // 3.19.1: pick the match from a list (the old division + number still work inside the bot)
+    .addSubcommand((s) => brandOpt(s.setName('remove').setDescription('[Admin] Take a match off a card'))
+        .addStringOption((o) => o.setName('match').setDescription('Start typing a wrestler\'s name, or pick from the list').setRequired(true).setAutocomplete(true)))
     .addSubcommand((s) => divOpt(brandOpt(s.setName('move').setDescription('Change the running order within a division')))
         .addIntegerOption((o) => o.setName('from').setDescription('Match number to move').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
         .addIntegerOption((o) => o.setName('to').setDescription('New spot').setRequired(true).setMinValue(1).setMaxValue(MAX_CARD_MATCHES)))
@@ -95,6 +96,26 @@ module.exports = {
             if (division) { params.push(division); extra = 'AND division = $3'; }
             const { rows } = await pool.query(`SELECT id, name, is_vacant FROM titles WHERE guild_id = $1 AND name ILIKE $2 ${extra} ORDER BY name LIMIT 25`, params);
             return interaction.respond(rows.map((r) => ({ name: `${r.name}${r.is_vacant ? ' (Vacant)' : ''}`.slice(0, 100), value: String(r.id) })));
+        }
+        if (focused.name === 'match' && sub === 'remove') { // 3.19.1: every match on that brand's card
+            const brand = interaction.options.getString('brand');
+            if (!brand) return interaction.respond([{ name: 'Pick the brand (RAW, SmackDown or LuchaDerpy) first', value: 'none' }]);
+            const out = [];
+            for (const d of await svc.filledDrafts(interaction.guildId, brand)) {
+                const ms = await svc.getDraftMatches(d.id);
+                const ids_ = [...new Set(ms.flatMap((m) => m.character_ids))];
+                const { rows } = ids_.length ? await pool.query(`SELECT id, name FROM characters WHERE id = ANY($1::bigint[])`, [ids_]) : { rows: [] };
+                const nm = new Map(rows.map((r) => [String(r.id), r.name]));
+                for (const m of ms) {
+                    const who = m.character_ids.map((x) => nm.get(String(x)) || '?');
+                    const half = who.length / 2;
+                    const text = isTeamMatch(m.match_type) ? `${who.slice(0, half).join(' & ')} vs ${who.slice(half).join(' & ')}` : who.join(' vs ');
+                    out.push({ name: `${svc.divisionLabel(d.division)} #${m.position}: ${text}${m.match_id ? ' (logged)' : ''}`.slice(0, 100), value: `${d.division}:${m.position}` });
+                }
+            }
+            const q = String(focused.value || '').toLowerCase();
+            const list = out.filter((o) => o.name.toLowerCase().includes(q)).slice(0, 25);
+            return interaction.respond(list.length ? list : [{ name: out.length ? 'No match on that card has that name' : 'That card has no matches', value: 'none' }]);
         }
         if (focused.name === 'request') {
             const { rows } = await pool.query(
@@ -234,9 +255,18 @@ module.exports = {
 
         if (sub === 'remove') {
             await interaction.deferReply({ flags: 64 });
-            const n = interaction.options.getInteger('number');
-            await svc.removeMatchFromCard(guildId, brand, division, n);
-            return respond(interaction, { content: `Removed ${DL} match ${n}.\n\n${await svc.describeShow(guildId, brand)}`, allowedMentions: NO_MENTIONS });
+            let div = division, n = interaction.options.getInteger('number');
+            const pick = interaction.options.getString('match');
+            if (pick) { // 3.19.1: "division:number" from the list
+                const m = /^([a-z_]+):(\d+)$/.exec(pick);
+                if (!m) throw new UserError('Pick a match from the list (start typing a wrestler\'s name).');
+                [div, n] = [m[1], Number(m[2])];
+            }
+            if (!div || !n) throw new UserError('Pick the match to take off.');
+            const before = await svc.describeCard(await svc.requireDraft(guildId, brand, div));
+            const line = before.split('\n').find((l) => l.startsWith(`**${n}.**`)) || `match ${n}`;
+            await svc.removeMatchFromCard(guildId, brand, div, n);
+            return respond(interaction, { content: `🗑 Took this off the ${BL} card (${svc.divisionLabel(div)}):\n${line}\n\n**The ${BL} card now:**\n${await svc.describeShow(guildId, brand)}`, allowedMentions: NO_MENTIONS });
         }
 
         if (sub === 'move') {
@@ -364,6 +394,6 @@ module.exports = {
 {
     const full = data.toJSON();
     const opts = full.options || [];
-    const shown = { ...full, options: ['view', 'add'].map((n) => opts.find((o) => o.name === n)) };
+    const shown = { ...full, options: ['view', 'add', 'remove'].map((n) => opts.find((o) => o.name === n)) }; // 3.19.1: + remove
     module.exports.data = { name: full.name, toJSON: () => JSON.parse(JSON.stringify(shown)), full: () => JSON.parse(JSON.stringify(full)) };
 }

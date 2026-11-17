@@ -28,7 +28,7 @@ const subs = (name) => (require('./mock').client.commands.get(name).data.toJSON(
     await t('Discord only lists the short versions', async () => {
         assert.deepStrictEqual(subs('admin'), ['pending', 'panel', 'data']);
         assert.deepStrictEqual(subs('booking'), ['request', 'signups']);
-        assert.deepStrictEqual(subs('card'), ['view', 'add']);
+        assert.deepStrictEqual(subs('card'), ['view', 'add', 'remove']);
         const ch = require('./mock').client.commands.get('championship').data.toJSON();
         assert.deepStrictEqual(ch.options.map((o) => [o.name, o.type, Boolean(o.required)]), [['title', 3, false]]);
     });

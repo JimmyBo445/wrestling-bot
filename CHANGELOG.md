@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.19.1
+- **`/card remove`** is now listed in Discord. Pick the brand, then the match from a list ("Men's #2: Roman Reigns vs Seth Rollins"); start typing a wrestler's name to narrow it down. The reply shows what was taken off and the card as it is now.
+
 ## 3.19.0 — Smarter ⚡ Auto-build
 - **⚡ Auto-build is now a screen with switches** (`/card view` → 🧰 More tools → ⚡ Auto-build). Tap a switch to turn it on or off for this build, pick matches per division from a menu, then **⚡ Build it** (or **✏️ Build with a show name**). **💾 Save switches as default** keeps them for every future build.
 - **🔁 Rematches** (default on). Off: nobody is booked against someone they met in that division in the last 21 days, and there are no Rematch / Rivalry matches. A wrestler with no fresh opponent left is left off the card instead of being repeated.
