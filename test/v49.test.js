@@ -177,8 +177,8 @@ const subs = (name) => (require('./mock').client.commands.get(name).data.toJSON(
         for (const x of ['ui:ct:nw:raw', 'ui:ct:au:raw', 'ui:ct:sc:raw', 'ui:ct:cq:raw', 'cardui:bk:raw']) assert.ok(ids(i).includes(x), x);
         i = await click('ui:ctm:nw:raw', priv({ ...ADM, fields: { name: 'Monday Mayhem' } }));
         assert.strictEqual((await q(`select name from card_shows where brand='raw'`))[0].name, 'Monday Mayhem');
-        i = await click('ui:ct:au:raw', priv(ADM));
-        assert.deepStrictEqual(modalOf(i).inputs, ['matches', 'name', 'signup']);
+        i = await click('ui:ct:au:raw', priv(ADM)); // 3.19: a screen with switches now; the old form still works
+        assert.ok(ids(i).some((x) => x.startsWith('ui:ct:ab:raw:')), ids(i).join(' '));
         i = await click('ui:ctm:au:raw', priv({ ...ADM, fields: { matches: '2', name: '', signup: 'no' } }));
         assert.match(text(i), /Booked the \*\*RAW\*\* card/, text(i));
         assert.ok((await q(`select count(*)::int n from card_draft_matches m join card_drafts d on d.id=m.draft_id where d.brand='raw'`))[0].n >= 1);

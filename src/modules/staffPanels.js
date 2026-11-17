@@ -445,7 +445,23 @@ async function handleCard(interaction, a, b, c) {
     if (a === 'h') return cardTools(interaction, brand);
     if (a === 'v') return cardView(interaction, brand);
     if (a === 'nw') return interaction.showModal(modal(`ui:ctm:nw:${brand}`, `New ${L} card (replaces the current one)`, [{ id: 'name', label: 'Show name (optional)', max: 40, placeholder: 'Monday Night Mayhem' }]));
-    if (a === 'au') {
+    if (a === 'au') return autoPanel(interaction, brand); // 3.19: a screen with switches instead of a form
+    if (['ap', 'apn', 'ab', 'abn', 'as'].includes(a)) {
+        const p = interaction.customId.split(':');
+        let st = parseAuto(p[4], p[5]);
+        if (a === 'apn') st = { ...st, n: Number(v) || st.n };
+        if (a === 'ap') { const k = p[6]; st = { ...st, [k]: !st[k] }; }
+        if (a === 'as') {
+            await pool.query(`UPDATE guilds SET autobuild_rematches = $2, autobuild_match_types = $3, autobuild_records = $4 WHERE guild_id = $1`, [interaction.guildId, st.r, st.m, st.p]);
+            return autoPanel(interaction, brand, st, '💾 Saved. Every ⚡ Auto-build starts with these switches now.');
+        }
+        if (a === 'abn') {
+            return interaction.showModal(modal(`ui:ctm:ab:${brand}:${autoCode(st)}`, `Auto-build the ${L} card`, [{ id: 'name', label: 'Show name', required: true, max: 40, placeholder: 'Monday Night Mayhem' }]));
+        }
+        if (a === 'ab') return runAuto(interaction, brand, st, null);
+        return autoPanel(interaction, brand, st);
+    }
+    if (a === 'au_form') { // the old form (kept for anything that still opens it)
         return interaction.showModal(modal(`ui:ctm:au:${brand}`, `Auto-build the ${L} card`, [
             { id: 'matches', label: 'Matches per division (1-10)', required: true, max: 2, value: 3 },
             { id: 'name', label: 'Show name (optional)', max: 40 },
@@ -514,9 +530,54 @@ async function handleCard(interaction, a, b, c) {
     throw new UserError('That button is from an older version of the bot. Run `/card view` again.');
 }
 
+// ------------------------------------------------------------------ 3.19: ⚡ Auto-build screen
+// state in the button id: n = matches per division, then r m p s = rematches, match types, pair by records, from signup
+const autoCode = (st) => `${st.n}:${[st.r, st.m, st.p, st.s].map((x) => (x ? 1 : 0)).join('')}`;
+function parseAuto(n, flags) {
+    const f = String(flags || '');
+    return { n: Math.min(10, Math.max(1, Number(n) || 3)), r: f[0] !== '0', m: f[1] === '1', p: f[2] !== '0', s: f[3] !== '0' };
+}
+async function autoPanel(interaction, brand, st = null, notice = null) {
+    return open(interaction, async () => {
+        const svc = require('../utils/cardService');
+        if (!st) { const g = await svc.autoSettings(interaction.guildId); st = { n: 3, r: g.rematches, m: g.matchTypes, p: g.records, s: true }; }
+        const saved = await svc.autoSettings(interaction.guildId);
+        const changed = saved.rematches !== st.r || saved.matchTypes !== st.m || saved.records !== st.p;
+        const code = autoCode(st);
+        const L = BRANDS[brand];
+        const on = (x) => (x ? '✅ on' : '⬜ off');
+        const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle(`⚡ Auto-build the ${L} card`).setDescription([
+            `Books **${st.n} match${st.n === 1 ? '' : 'es'}** in every division and replaces the current ${L} card. Title matches for champions are always included.`,
+            '',
+            `🔁 **Rematches:** ${on(st.r)}${st.r ? ' (recent matches can be run back, marked Rematch / Rivalry)' : ` (nobody faces someone they met in the last ${svc.NO_REMATCH_DAYS} days in that division)`}`,
+            `🎭 **Other match types:** ${on(st.m)}${st.m ? ' (up to a third of each division: triple threats, fatal 4-ways, and tag matches between existing tag teams)' : ' (singles only)'}`,
+            `📊 **Pair by records:** ${on(st.p)}${st.p ? ' (similar records face each other: win % with their current player, mixed with the last 30 days)' : ''}`,
+            `📝 **From the signup:** ${on(st.s)}${st.s ? ' (only wrestlers who signed up)' : ' (anyone in the division)'}`,
+            '',
+            changed ? '_These switches are just for this build. 💾 saves them as the default._' : '_These are your saved switches. Change any of them just for this build, or 💾 save new defaults._'
+        ].join('\n'));
+        const t = (k, label, x) => btn(`ui:ct:ap:${brand}:${code}:${k}`, `${label}: ${x ? 'ON' : 'OFF'}`, x ? G : S);
+        const menu = new StringSelectMenuBuilder().setCustomId(`ui:ct:apn:${brand}:${code}`).setPlaceholder(`Matches per division: ${st.n}`)
+            .addOptions(Array.from({ length: 10 }, (_, i) => ({ label: `${i + 1} match${i ? 'es' : ''} per division`, value: String(i + 1), default: i + 1 === st.n })));
+        return withNotice({ embeds: [embed], components: [
+            row(t('r', '🔁 Rematches', st.r), t('m', '🎭 Other match types', st.m), t('p', '📊 Pair by records', st.p), t('s', '📝 From signup', st.s)),
+            new ActionRowBuilder().addComponents(menu),
+            row(btn(`ui:ct:ab:${brand}:${code}`, '⚡ Build it', P), btn(`ui:ct:abn:${brand}:${code}`, '✏️ Build with a show name'), btn(`ui:ct:as:${brand}:${code}`, '💾 Save switches as default', S, !changed), btn(`ui:ct:h:${brand}`, '◀ Card tools'))
+        ] }, notice);
+    });
+}
+async function runAuto(interaction, brand, st, name) {
+    const values = { brand, matches: st.n, name: name || null, rematches: st.r, match_types: st.m, records: st.p };
+    if (!st.s) values.use_signup = false;
+    const r = await attempt(() => capture(interaction, 'card', 'auto', values));
+    if (r.failed) return autoPanel(interaction, brand, st, r.content);
+    return open(interaction, async () => r); // /card auto answers with the card screen
+}
+
 async function handleCardForm(interaction, a, b) {
     requireAdmin(interaction, 'build match cards');
     const brand = brandOf(b);
+    if (a === 'ab') { const p = interaction.customId.split(':'); return runAuto(interaction, brand, parseAuto(p[4], p[5]), field(interaction, 'name') || null); }
     if (a === 'nw') {
         const r = await attempt(() => capture(interaction, 'card', 'new', { brand, name: field(interaction, 'name') || null }));
         return cardView(interaction, brand, r.failed ? r.content : `🆕 Started a fresh ${BRANDS[brand]} card. Add matches with \`/card add\`, or 🧰 More tools → ⚡ Auto-build.`);

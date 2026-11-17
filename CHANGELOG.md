@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.19.0 — Smarter ⚡ Auto-build
+- **⚡ Auto-build is now a screen with switches** (`/card view` → 🧰 More tools → ⚡ Auto-build). Tap a switch to turn it on or off for this build, pick matches per division from a menu, then **⚡ Build it** (or **✏️ Build with a show name**). **💾 Save switches as default** keeps them for every future build.
+- **🔁 Rematches** (default on). Off: nobody is booked against someone they met in that division in the last 21 days, and there are no Rematch / Rivalry matches. A wrestler with no fresh opponent left is left off the card instead of being repeated.
+- **🎭 Other match types** (default off). On: up to a third of each division's matches become triple threats, fatal 4-ways, or tag matches between existing tag teams (it rotates between them).
+- **📊 Pair by records** (default on). Wrestlers with similar records face each other. The record is win % with their current player, mixed half-and-half with their last 30 days.
+- **📝 From signup** works like before.
+- Title matches for champions are still always included.
+- `/card auto` has the same three switches as optional choices; left empty, it uses your saved defaults.
+- Database change: migration 033.
+
 ## 3.18.4
 - Fixed "Unknown interaction" on the staff **Approve / Deny** buttons. Discord gives a bot 3 seconds to answer a button; approving a request (DMs, sign-up updates) could take longer. The bot now answers Discord first and updates the card after.
 - If a button that edits a message hits a problem, the bot answers privately underneath and no longer risks deleting or overwriting that message (for example a staff request card).

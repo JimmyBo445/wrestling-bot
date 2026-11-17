@@ -29,7 +29,10 @@ const data = new SlashCommandBuilder()
     .addSubcommand((s) => brandOpt(s.setName('auto').setDescription('Book every division at once from recent matches: rematches, title shots, fresh matchups'))
         .addIntegerOption((o) => o.setName('matches').setDescription(`Matches per division (default 3, max ${MAX_CARD_MATCHES})`).setRequired(false).setMinValue(1).setMaxValue(MAX_CARD_MATCHES))
         .addStringOption((o) => o.setName('name').setDescription('Show name, e.g. "Monday Night Mayhem"').setRequired(false).setMaxLength(40))
-        .addBooleanOption((o) => o.setName('use_signup').setDescription('Book from the current signup (default: yes when there is one)').setRequired(false)))
+        .addBooleanOption((o) => o.setName('use_signup').setDescription('Book from the current signup (default: yes when there is one)').setRequired(false))
+        .addBooleanOption((o) => o.setName('rematches').setDescription('Allow rematches (off = nobody faces someone they met in the last 21 days). Default: saved setting').setRequired(false))
+        .addBooleanOption((o) => o.setName('match_types').setDescription('Mix in triple threats, fatal 4-ways and tag teams (up to 1/3). Default: saved setting').setRequired(false))
+        .addBooleanOption((o) => o.setName('records').setDescription('Pair wrestlers with similar records. Default: saved setting').setRequired(false)))
     .addSubcommand((s) => {
         brandOpt(s.setName('add').setDescription('Add a match to the card. The division comes from the wrestlers.'))
             .addStringOption((o) => o.setName('match_type').setDescription('Type of match').setRequired(true).addChoices(...TYPE_CHOICES))
@@ -158,10 +161,15 @@ module.exports = {
             const signup = wantSignup === false ? null : await su.activeSignup(guildId, brand === 'luchaderpy' ? su.LUCHA_KIND : 'main'); // 3.16
             const signupIds = signup ? await su.signedUpIds(signup.id) : null;
             const priority = signup ? await su.passedOverCounts(guildId, [...signupIds]) : null;
-            const out = await svc.autoShow(guildId, brand, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null, { signupIds, priority });
+            // 3.19: the saved switches, unless this build says otherwise
+            const saved = await svc.autoSettings(guildId);
+            const pick = (n, d) => { const v = interaction.options.getBoolean(n); return v === null ? d : v; };
+            const sw = { rematches: pick('rematches', saved.rematches), matchTypes: pick('match_types', saved.matchTypes), records: pick('records', saved.records) };
+            const out = await svc.autoShow(guildId, brand, interaction.user.id, wanted, interaction.options.getString('name')?.trim() || null, { signupIds, priority, ...sw });
             const lines = out.results.map((r) => `**${svc.divisionLabel(r.division)}:** ${r.planned} match${r.planned === 1 ? '' : 'es'}${r.planned < r.wanted ? ` (wanted ${r.wanted})` : ''}`);
             const skipped = out.skipped.map((x) => `⚠️ **${svc.divisionLabel(x.division)}** was skipped: ${x.reason}`);
-            const via = out.signupMode === 'used' ? `\n📝 Booked only from the **${signup.title}** signup.` : '';
+            const via = (out.signupMode === 'used' ? `\n📝 Booked only from the **${signup.title}** signup.` : '')
+                + `\n⚙️ Rematches **${sw.rematches ? 'on' : `off (no one faces someone they met in the last ${svc.NO_REMATCH_DAYS} days)`}** · Other match types **${sw.matchTypes ? 'on' : 'off'}** · Pair by records **${sw.records ? 'on' : 'off'}**`;
             const ui = await cardUi.viewMessage(guildId, brand, {
                 notice: `Booked the **${BL}** card from recent matches. ${lines.join(' · ')}${via}${skipped.length ? `\n${skipped.join('\n')}` : ''}\nChange anything with the buttons below, or add a match with \`/card add\`.`
             });

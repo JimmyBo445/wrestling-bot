@@ -445,6 +445,13 @@ async function describeCard(draft) {
 
 const RECENT_DAYS = 30;
 const RIVALRY_DAYS = 90;
+const NO_REMATCH_DAYS = 21; // 3.19: with rematches off, nobody faces someone they met in the last 21 days
+/** 3.19: the saved Auto-build switches. */
+async function autoSettings(guildId) {
+    const { rows } = await pool.query(`SELECT autobuild_rematches, autobuild_match_types, autobuild_records FROM guilds WHERE guild_id = $1`, [guildId]);
+    const g = rows[0] || {};
+    return { rematches: g.autobuild_rematches ?? true, matchTypes: g.autobuild_match_types ?? false, records: g.autobuild_records ?? true };
+}
 
 /**
  * Plans a card from what has happened lately:
@@ -453,7 +460,7 @@ const RIVALRY_DAYS = 90;
  *  3. fresh matchups for wrestlers who are not booked yet (least-faced opponents, different players first)
  * Returns matches in running order: fresh first, then rematches, then title matches last.
  */
-async function planCard(guildId, division, count, { signupIds = null, priority = null } = {}) {
+async function planCard(guildId, division, count, { signupIds = null, priority = null, rematches: allowRematches = true, matchTypes = false, records = false } = {}) {
     let { rows: pool_ } = await pool.query(
         `SELECT c.id, c.name, c.owner_id FROM characters c JOIN users uo ON uo.id = c.owner_id WHERE c.guild_id = $1 AND c.division = $2 AND c.status = 'approved' AND NOT uo.is_placeholder
            AND NOT EXISTS (SELECT 1 FROM injuries i WHERE i.character_id = c.id AND i.cleared_at IS NULL AND i.returns_at >= CURRENT_DATE)`,
@@ -498,8 +505,36 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     const meetings = new Map(meet.map((r) => [pairKey(r.a, r.b), r.n]));
     const meets = (x, y) => meetings.get(pairKey(x, y)) || 0;
 
+    // 3.19: pairs that met in this division in the last 21 days (any match type) → kept apart when rematches are off
+    const { rows: rmeet } = allowRematches ? { rows: [] } : await pool.query(
+        `SELECT DISTINCT a.character_id AS a, b.character_id AS b
+         FROM match_participants a JOIN match_participants b ON b.match_id = a.match_id AND a.character_id < b.character_id
+         JOIN matches m ON m.id = a.match_id JOIN characters ca ON ca.id = a.character_id
+         WHERE ca.guild_id = $1 AND ca.division = $2 AND m.created_at > now() - ($3 || ' days')::interval`,
+        [guildId, division, String(NO_REMATCH_DAYS)]);
+    const metLately = new Set(rmeet.map((r) => pairKey(r.a, r.b)));
+    const clash = (x, y) => !allowRematches && metLately.has(pairKey(x, y));
+
+    // 3.19: record score 0..1 = win % with the current player, blended half-and-half with the last 30 days
+    const { rows: recs } = await pool.query(
+        `SELECT mp.character_id,
+                COUNT(*) FILTER (WHERE mp.is_winner)::int AS w, COUNT(*) FILTER (WHERE NOT mp.is_winner)::int AS l,
+                COUNT(*) FILTER (WHERE mp.is_winner AND m.created_at > now() - ($3 || ' days')::interval)::int AS rw,
+                COUNT(*) FILTER (WHERE NOT mp.is_winner AND m.created_at > now() - ($3 || ' days')::interval)::int AS rl
+         FROM match_participants mp JOIN matches m ON m.id = mp.match_id JOIN characters c ON c.id = mp.character_id
+         WHERE c.guild_id = $1 AND c.division = $2 AND m.result_type = 'decisive' AND mp.owner_id = c.owner_id GROUP BY mp.character_id`,
+        [guildId, division, String(RECENT_DAYS)]);
+    const recordScore = new Map(recs.map((r) => {
+        const all = r.w + r.l ? r.w / (r.w + r.l) : 0.5;
+        const now = r.rw + r.rl ? r.rw / (r.rw + r.rl) : all;
+        return [String(r.character_id), (all + now) / 2];
+    }));
+    const scoreOf = (id) => recordScore.get(String(id)) ?? 0.5;
+    const gap = (x, y) => (records ? Math.round(Math.abs(scoreOf(x) - scoreOf(y)) * 10) : 0); // in 10% steps
+
     const titleMatches = [];
     const rematches = [];
+    const multi = []; // 3.19: triple threats, fatal 4-ways, tag teams
     const fresh = [];
 
     // ---- 1. title matches
@@ -560,8 +595,8 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     }
 
     // ---- 2. rematches of recent matches
-    const remaining = () => count - titleMatches.length - rematches.length - fresh.length;
-    const rematchCap = Math.max(1, Math.ceil((count - titleMatches.length) * 0.4));
+    const remaining = () => count - titleMatches.length - rematches.length - fresh.length - multi.length;
+    const rematchCap = allowRematches ? Math.max(1, Math.ceil((count - titleMatches.length) * 0.4)) : 0;
     const { rows: recent } = await pool.query(
         `SELECT m.id, m.match_type, m.created_at,
                 json_agg(json_build_object('c', mp.character_id, 't', mp.team_number, 'w', mp.is_winner) ORDER BY mp.team_number NULLS FIRST, mp.id) AS parts
@@ -600,16 +635,67 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
         rematches.push({ match_type: m.match_type, character_ids: order, title_id: null, stipulation: times >= 2 ? 'Rivalry' : 'Rematch' });
     }
 
-    // ---- 3. fresh matchups for everyone still free
     const order = [...chars.values()].filter((c) => free(c.id))
         .sort((x, y) => ((priority?.get(String(y.id)) || 0) - (priority?.get(String(x.id)) || 0)) || (lastSeen.get(String(x.id)) || 0) - (lastSeen.get(String(y.id)) || 0) || Math.random() - 0.5);
+    const sameOwner = (x, y) => String(x.owner_id) === String(y.owner_id);
+
+    // ---- 2b. (3.19) other match types: up to a third of the card, rotating tag teams, triple threats, fatal 4-ways
+    if (matchTypes) {
+        const cap = Math.floor(count / 3);
+        const { rows: tms } = await pool.query(
+            `SELECT t.id, t.name, array_agg(tm.character_id::text ORDER BY tm.character_id) AS members
+             FROM teams t JOIN team_members tm ON tm.team_id = t.id AND tm.left_at IS NULL
+             WHERE t.guild_id = $1 AND t.division = $2 AND t.status = 'active' GROUP BY t.id`, [guildId, division]);
+        const teamScore = (t) => t.members.reduce((x, id) => x + scoreOf(id), 0) / t.members.length;
+        const tryTag = () => {
+            const ready = tms.filter((t) => [2, 3].includes(t.members.length) && t.members.every((id) => free(id)));
+            let best = null;
+            for (let i = 0; i < ready.length; i++) for (let j = i + 1; j < ready.length; j++) {
+                const [x, y] = [ready[i], ready[j]];
+                if (x.members.length !== y.members.length || x.members.some((id) => y.members.includes(id))) continue;
+                if (x.members.some((a) => y.members.some((b) => clash(a, b)))) continue;
+                const d = records ? Math.abs(teamScore(x) - teamScore(y)) : Math.random();
+                if (!best || d < best.d) best = { d, x, y };
+            }
+            if (!best) return null;
+            return { match_type: best.x.members.length === 2 ? 'tag2v2' : 'tag3v3', character_ids: [...best.x.members, ...best.y.members], title_id: null, stipulation: null };
+        };
+        const tryGroup = (size, type) => {
+            for (const seed of order.filter((c) => free(c.id))) {
+                const group = [seed];
+                const cands = order.filter((c) => free(c.id) && String(c.id) !== String(seed.id))
+                    .sort((x, y) => gap(seed.id, x.id) - gap(seed.id, y.id) || meets(seed.id, x.id) - meets(seed.id, y.id));
+                for (const c of cands) {
+                    if (group.length === size) break;
+                    if (group.some((g) => sameOwner(g, c) || clash(g.id, c.id))) continue;
+                    group.push(c);
+                }
+                if (group.length === size) return { match_type: type, character_ids: group.map((g) => String(g.id)), title_id: null, stipulation: null };
+            }
+            return null;
+        };
+        const kinds = ['tag', 'triple_threat', 'fatal4way'];
+        let k = Math.floor(Math.random() * kinds.length), misses = 0;
+        while (multi.length < cap && remaining() > 0 && misses < kinds.length) {
+            const kind = kinds[k++ % kinds.length];
+            const m = kind === 'tag' ? tryTag() : tryGroup(kind === 'triple_threat' ? 3 : 4, kind);
+            if (!m) { misses++; continue; }
+            misses = 0;
+            take(m.character_ids);
+            multi.push(m);
+        }
+    }
+
+    // ---- 3. fresh matchups for everyone still free
+    const skipped = new Set();
     while (remaining() > 0) {
-        const a = order.find((c) => free(c.id));
+        const a = order.find((c) => free(c.id) && !skipped.has(String(c.id)));
         if (!a) break;
-        const opps = order.filter((c) => free(c.id) && String(c.id) !== String(a.id));
-        if (!opps.length) break;
+        const opps = order.filter((c) => free(c.id) && String(c.id) !== String(a.id) && !clash(a.id, c.id));
+        if (!opps.length) { skipped.add(String(a.id)); continue; } // 3.19: everyone left already faced them lately
         opps.sort((x, y) =>
-            ((String(x.owner_id) === String(a.owner_id)) ? 1 : 0) - ((String(y.owner_id) === String(a.owner_id)) ? 1 : 0) ||
+            (sameOwner(x, a) ? 1 : 0) - (sameOwner(y, a) ? 1 : 0) ||
+            gap(a.id, x.id) - gap(a.id, y.id) ||
             meets(a.id, x.id) - meets(a.id, y.id) ||
             (lastSeen.get(String(x.id)) || 0) - (lastSeen.get(String(y.id)) || 0));
         const b = opps[0];
@@ -617,8 +703,8 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
         fresh.push({ match_type: 'singles', character_ids: [String(a.id), String(b.id)], title_id: null, stipulation: null });
     }
 
-    // ---- 4. top up with more rematches if there were not enough fresh faces
-    for (const m of recent) {
+    // ---- 4. top up with more rematches if there were not enough fresh faces (not when rematches are off)
+    for (const m of allowRematches ? recent : []) {
         if (remaining() <= 0) break;
         const parts = m.parts.map((p) => ({ c: String(p.c), w: p.w }));
         if (!parts.every((p) => free(p.c))) continue;
@@ -631,7 +717,7 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
     }
 
     // main event last: title matches in reverse catalogue order (top title closes the show)
-    const result = [...fresh, ...rematches, ...titleMatches.reverse()].slice(0, count);
+    const result = [...fresh, ...multi, ...rematches, ...titleMatches.reverse()].slice(0, count);
     result.signupMode = signupMode;
     result.signedCount = signupMode === 'used' ? chars.size : 0;
     return result;
@@ -642,7 +728,7 @@ async function planCard(guildId, division, count, { signupIds = null, priority =
  * Divisions that can't be booked (fewer than 2 wrestlers, or too few signed up) are skipped and reported.
  * Returns { drafts, results:[{division, planned, wanted}], skipped:[{division, reason}], signupMode, signedCount }.
  */
-async function autoShow(guildId, brand, createdBy, perDivision, name = null, { signupIds = null, priority = null } = {}) {
+async function autoShow(guildId, brand, createdBy, perDivision, name = null, { signupIds = null, priority = null, rematches = true, matchTypes = false, records = false } = {}) {
     const { rows: counts } = await pool.query(
         `SELECT c.division, COUNT(*)::int AS n FROM characters c JOIN users u ON u.id = c.owner_id
          WHERE c.guild_id = $1 AND c.status = 'approved' AND NOT u.is_placeholder GROUP BY c.division`, [guildId]);
@@ -652,7 +738,7 @@ async function autoShow(guildId, brand, createdBy, perDivision, name = null, { s
     for (const division of DIVISION_ORDER.filter((d) => divisionsForBrand(brand).includes(d))) { // 3.15
         if ((have.get(division) || 0) < 2) continue; // nothing to book here, and nothing worth reporting
         try {
-            const plan = await planCard(guildId, division, perDivision, { signupIds, priority });
+            const plan = await planCard(guildId, division, perDivision, { signupIds, priority, rematches, matchTypes, records });
             if (plan.length) plans.push({ division, plan });
             if (plan.signupMode) { signupMode = 'used'; signedCount += plan.signedCount; }
         } catch (err) {
@@ -732,7 +818,7 @@ function chunkLines(header, lines, max = 1900) {
 }
 
 module.exports = {
-    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, checkBrandDivision, getDraft, requireDraft, startDraft, getDraftMatches,
+    brandLabel, divisionLabel, cardLabel, DIVISION_ORDER, checkBrandDivision, autoSettings, NO_REMATCH_DAYS, getDraft, requireDraft, startDraft, getDraftMatches,
     getShow, brandDrafts, filledDrafts, startShow, ensureDraft, setShowName, editMatchOnCard, autoShow, describeShow, pingLines, chunkLines,
     tapeTargetsForSlot, linkMatchToCard, addMatchToCard, removeMatchFromCard, moveMatchOnCard, clearCard, buildShowData, buildRecapData, describeCard, planCard
 };
